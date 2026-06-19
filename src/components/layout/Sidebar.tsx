@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { ChevronUp, X } from 'lucide-react';
 import { AuthenticatedUser, userHasPermission } from '@/lib/auth';
-import { getRoleLabel, getVisibleNavItems, NavItem } from '@/lib/navigation';
+import { getRoleLabel, getNavItemLabel, getVisibleNavItems, NavItem } from '@/lib/navigation';
 import { Avatar } from '@/components/ui/Avatar';
 import { Logo } from '@/components/ui/Logo';
 import { AdminToolsMenu } from '@/components/layout/AdminToolsMenu';
@@ -64,6 +64,7 @@ export function Sidebar({
             item={item}
             pathname={pathname}
             onNavigate={onNavigate}
+            userType={user.userType}
           />
         ))}
       </nav>
@@ -89,10 +90,12 @@ function SidebarLink({
   item,
   pathname,
   onNavigate,
+  userType,
 }: {
   item: NavItem;
   pathname: string;
   onNavigate?: () => void;
+  userType: 'internal' | 'external';
 }) {
   const isActive =
     pathname === item.href || pathname.startsWith(`${item.href}/`);
@@ -111,7 +114,7 @@ function SidebarLink({
       aria-current={isActive ? 'page' : undefined}
     >
       <Icon className="h-4 w-4 shrink-0" aria-hidden />
-      <span className="flex-1">{item.label}</span>
+      <span className="flex-1">{getNavItemLabel(item, userType)}</span>
       {item.badge ? (
         <span
           className={cn(

@@ -1,8 +1,9 @@
 'use client';
 
 import { FormEvent, useCallback, useEffect, useMemo, useState } from 'react';
+import { Search } from 'lucide-react';
 import { Modal, ModalActions } from '@/components/ui/Modal';
-import { Select } from '@/components/ui/Select';
+import { Input } from '@/components/ui/Input';
 import { MemberCandidate } from '@/components/chat/ChannelMemberPicker';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
@@ -33,6 +34,9 @@ interface ChannelDetails {
   id: string;
   name: string;
   type: string;
+  displayName?: string;
+  clientOrganizationId?: string | null;
+  clientOrganization?: { id: string; name: string } | null;
   project?: {
     id: string;
     name: string;
@@ -58,6 +62,7 @@ export function ManageChannelMembersModal({
   const [internalUsers, setInternalUsers] = useState<MemberCandidate[]>([]);
   const [clientUsers, setClientUsers] = useState<MemberCandidate[]>([]);
   const [selectedUserId, setSelectedUserId] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [actionUserId, setActionUserId] = useState<string | null>(null);
@@ -74,6 +79,8 @@ export function ManageChannelMembersModal({
     setChannel(channelData);
 
     const clientOrganizationId =
+      channelData.clientOrganizationId ??
+      channelData.clientOrganization?.id ??
       channelData.project?.clientOrganizationId ??
       channelData.project?.clientOrganization?.id;
 
@@ -95,6 +102,7 @@ export function ManageChannelMembersModal({
     if (!open || !channelId) {
       setChannel(null);
       setSelectedUserId('');
+      setSearchQuery('');
       setErrorMessage(null);
       return;
     }
@@ -110,15 +118,26 @@ export function ManageChannelMembersModal({
     [internalUsers, clientUsers],
   );
 
+  const filteredCandidates = useMemo(() => {
+    const term = searchQuery.trim().toLowerCase();
+    if (!term) return availableCandidates;
+
+    return availableCandidates.filter(
+      (user) =>
+        user.fullName.toLowerCase().includes(term) ||
+        user.email.toLowerCase().includes(term),
+    );
+  }, [availableCandidates, searchQuery]);
+
   const selectedCandidate = availableCandidates.find(
     (user) => user.id === selectedUserId,
   );
 
   useEffect(() => {
-    if (!availableCandidates.some((user) => user.id === selectedUserId)) {
-      setSelectedUserId(availableCandidates[0]?.id ?? '');
+    if (!filteredCandidates.some((user) => user.id === selectedUserId)) {
+      setSelectedUserId(filteredCandidates[0]?.id ?? '');
     }
-  }, [availableCandidates, selectedUserId]);
+  }, [filteredCandidates, selectedUserId]);
 
   async function handleSubmit(event?: FormEvent) {
     event?.preventDefault();
@@ -141,6 +160,7 @@ export function ManageChannelMembersModal({
 
       await loadChannelData();
       setSelectedUserId('');
+      setSearchQuery('');
       onUpdated();
     } catch (error) {
       setErrorMessage(
@@ -197,15 +217,22 @@ export function ManageChannelMembersModal({
   const pendingInvites = channel?.invites ?? [];
   const addLabel =
     selectedCandidate?.userType === 'external' ? 'Send invite' : 'Add member';
+  const hubLabel =
+    channel?.clientOrganization?.name ??
+    channel?.project?.clientOrganization?.name ??
+    channel?.displayName ??
+    channel?.name;
 
   return (
     <Modal
       open={open}
       onClose={onClose}
-      title="Manage members"
+      title={showClientUsers ? 'Manage client access' : 'Manage members'}
       description={
         channel
-          ? `Manage membership for #${channel.name}.`
+          ? showClientUsers
+            ? `Add internal teammates or invite linked client users to ${hubLabel}.`
+            : `Manage membership for #${channel.name}.`
           : 'Load channel members and invite additional people.'
       }
       footer={
@@ -309,26 +336,54 @@ export function ManageChannelMembersModal({
           ) : null}
 
           {availableCandidates.length > 0 ? (
-            <Select
-              label="Add member or invite client user"
-              value={selectedUserId}
-              onChange={(event) => setSelectedUserId(event.target.value)}
-              options={availableCandidates.map((user) => ({
-                value: user.id,
-                label: `${user.fullName} (${user.userType === 'external' ? 'client — invite' : 'internal'})`,
-              }))}
-            />
+            <div className="space-y-3">
+              <div className="relative">
+                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--muted)]" />
+                <Input
+                  value={searchQuery}
+                  onChange={(event) => setSearchQuery(event.target.value)}
+                  placeholder="Search by name or email"
+                  className="pl-10"
+                />
+              </div>
+              <div className="max-h-48 space-y-1 overflow-y-auto rounded-[var(--radius-md)] border border-[var(--border)] p-2">
+                {filteredCandidates.length === 0 ? (
+                  <p className="px-2 py-3 text-sm text-[var(--muted)]">
+                    No matching people found.
+                  </p>
+                ) : (
+                  filteredCandidates.map((user) => (
+                    <button
+                      key={user.id}
+                      type="button"
+                      onClick={() => setSelectedUserId(user.id)}
+                      className={`flex w-full flex-col rounded-[var(--radius-md)] px-3 py-2 text-left ${
+                        selectedUserId === user.id
+                          ? 'bg-[var(--primary-soft)] text-[var(--primary)]'
+                          : 'hover:bg-[var(--surface-muted)]'
+                      }`}
+                    >
+                      <span className="text-sm font-medium">{user.fullName}</span>
+                      <span className="text-xs opacity-80">
+                        {user.email} ·{' '}
+                        {user.userType === 'external' ? 'client (invite)' : 'internal'}
+                      </span>
+                    </button>
+                  ))
+                )}
+              </div>
+            </div>
           ) : (
             <p className="text-sm text-[var(--muted)]">
               All eligible users are already members or have pending invites.
+              Link client users from the Clients page first.
             </p>
           )}
 
           {showClientUsers ? (
             <p className="text-xs text-[var(--muted)]">
-              Client users receive a pending invite and must accept before joining.
-              They must be linked to{' '}
-              {channel.project?.clientOrganization?.name ?? 'the client organization'}.
+              Client users must be linked to {hubLabel} on the Clients page. They
+              receive a pending invite and must accept before messaging.
             </p>
           ) : null}
         </div>

@@ -1,12 +1,16 @@
 'use client';
 
 import { useState } from 'react';
-import { UserPlus, Workflow } from 'lucide-react';
+import { useRouter } from 'next/navigation';
+import { MessageSquare, UserPlus, Workflow } from 'lucide-react';
 import { ResourceListPage } from '@/components/ui/ResourceListPage';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { getInitials } from '@/lib/navigation';
 import { userHasPermission } from '@/lib/auth';
+import { apiRequest } from '@/lib/api-client';
+import { ApiResponse } from '@/lib/auth';
+import { ChatChannel } from '@/lib/chat-types';
 import { CreateClientModal } from '@/components/modals/CreateClientModal';
 import { CreateOnboardingModal } from '@/components/modals/CreateOnboardingModal';
 import { LinkClientUserModal } from '@/components/modals/LinkClientUserModal';
@@ -33,11 +37,28 @@ const STATUS_FILTERS = [
 ];
 
 export default function ClientsPage() {
+  const router = useRouter();
   const { user, refreshKey, notifyRefresh } = useWorkspace();
   const canManageClients = userHasPermission(user, 'clients.manage');
   const [createOpen, setCreateOpen] = useState(false);
   const [onboardingClientId, setOnboardingClientId] = useState<string | undefined>();
   const [linkClient, setLinkClient] = useState<ClientItem | null>(null);
+  const [openingMessagesClientId, setOpeningMessagesClientId] = useState<string | null>(
+    null,
+  );
+
+  async function openClientMessages(clientId: string) {
+    setOpeningMessagesClientId(clientId);
+
+    try {
+      const response = await apiRequest<ApiResponse<ChatChannel>>(
+        `/clients/${clientId}/messages-channel`,
+      );
+      router.push(`/chat?channel=${response.data.id}`);
+    } finally {
+      setOpeningMessagesClientId(null);
+    }
+  }
 
   return (
     <>
@@ -82,6 +103,15 @@ export default function ClientsPage() {
               <Badge variant={statusVariant(item.status)} className="capitalize">
                 {item.status.replaceAll('_', ' ')}
               </Badge>
+              <Button
+                size="sm"
+                variant="secondary"
+                disabled={openingMessagesClientId === item.id}
+                onClick={() => void openClientMessages(item.id)}
+              >
+                <MessageSquare className="h-4 w-4" />
+                Open messages
+              </Button>
               <Button
                 size="sm"
                 variant="secondary"

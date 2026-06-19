@@ -181,16 +181,24 @@ export function ChatWorkspace({
     loadChannels()
       .then((data) => {
         if (data.length > 0) {
-          setSelectedChannelId(
-            (current) => current ?? initialChannelId ?? data[0].id,
-          );
+          setSelectedChannelId((current) => {
+            const preferred = current ?? initialChannelId;
+            if (preferred) return preferred;
+
+            if (isExternalUser) {
+              const hub = data.find((channel) => channel.type === 'client_shared');
+              return hub?.id ?? data[0].id;
+            }
+
+            return data[0].id;
+          });
         }
       })
       .catch((error: Error) => setErrorMessage(error.message))
       .finally(() => setIsLoadingChannels(false));
 
     loadPendingInvites().catch(() => setPendingInvites([]));
-  }, [loadChannels, loadPendingInvites, initialChannelId]);
+  }, [loadChannels, loadPendingInvites, initialChannelId, isExternalUser]);
 
   useEffect(() => {
     selectedChannelIdRef.current = selectedChannelId;
@@ -342,6 +350,7 @@ export function ChatWorkspace({
 
     apiRequest<
       ApiResponse<{
+        clientOrganization?: { name: string } | null;
         project?: {
           name: string;
           clientOrganization?: { name: string } | null;
@@ -352,7 +361,10 @@ export function ChatWorkspace({
         setChannelContext({
           projectName: response.data.project?.name,
           clientOrganizationName:
-            response.data.project?.clientOrganization?.name ?? undefined,
+            response.data.clientOrganization?.name ??
+            response.data.project?.clientOrganization?.name ??
+            channel.displayName ??
+            undefined,
         });
       })
       .catch(() => setChannelContext(null));
@@ -698,10 +710,10 @@ export function ChatWorkspace({
       <>
         <div className="space-y-4">
           <EmptyState
-            title="No channels yet"
+            title={isExternalUser ? 'Messages not ready yet' : 'No channels yet'}
             description={
               isExternalUser
-                ? 'Accept a channel invitation to start collaborating.'
+                ? 'Your team will invite you when client messaging is ready.'
                 : 'Join or create a channel to start collaborating.'
             }
           />
@@ -762,22 +774,28 @@ export function ChatWorkspace({
       <div
         className={cn(
           'grid h-full min-h-0 gap-4',
-          threadMessageId
-            ? 'lg:grid-cols-[260px_minmax(0,1fr)_360px]'
-            : 'lg:grid-cols-[260px_minmax(0,1fr)]',
+          isExternalUser
+            ? threadMessageId
+              ? 'lg:grid-cols-[minmax(0,1fr)_360px]'
+              : 'lg:grid-cols-[minmax(0,1fr)]'
+            : threadMessageId
+              ? 'lg:grid-cols-[260px_minmax(0,1fr)_360px]'
+              : 'lg:grid-cols-[260px_minmax(0,1fr)]',
         )}
       >
-        <ChannelSidebar
-          channels={channels}
-          selectedChannelId={selectedChannelId}
-          pendingInvites={pendingInvites}
-          acceptingInviteId={acceptingInviteId}
-          canCreateChannel={canCreateChannel}
-          onSelectChannel={setSelectedChannelId}
-          onCreateChannel={() => setCreateChannelOpen(true)}
-          onStartDirectMessage={() => setStartDmOpen(true)}
-          onAcceptInvite={(invite) => void handleAcceptInvite(invite)}
-        />
+        {!isExternalUser ? (
+          <ChannelSidebar
+            channels={channels}
+            selectedChannelId={selectedChannelId}
+            pendingInvites={pendingInvites}
+            acceptingInviteId={acceptingInviteId}
+            canCreateChannel={canCreateChannel}
+            onSelectChannel={setSelectedChannelId}
+            onCreateChannel={() => setCreateChannelOpen(true)}
+            onStartDirectMessage={() => setStartDmOpen(true)}
+            onAcceptInvite={(invite) => void handleAcceptInvite(invite)}
+          />
+        ) : null}
 
         <Card padding="none" className="flex min-h-0 flex-col overflow-hidden">
           <ChannelHeader

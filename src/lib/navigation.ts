@@ -18,6 +18,7 @@ export interface NavItem {
   href: string;
   label: string;
   icon: LucideIcon;
+  externalLabel?: string;
   internalOnly?: boolean;
   permission?: string;
   badge?: number;
@@ -26,7 +27,7 @@ export interface NavItem {
 export const NAV_ITEMS: NavItem[] = [
   { href: '/dashboard', label: 'Home', icon: Home },
   { href: '/inbox', label: 'Inbox', icon: Inbox },
-  { href: '/chat', label: 'Chat', icon: MessageSquare },
+  { href: '/chat', label: 'Chat', externalLabel: 'Messages', icon: MessageSquare },
   { href: '/projects', label: 'Projects', icon: Briefcase },
   { href: '/tasks', label: 'Tasks', icon: LayoutGrid },
   { href: '/clients', label: 'Clients', icon: Building2, permission: 'clients.view' },
@@ -40,6 +41,14 @@ export const NAV_ITEMS: NavItem[] = [
   { href: '/integrations', label: 'Integrations', icon: Plug, internalOnly: true },
   { href: '/admin', label: 'Settings', icon: Settings, permission: 'users.manage' },
 ];
+
+export function getNavItemLabel(item: NavItem, userType: 'internal' | 'external') {
+  if (userType === 'external' && item.externalLabel) {
+    return item.externalLabel;
+  }
+
+  return item.label;
+}
 
 export function getVisibleNavItems(
   userType: 'internal' | 'external',

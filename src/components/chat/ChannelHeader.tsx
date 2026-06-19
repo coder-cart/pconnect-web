@@ -57,13 +57,18 @@ export function ChannelHeader({
         displayName: channelDisplayName,
       })
     : undefined;
-  const showHashPrefix = channelType && !isDirectOrGroupChannel(channelType);
+  const showHashPrefix =
+    channelType &&
+    !isDirectOrGroupChannel(channelType) &&
+    channelType !== 'client_shared';
   const ChannelIcon =
     channelType === 'direct'
       ? MessageCircle
       : channelType === 'group'
         ? Users
-        : Hash;
+        : channelType === 'client_shared'
+          ? MessageCircle
+          : Hash;
 
   return (
     <div className="shrink-0 border-b border-[var(--border)]">
@@ -90,7 +95,7 @@ export function ChannelHeader({
           {canInvite ? (
             <Button type="button" variant="secondary" size="sm" onClick={onInvite}>
               <UserPlus className="h-4 w-4" />
-              Invite teammates
+              {channelType === 'client_shared' ? 'Add people' : 'Invite teammates'}
             </Button>
           ) : null}
           <DropdownMenu

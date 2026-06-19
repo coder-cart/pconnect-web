@@ -6,11 +6,17 @@ export interface ChatChannel {
   type: string;
   displayName?: string;
   dmPeerUserId?: string | null;
+  clientOrganizationId?: string | null;
+  clientOrganizationName?: string | null;
   unreadCount?: number;
 }
 
 export function getChannelLabel(channel: Pick<ChatChannel, 'name' | 'type' | 'displayName'>) {
-  if (channel.type === 'direct' || channel.type === 'group') {
+  if (
+    channel.type === 'direct' ||
+    channel.type === 'group' ||
+    channel.type === 'client_shared'
+  ) {
     return channel.displayName ?? channel.name;
   }
 
