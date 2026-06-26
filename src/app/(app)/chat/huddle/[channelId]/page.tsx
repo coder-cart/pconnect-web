@@ -1,14 +1,14 @@
 'use client';
 
 import Link from 'next/link';
+import { useParams } from 'next/navigation';
 import { Headphones } from 'lucide-react';
 import { Card } from '@/components/ui/Card';
 
-export default function HuddlePage({
-  params,
-}: {
-  params: { channelId: string };
-}) {
+export default function HuddlePage() {
+  const params = useParams<{ channelId: string }>();
+  const channelId = params.channelId;
+
   return (
     <div className="mx-auto max-w-xl py-12">
       <Card padding="lg" className="text-center">
@@ -19,10 +19,10 @@ export default function HuddlePage({
           later with a provider such as Livekit or Daily.co.
         </p>
         <p className="mt-4 text-xs text-[var(--muted)]">
-          Channel: {params.channelId}
+          Channel: {channelId}
         </p>
         <Link
-          href={`/chat?channel=${params.channelId}`}
+          href={`/chat?channel=${channelId}`}
           className="mt-6 inline-flex h-10 items-center justify-center rounded-[var(--radius-md)] bg-[var(--primary)] px-4 text-sm font-medium text-white"
         >
           Back to channel

@@ -33,11 +33,11 @@ case "$MODE" in
   prod)
     echo "==> Building"
     npm run build
-    echo "==> Starting production server on port ${PORT:-3000}"
+    echo "==> Starting production server on port ${PORT:-7000}"
     npm run start
     ;;
   dev)
-    echo "==> Starting dev server on port ${PORT:-3000}"
+    echo "==> Starting dev server on port ${PORT:-7000}"
     npm run dev
     ;;
   *)

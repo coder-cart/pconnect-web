@@ -27,7 +27,7 @@ npm install
 npm run dev
 ```
 
-The app runs at `http://localhost:3000`.
+The app runs at `http://localhost:7000` (and expects the API at `http://localhost:7001`).
 
 ## Demo login
 

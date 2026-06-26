@@ -1,12 +1,13 @@
 'use client';
 
+import { Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { ChatWorkspace } from '@/components/chat/ChatWorkspace';
 import { useWorkspace } from '@/components/providers/WorkspaceProvider';
 import { userIsExternal } from '@/lib/auth';
 
-export default function ChatPage() {
+function ChatPageContent() {
   const { user } = useWorkspace();
   const searchParams = useSearchParams();
   const initialChannelId = searchParams.get('channel');
@@ -52,5 +53,13 @@ export default function ChatPage() {
         />
       </div>
     </div>
+  );
+}
+
+export default function ChatPage() {
+  return (
+    <Suspense fallback={null}>
+      <ChatPageContent />
+    </Suspense>
   );
 }
