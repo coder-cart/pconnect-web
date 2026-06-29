@@ -9,7 +9,9 @@ import { apiRequest } from '@/lib/api-client';
 import { ApiResponse } from '@/lib/auth';
 import { ListSkeleton } from '@/components/ui/Skeleton';
 import { CreateUserModal } from '@/components/modals/CreateUserModal';
+import { RolesPermissionsManager } from '@/components/admin/RolesPermissionsManager';
 import { useWorkspace } from '@/components/providers/WorkspaceProvider';
+import { userHasPermission } from '@/lib/auth';
 
 interface UserItem {
   id: string;
@@ -36,7 +38,8 @@ const STATUS_FILTERS = [
 ];
 
 export default function AdminPage() {
-  const { refreshKey, notifyRefresh } = useWorkspace();
+  const { user, refreshKey, notifyRefresh } = useWorkspace();
+  const canManageRoles = userHasPermission(user, 'roles.manage');
   const [activeTab, setActiveTab] = useState('users');
   const [auditLogs, setAuditLogs] = useState<AuditLogItem[]>([]);
   const [isLoadingAudit, setIsLoadingAudit] = useState(false);
@@ -46,8 +49,10 @@ export default function AdminPage() {
     if (activeTab !== 'audit') return;
 
     setIsLoadingAudit(true);
-    apiRequest<ApiResponse<AuditLogItem[]>>('/audit-logs')
-      .then((response) => setAuditLogs(response.data))
+    apiRequest<ApiResponse<{ items: AuditLogItem[] }>>(
+      '/audit-logs?pageSize=50',
+    )
+      .then((response) => setAuditLogs(response.data.items))
       .finally(() => setIsLoadingAudit(false));
   }, [activeTab, refreshKey]);
 
@@ -58,6 +63,9 @@ export default function AdminPage() {
         onChange={setActiveTab}
         items={[
           { id: 'users', label: 'Users' },
+          ...(canManageRoles
+            ? [{ id: 'roles', label: 'Roles & Permissions' }]
+            : []),
           { id: 'audit', label: 'Audit Logs' },
         ]}
       />
@@ -100,6 +108,10 @@ export default function AdminPage() {
             </div>
           )}
         />
+      ) : null}
+
+      {activeTab === 'roles' && canManageRoles ? (
+        <RolesPermissionsManager />
       ) : null}
 
       {activeTab === 'audit' ? (

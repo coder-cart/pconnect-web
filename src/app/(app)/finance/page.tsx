@@ -14,6 +14,7 @@ import { apiRequest } from '@/lib/api-client';
 import { ApiResponse, userHasPermission } from '@/lib/auth';
 import { CreateInvoiceModal } from '@/components/modals/CreateInvoiceModal';
 import { CreateExpenseModal } from '@/components/modals/CreateExpenseModal';
+import { PayInvoiceModal } from '@/components/finance/PayInvoiceModal';
 import { useWorkspace } from '@/components/providers/WorkspaceProvider';
 
 interface FinanceSummary {
@@ -67,6 +68,7 @@ export default function FinancePage() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
   const [expenseOpen, setExpenseOpen] = useState(false);
+  const [payInvoice, setPayInvoice] = useState<InvoiceRecord | null>(null);
 
   function loadFinance() {
     setIsLoading(true);
@@ -211,7 +213,7 @@ export default function FinancePage() {
                 Recent Invoices
               </h2>
             </div>
-            <InvoiceTable invoices={invoices.slice(0, 5)} />
+            <InvoiceTable invoices={invoices.slice(0, 5)} onPay={setPayInvoice} />
           </Card>
         </>
       ) : activeTab === 'invoices' ? (
@@ -222,7 +224,7 @@ export default function FinancePage() {
           />
         ) : (
           <Card>
-            <InvoiceTable invoices={invoices} />
+            <InvoiceTable invoices={invoices} onPay={setPayInvoice} />
           </Card>
         )
       ) : activeTab === 'expenses' ? (
@@ -277,11 +279,27 @@ export default function FinancePage() {
           loadFinance();
         }}
       />
+      <PayInvoiceModal
+        invoiceId={payInvoice?.id ?? null}
+        invoiceNumber={payInvoice?.invoiceNumber}
+        onClose={() => setPayInvoice(null)}
+        onPaid={() => {
+          setPayInvoice(null);
+          notifyRefresh();
+          loadFinance();
+        }}
+      />
     </div>
   );
 }
 
-function InvoiceTable({ invoices }: { invoices: InvoiceRecord[] }) {
+function InvoiceTable({
+  invoices,
+  onPay,
+}: {
+  invoices: InvoiceRecord[];
+  onPay?: (invoice: InvoiceRecord) => void;
+}) {
   return (
     <div className="overflow-x-auto">
       <table className="min-w-full text-left text-sm">
@@ -291,30 +309,44 @@ function InvoiceTable({ invoices }: { invoices: InvoiceRecord[] }) {
             <th className="px-3 py-2 font-medium">Client</th>
             <th className="px-3 py-2 font-medium">Amount</th>
             <th className="px-3 py-2 font-medium">Status</th>
+            <th className="px-3 py-2 font-medium">Actions</th>
           </tr>
         </thead>
         <tbody>
-          {invoices.map((invoice) => (
-            <tr
-              key={invoice.id}
-              className="border-b border-[var(--border)] last:border-0"
-            >
-              <td className="px-3 py-3 font-medium text-[var(--foreground)]">
-                {invoice.invoiceNumber}
-              </td>
-              <td className="px-3 py-3 text-[var(--muted)]">
-                {invoice.clientOrganization?.name ?? '—'}
-              </td>
-              <td className="px-3 py-3 text-[var(--foreground)]">
-                {formatCurrency(Number(invoice.totalAmount))}
-              </td>
-              <td className="px-3 py-3">
-                <Badge variant={statusVariant(invoice.status)}>
-                  {invoice.status.replace('_', ' ')}
-                </Badge>
-              </td>
-            </tr>
-          ))}
+          {invoices.map((invoice) => {
+            const payable =
+              invoice.status !== 'paid' && invoice.status !== 'cancelled';
+            return (
+              <tr
+                key={invoice.id}
+                className="border-b border-[var(--border)] last:border-0"
+              >
+                <td className="px-3 py-3 font-medium text-[var(--foreground)]">
+                  {invoice.invoiceNumber}
+                </td>
+                <td className="px-3 py-3 text-[var(--muted)]">
+                  {invoice.clientOrganization?.name ?? '—'}
+                </td>
+                <td className="px-3 py-3 text-[var(--foreground)]">
+                  {formatCurrency(Number(invoice.totalAmount))}
+                </td>
+                <td className="px-3 py-3">
+                  <Badge variant={statusVariant(invoice.status)}>
+                    {invoice.status.replace('_', ' ')}
+                  </Badge>
+                </td>
+                <td className="px-3 py-3">
+                  {payable && onPay ? (
+                    <Button size="sm" onClick={() => onPay(invoice)}>
+                      Pay
+                    </Button>
+                  ) : (
+                    <span className="text-[var(--muted)]">—</span>
+                  )}
+                </td>
+              </tr>
+            );
+          })}
         </tbody>
       </table>
     </div>

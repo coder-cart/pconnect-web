@@ -1,5 +1,8 @@
 import {
+  BadgeCheck,
+  BarChart3,
   Briefcase,
+  Brush,
   Building2,
   CreditCard,
   FolderOpen,
@@ -7,10 +10,10 @@ import {
   Inbox,
   LayoutGrid,
   MessageSquare,
+  Package,
   Plug,
   Settings,
-  Shield,
-  Users,
+  ShieldCheck,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -29,6 +32,16 @@ export const NAV_ITEMS: NavItem[] = [
   { href: '/inbox', label: 'Inbox', icon: Inbox },
   { href: '/chat', label: 'Chat', externalLabel: 'Messages', icon: MessageSquare },
   { href: '/projects', label: 'Projects', icon: Briefcase },
+  { href: '/production', label: 'Production', icon: Package, internalOnly: true },
+  { href: '/my-work', label: 'My Work', icon: Brush, internalOnly: true },
+  { href: '/qa', label: 'QA Review', icon: ShieldCheck, permission: 'qa.review' },
+  {
+    href: '/approvals',
+    label: 'Approvals',
+    externalLabel: 'Approvals',
+    icon: BadgeCheck,
+    permission: 'approvals.respond',
+  },
   { href: '/tasks', label: 'Tasks', icon: LayoutGrid },
   { href: '/clients', label: 'Clients', icon: Building2, permission: 'clients.view' },
   { href: '/files', label: 'Files', icon: FolderOpen },
@@ -37,6 +50,12 @@ export const NAV_ITEMS: NavItem[] = [
     label: 'Finance',
     icon: CreditCard,
     internalOnly: true,
+  },
+  {
+    href: '/reports',
+    label: 'Reports',
+    icon: BarChart3,
+    permission: 'reports.view',
   },
   { href: '/integrations', label: 'Integrations', icon: Plug, internalOnly: true },
   { href: '/admin', label: 'Settings', icon: Settings, permission: 'users.manage' },
@@ -67,20 +86,28 @@ export function getVisibleNavItems(
   });
 }
 
+const ROLE_LABELS: Array<[string, string]> = [
+  ['company_owner', 'Company Owner'],
+  ['internal_admin', 'Admin'],
+  ['internal_manager', 'Manager'],
+  ['team_lead', 'Team Lead'],
+  ['qa', 'QA Reviewer'],
+  ['editor', 'Editor'],
+  ['external_client', 'Client'],
+];
+
 export function getRoleLabel(
   userType: 'internal' | 'external',
   roleCodes: string[],
 ): string {
   if (userType === 'external') {
-    return 'External Client';
+    return 'Client';
   }
 
-  if (roleCodes.includes('internal_admin')) {
-    return 'Admin';
-  }
-
-  if (roleCodes.includes('internal_manager')) {
-    return 'Manager';
+  for (const [code, label] of ROLE_LABELS) {
+    if (roleCodes.includes(code)) {
+      return label;
+    }
   }
 
   return 'Team Member';

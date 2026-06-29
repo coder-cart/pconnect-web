@@ -1,7 +1,15 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { Download, FolderOpen, Pencil, Share2, Trash2, Upload } from 'lucide-react';
+import {
+  Download,
+  FolderOpen,
+  History,
+  Pencil,
+  Share2,
+  Trash2,
+  Upload,
+} from 'lucide-react';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
@@ -13,6 +21,7 @@ import { apiDownload, apiRequest, apiUpload } from '@/lib/api-client';
 import { ApiResponse, userIsExternal } from '@/lib/auth';
 import { ShareFileModal } from '@/components/modals/ShareFileModal';
 import { EditFileModal } from '@/components/modals/EditFileModal';
+import { FileVersionsModal } from '@/components/files/FileVersionsModal';
 import { useWorkspace } from '@/components/providers/WorkspaceProvider';
 
 interface FileRecord {
@@ -51,6 +60,7 @@ export default function FilesPage() {
   const [filterVisibilityScope, setFilterVisibilityScope] = useState('');
   const [shareFile, setShareFile] = useState<FileRecord | null>(null);
   const [editFile, setEditFile] = useState<FileRecord | null>(null);
+  const [versionsFile, setVersionsFile] = useState<FileRecord | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isUploading, setIsUploading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -339,6 +349,14 @@ export default function FilesPage() {
                             <Button
                               size="sm"
                               variant="secondary"
+                              onClick={() => setVersionsFile(file)}
+                            >
+                              <History className="h-4 w-4" />
+                              Versions
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="secondary"
                               onClick={() => void handleDelete(file)}
                             >
                               <Trash2 className="h-4 w-4" />
@@ -371,6 +389,16 @@ export default function FilesPage() {
         visibilityScope={editFile?.visibilityScope ?? null}
         onClose={() => setEditFile(null)}
         onUpdated={notifyRefresh}
+      />
+
+      <FileVersionsModal
+        fileId={versionsFile?.id ?? null}
+        fileName={versionsFile?.fileName}
+        onClose={() => setVersionsFile(null)}
+        onUpdated={() => {
+          notifyRefresh();
+          loadFiles();
+        }}
       />
     </div>
   );

@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Plus } from 'lucide-react';
 import { apiRequest } from '@/lib/api-client';
-import { ApiResponse } from '@/lib/auth';
+import { ApiResponse, userHasPermission } from '@/lib/auth';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
@@ -13,6 +13,8 @@ import { Tabs } from '@/components/ui/Tabs';
 import { ListSkeleton } from '@/components/ui/Skeleton';
 import { EmptyState, ErrorState } from '@/components/ui/StatePanels';
 import { TaskDetailDrawer } from '@/components/tasks/TaskDetailDrawer';
+import { TaskKanban } from '@/components/tasks/TaskKanban';
+import { TaskTemplatesPanel } from '@/components/tasks/TaskTemplatesPanel';
 import { CreateTaskModal } from '@/components/modals/CreateTaskModal';
 import { useWorkspace } from '@/components/providers/WorkspaceProvider';
 
@@ -41,7 +43,8 @@ function statusVariant(status: string) {
 }
 
 export default function TasksPage() {
-  const { refreshKey, notifyRefresh } = useWorkspace();
+  const { user, refreshKey, notifyRefresh } = useWorkspace();
+  const canManageTemplates = userHasPermission(user, 'templates.manage');
   const [activeTab, setActiveTab] = useState('my-tasks');
   const [tasks, setTasks] = useState<TaskItem[]>([]);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
@@ -68,6 +71,22 @@ export default function TasksPage() {
   useEffect(() => {
     loadTasks();
   }, [refreshKey]);
+
+  async function handleStatusChange(taskId: string, status: string) {
+    setTasks((current) =>
+      current.map((task) =>
+        task.id === taskId ? { ...task, status } : task,
+      ),
+    );
+    try {
+      await apiRequest(`/tasks/${taskId}/status`, {
+        method: 'POST',
+        body: JSON.stringify({ status }),
+      });
+    } catch {
+      loadTasks();
+    }
+  }
 
   const overdueCount = useMemo(
     () =>
@@ -133,9 +152,25 @@ export default function TasksPage() {
             label: 'Overdue',
             badge: overdueCount > 0 ? overdueCount : undefined,
           },
+          { id: 'board', label: 'Board' },
+          { id: 'templates', label: 'Templates & Recurring' },
         ]}
       />
 
+      {activeTab === 'templates' ? (
+        <TaskTemplatesPanel canManage={canManageTemplates} />
+      ) : activeTab === 'board' ? (
+        <TaskKanban
+          tasks={tasks.filter((task) =>
+            `${task.title} ${task.project?.name ?? ''}`
+              .toLowerCase()
+              .includes(searchQuery.toLowerCase()),
+          )}
+          onStatusChange={handleStatusChange}
+          onSelect={setSelectedTaskId}
+        />
+      ) : (
+        <>
       <Card padding="sm">
         <SearchInput
           placeholder="Search tasks..."
@@ -187,6 +222,8 @@ export default function TasksPage() {
           </ul>
         </Card>
       ) : null}
+        </>
+      )}
 
       <TaskDetailDrawer
         taskId={selectedTaskId}

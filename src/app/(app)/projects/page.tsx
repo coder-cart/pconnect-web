@@ -17,6 +17,10 @@ interface ProjectItem {
   status: string;
   visibilityScope: string;
   description?: string | null;
+  progress?: number;
+  taskCount?: number;
+  completedTaskCount?: number;
+  memberCount?: number;
 }
 
 function statusVariant(status: string) {
@@ -24,13 +28,6 @@ function statusVariant(status: string) {
   if (status === 'on_hold') return 'neutral' as const;
   if (status === 'active') return 'primary' as const;
   return 'warning' as const;
-}
-
-function progressForStatus(status: string) {
-  if (status === 'completed') return 100;
-  if (status === 'active') return 68;
-  if (status === 'on_hold') return 35;
-  return 12;
 }
 
 const STATUS_FILTERS = [
@@ -69,7 +66,7 @@ export default function ProjectsPage() {
         getItemKey={(item) => item.id}
         renderItem={() => null}
         renderGridItem={(item) => {
-          const progress = progressForStatus(item.status);
+          const progress = item.progress ?? 0;
 
           return (
             <Card className="relative overflow-hidden transition-transform hover:-translate-y-0.5">
@@ -118,11 +115,11 @@ export default function ProjectsPage() {
                   </span>
                   <span className="inline-flex items-center gap-1">
                     <CheckSquare className="h-3.5 w-3.5" />
-                    Tasks
+                    {item.completedTaskCount ?? 0}/{item.taskCount ?? 0} tasks
                   </span>
                   <span className="inline-flex items-center gap-1">
                     <Users className="h-3.5 w-3.5" />
-                    Team
+                    {item.memberCount ?? 0} members
                   </span>
                 </div>
 

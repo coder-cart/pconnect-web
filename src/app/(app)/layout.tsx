@@ -7,6 +7,7 @@ import {
   AuthenticatedUser,
   ApiResponse,
   clearStoredToken,
+  getStoredRefreshToken,
   getStoredToken,
 } from '@/lib/auth';
 import { apiRequest } from '@/lib/api-client';
@@ -47,7 +48,10 @@ export default function ProtectedLayout({ children }: ProtectedLayoutProps) {
 
   async function handleLogout() {
     try {
-      await apiRequest('/auth/logout', { method: 'POST' });
+      await apiRequest('/auth/logout', {
+        method: 'POST',
+        body: JSON.stringify({ refreshToken: getStoredRefreshToken() }),
+      });
     } catch {
       // Clear local session even if the API call fails.
     }

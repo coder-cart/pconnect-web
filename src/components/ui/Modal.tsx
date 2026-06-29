@@ -1,6 +1,6 @@
 'use client';
 
-import { ReactNode, useEffect } from 'react';
+import { ReactNode, useEffect, useRef } from 'react';
 import { X } from 'lucide-react';
 import { cn } from '@/lib/cn';
 import { Button } from './Button';
@@ -15,6 +15,9 @@ interface ModalProps {
   size?: 'md' | 'lg';
 }
 
+const FOCUSABLE_SELECTOR =
+  'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])';
+
 export function Modal({
   open,
   title,
@@ -24,15 +27,54 @@ export function Modal({
   footer,
   size = 'md',
 }: ModalProps) {
+  const dialogRef = useRef<HTMLDivElement>(null);
+
   useEffect(() => {
     if (!open) return;
 
+    const previouslyFocused = document.activeElement as HTMLElement | null;
+
+    function getFocusable(): HTMLElement[] {
+      if (!dialogRef.current) return [];
+      return Array.from(
+        dialogRef.current.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR),
+      ).filter((element) => element.offsetParent !== null);
+    }
+
     function handleKeyDown(event: KeyboardEvent) {
-      if (event.key === 'Escape') onClose();
+      if (event.key === 'Escape') {
+        onClose();
+        return;
+      }
+
+      if (event.key !== 'Tab') return;
+
+      const focusable = getFocusable();
+      if (focusable.length === 0) return;
+
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      const active = document.activeElement;
+
+      if (event.shiftKey && active === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && active === last) {
+        event.preventDefault();
+        first.focus();
+      }
     }
 
     document.addEventListener('keydown', handleKeyDown);
-    return () => document.removeEventListener('keydown', handleKeyDown);
+
+    // Move focus into the dialog on open.
+    const focusable = getFocusable();
+    (focusable[0] ?? dialogRef.current)?.focus();
+
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown);
+      previouslyFocused?.focus?.();
+    };
   }, [open, onClose]);
 
   if (!open) return null;
@@ -46,9 +88,11 @@ export function Modal({
         onClick={onClose}
       />
       <div
+        ref={dialogRef}
         role="dialog"
         aria-modal="true"
         aria-labelledby="modal-title"
+        tabIndex={-1}
         className={cn(
           'relative z-10 max-h-[90vh] w-full overflow-y-auto rounded-[var(--radius-lg)] border border-[var(--border)] bg-[var(--surface)] shadow-[var(--shadow-md)]',
           size === 'lg' ? 'max-w-2xl' : 'max-w-lg',

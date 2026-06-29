@@ -40,13 +40,17 @@ export default function LoginPage() {
 
     try {
       const response = await apiRequest<
-        ApiResponse<{ accessToken: string; user: AuthenticatedUser }>
+        ApiResponse<{
+          accessToken: string;
+          refreshToken: string;
+          user: AuthenticatedUser;
+        }>
       >('/auth/login', {
         method: 'POST',
         body: JSON.stringify({ email, password }),
       });
 
-      setStoredToken(response.data.accessToken);
+      setStoredToken(response.data.accessToken, response.data.refreshToken);
       router.replace('/dashboard');
     } catch (error) {
       setErrorMessage(

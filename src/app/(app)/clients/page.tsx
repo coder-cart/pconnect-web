@@ -85,7 +85,11 @@ export default function ClientsPage() {
         getItemKey={(item) => item.id}
         renderItem={(item) => (
           <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-            <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={() => router.push(`/clients/${item.id}`)}
+              className="flex items-center gap-3 rounded-[var(--radius-md)] text-left transition-colors hover:opacity-80"
+            >
               <div className="flex h-11 w-11 items-center justify-center rounded-full bg-[var(--primary-soft)] text-sm font-semibold text-[var(--primary)]">
                 {getInitials(item.name)}
               </div>
@@ -97,7 +101,7 @@ export default function ClientsPage() {
                   {item.primaryContactEmail ?? 'No contact email'}
                 </p>
               </div>
-            </div>
+            </button>
 
             <div className="flex flex-wrap items-center gap-3">
               <Badge variant={statusVariant(item.status)} className="capitalize">
@@ -144,7 +148,13 @@ export default function ClientsPage() {
         open={Boolean(onboardingClientId)}
         defaultClientId={onboardingClientId}
         onClose={() => setOnboardingClientId(undefined)}
-        onCreated={notifyRefresh}
+        onCreated={() => {
+          const createdForClientId = onboardingClientId;
+          notifyRefresh();
+          if (createdForClientId) {
+            router.push(`/clients/${createdForClientId}`);
+          }
+        }}
       />
       <LinkClientUserModal
         open={Boolean(linkClient)}
