@@ -64,8 +64,8 @@ export function LinkClientUserModal({
       title="Link client user"
       description={
         clientName
-          ? `Invite an external user to ${clientName}.`
-          : 'Invite an external user to this client organization.'
+          ? `Invite an external user to ${clientName}. They will be invited to the client messages hub.`
+          : 'Invite an external user to this client organization. They will be invited to the client messages hub.'
       }
       footer={
         <ModalActions

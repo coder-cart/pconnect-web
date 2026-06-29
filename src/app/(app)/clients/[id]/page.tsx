@@ -2,7 +2,15 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
-import { CheckCircle2, Circle, CircleCheck, Plus, Workflow } from 'lucide-react';
+import {
+  CheckCircle2,
+  Circle,
+  CircleCheck,
+  Plus,
+  UserPlus,
+  Users,
+  Workflow,
+} from 'lucide-react';
 import { apiRequest } from '@/lib/api-client';
 import { ApiResponse, userHasPermission } from '@/lib/auth';
 import { PageHeader } from '@/components/ui/PageHeader';
@@ -12,6 +20,7 @@ import { Card } from '@/components/ui/Card';
 import { Input } from '@/components/ui/Input';
 import { LoadingState, ErrorState } from '@/components/ui/StatePanels';
 import { CreateOnboardingModal } from '@/components/modals/CreateOnboardingModal';
+import { LinkClientUserModal } from '@/components/modals/LinkClientUserModal';
 import { useWorkspace } from '@/components/providers/WorkspaceProvider';
 
 interface OnboardingItem {
@@ -30,6 +39,18 @@ interface OnboardingWorkflow {
   items: OnboardingItem[];
 }
 
+interface ClientMember {
+  id: string;
+  linkedAt: string;
+  user: {
+    id: string;
+    fullName: string;
+    email: string;
+    userType: string;
+    status: string;
+  };
+}
+
 function statusVariant(status: string) {
   if (status === 'completed') return 'success' as const;
   if (status === 'in_progress') return 'primary' as const;
@@ -43,6 +64,20 @@ function clientStatusVariant(status: string) {
   return 'neutral' as const;
 }
 
+function userStatusVariant(status: string) {
+  if (status === 'active') return 'success' as const;
+  if (status === 'inactive') return 'neutral' as const;
+  return 'warning' as const;
+}
+
+function formatLinkedDate(value: string) {
+  return new Date(value).toLocaleDateString([], {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+  });
+}
+
 export default function ClientOnboardingDetailPage() {
   const params = useParams<{ id: string }>();
   const clientId = params.id;
@@ -50,11 +85,13 @@ export default function ClientOnboardingDetailPage() {
   const canManage = userHasPermission(user, 'clients.manage');
 
   const [workflows, setWorkflows] = useState<OnboardingWorkflow[]>([]);
+  const [members, setMembers] = useState<ClientMember[]>([]);
   const [clientName, setClientName] = useState<string>('Client');
   const [clientStatus, setClientStatus] = useState<string>('onboarding');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [createOpen, setCreateOpen] = useState(false);
+  const [linkOpen, setLinkOpen] = useState(false);
   const [newItemTitles, setNewItemTitles] = useState<Record<string, string>>({});
   const [busyItemId, setBusyItemId] = useState<string | null>(null);
   const [busyWorkflowId, setBusyWorkflowId] = useState<string | null>(null);
@@ -62,17 +99,20 @@ export default function ClientOnboardingDetailPage() {
 
   const load = useCallback(async () => {
     try {
-      const [workflowsResponse, clientsResponse] = await Promise.all([
-        apiRequest<ApiResponse<OnboardingWorkflow[]>>('/onboarding/workflows'),
-        apiRequest<
-          ApiResponse<Array<{ id: string; name: string; status: string }>>
-        >('/clients'),
-      ]);
+      const [workflowsResponse, clientsResponse, membersResponse] =
+        await Promise.all([
+          apiRequest<ApiResponse<OnboardingWorkflow[]>>('/onboarding/workflows'),
+          apiRequest<
+            ApiResponse<Array<{ id: string; name: string; status: string }>>
+          >('/clients'),
+          apiRequest<ApiResponse<ClientMember[]>>(`/clients/${clientId}/users`),
+        ]);
 
       const scoped = workflowsResponse.data.filter(
         (workflow) => workflow.clientOrganization?.id === clientId,
       );
       setWorkflows(scoped);
+      setMembers(membersResponse.data);
 
       const matchedClient = clientsResponse.data.find(
         (client) => client.id === clientId,
@@ -179,8 +219,8 @@ export default function ClientOnboardingDetailPage() {
   if (isLoading) {
     return (
       <LoadingState
-        title="Loading onboarding"
-        description="Fetching onboarding workflows for this client."
+        title="Loading client"
+        description="Fetching organization members and onboarding progress."
       />
     );
   }
@@ -189,7 +229,7 @@ export default function ClientOnboardingDetailPage() {
     <div className="space-y-6">
       <PageHeader
         title={clientName}
-        description="Onboarding workflows and checklist progress."
+        description="Organization members, onboarding progress, and activation."
         breadcrumbs={[
           { label: 'Clients', href: '/clients' },
           { label: clientName },
@@ -220,6 +260,69 @@ export default function ClientOnboardingDetailPage() {
       {errorMessage ? (
         <p className="text-sm text-[var(--danger)]">{errorMessage}</p>
       ) : null}
+
+      <Card>
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <Users className="h-5 w-5 text-[var(--primary)]" />
+            <h2 className="text-base font-semibold text-[var(--foreground)]">
+              Organization members
+            </h2>
+          </div>
+          {canManage ? (
+            <Button size="sm" variant="secondary" onClick={() => setLinkOpen(true)}>
+              <UserPlus className="h-4 w-4" />
+              Add member
+            </Button>
+          ) : null}
+        </div>
+
+        {members.length === 0 ? (
+          <p className="text-sm text-[var(--muted)]">
+            No client users linked yet. Add a member so they can log in and receive
+            an invite to the client messages hub.
+          </p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[480px] text-left text-sm">
+              <thead>
+                <tr className="border-b border-[var(--border)] text-xs font-medium uppercase tracking-wide text-[var(--muted)]">
+                  <th className="pb-2 pr-4 font-medium">Name</th>
+                  <th className="pb-2 pr-4 font-medium">Email</th>
+                  <th className="pb-2 pr-4 font-medium">Status</th>
+                  <th className="pb-2 font-medium">Linked</th>
+                </tr>
+              </thead>
+              <tbody>
+                {members.map((member) => (
+                  <tr
+                    key={member.id}
+                    className="border-b border-[var(--border)] last:border-0"
+                  >
+                    <td className="py-3 pr-4 font-medium text-[var(--foreground)]">
+                      {member.user.fullName}
+                    </td>
+                    <td className="py-3 pr-4 text-[var(--muted-foreground)]">
+                      {member.user.email}
+                    </td>
+                    <td className="py-3 pr-4">
+                      <Badge
+                        variant={userStatusVariant(member.user.status)}
+                        className="capitalize"
+                      >
+                        {member.user.status.replaceAll('_', ' ')}
+                      </Badge>
+                    </td>
+                    <td className="py-3 text-[var(--muted)]">
+                      {formatLinkedDate(member.linkedAt)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </Card>
 
       {workflows.length === 0 ? (
         <ErrorState
@@ -362,6 +465,13 @@ export default function ClientOnboardingDetailPage() {
         defaultClientId={clientId}
         onClose={() => setCreateOpen(false)}
         onCreated={() => void load()}
+      />
+      <LinkClientUserModal
+        open={linkOpen}
+        clientId={clientId}
+        clientName={clientName}
+        onClose={() => setLinkOpen(false)}
+        onLinked={() => void load()}
       />
     </div>
   );

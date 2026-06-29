@@ -21,6 +21,7 @@ interface ChannelSidebarProps {
   canCreateChannel: boolean;
   onSelectChannel: (channelId: string) => void;
   onCreateChannel: () => void;
+  onCreateClientChannel?: (clientOrganizationId: string) => void;
   onStartDirectMessage: () => void;
   onAcceptInvite: (invite: PendingChannelInvite) => void;
 }
@@ -116,6 +117,7 @@ export function ChannelSidebar({
   canCreateChannel,
   onSelectChannel,
   onCreateChannel,
+  onCreateClientChannel,
   onStartDirectMessage,
   onAcceptInvite,
 }: ChannelSidebarProps) {
@@ -155,17 +157,25 @@ export function ChannelSidebar({
   );
 
   const clientGroups = useMemo(() => {
-    const groups = new Map<string, { orgName: string; channels: ChatChannel[] }>();
+    const groups = new Map<
+      string,
+      {
+        orgName: string;
+        clientOrganizationId: string | null;
+        channels: ChatChannel[];
+      }
+    >();
 
     for (const channel of clientChannels) {
       const orgName = channel.clientOrganizationName ?? 'Client messages';
-      const orgKey = channel.clientOrganizationId ?? orgName;
+      const clientOrganizationId = channel.clientOrganizationId ?? null;
+      const orgKey = clientOrganizationId ?? orgName;
       const existing = groups.get(orgKey);
 
       if (existing) {
         existing.channels.push(channel);
       } else {
-        groups.set(orgKey, { orgName, channels: [channel] });
+        groups.set(orgKey, { orgName, clientOrganizationId, channels: [channel] });
       }
     }
 
@@ -273,9 +283,25 @@ export function ChannelSidebar({
           ) : (
             clientGroups.map((group) => (
               <div key={group.orgName} className="space-y-1">
-                <p className="px-3 py-1 text-[11px] font-medium text-[var(--muted)]">
-                  {group.orgName}
-                </p>
+                <div className="flex items-center justify-between px-3 py-1">
+                  <p className="text-[11px] font-medium text-[var(--muted)]">
+                    {group.orgName}
+                  </p>
+                  {canCreateChannel &&
+                  onCreateClientChannel &&
+                  group.clientOrganizationId ? (
+                    <button
+                      type="button"
+                      onClick={() =>
+                        onCreateClientChannel(group.clientOrganizationId as string)
+                      }
+                      className="rounded-[var(--radius-sm)] p-0.5 text-[var(--muted)] hover:bg-[var(--surface-muted)] hover:text-[var(--foreground)]"
+                      aria-label={`Create channel for ${group.orgName}`}
+                    >
+                      <Plus className="h-3.5 w-3.5" />
+                    </button>
+                  ) : null}
+                </div>
                 {group.channels.map((channel) => (
                   <ChannelButton
                     key={channel.id}

@@ -118,6 +118,10 @@ export function ChatWorkspace({
   const [isSendingThreadReply, setIsSendingThreadReply] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [createChannelOpen, setCreateChannelOpen] = useState(false);
+  const [channelPreset, setChannelPreset] = useState<{
+    type?: string;
+    clientOrganizationId?: string;
+  } | null>(null);
   const [startDmOpen, setStartDmOpen] = useState(false);
   const [manageMembersOpen, setManageMembersOpen] = useState(false);
   const [pinnedMessages, setPinnedMessages] = useState<
@@ -142,6 +146,21 @@ export function ChatWorkspace({
   const isExternalUser = userIsExternal(user);
   const canCreateChannel =
     !isExternalUser && userHasPermission(user, 'channels.create_internal');
+
+  const openCreateChannel = useCallback(() => {
+    setChannelPreset(null);
+    setCreateChannelOpen(true);
+  }, []);
+
+  const openCreateClientChannel = useCallback((clientOrganizationId: string) => {
+    setChannelPreset({ type: 'client_shared', clientOrganizationId });
+    setCreateChannelOpen(true);
+  }, []);
+
+  const closeCreateChannel = useCallback(() => {
+    setCreateChannelOpen(false);
+    setChannelPreset(null);
+  }, []);
 
   const loadChannels = useCallback(async () => {
     const response = await apiRequest<ApiResponse<ChatChannel[]>>('/channels');
@@ -719,7 +738,7 @@ export function ChatWorkspace({
           />
           {canCreateChannel ? (
             <div className="flex justify-center">
-              <Button onClick={() => setCreateChannelOpen(true)}>
+              <Button onClick={openCreateChannel}>
                 <Plus className="h-4 w-4" />
                 Create channel
               </Button>
@@ -728,8 +747,11 @@ export function ChatWorkspace({
         </div>
         <CreateChannelModal
           open={createChannelOpen}
-          onClose={() => setCreateChannelOpen(false)}
+          onClose={closeCreateChannel}
           onCreated={handleChannelCreated}
+          presetType={channelPreset?.type}
+          presetClientOrganizationId={channelPreset?.clientOrganizationId}
+          lockClientOrganization={Boolean(channelPreset?.clientOrganizationId)}
         />
       </>
     );
@@ -791,7 +813,8 @@ export function ChatWorkspace({
             acceptingInviteId={acceptingInviteId}
             canCreateChannel={canCreateChannel}
             onSelectChannel={setSelectedChannelId}
-            onCreateChannel={() => setCreateChannelOpen(true)}
+            onCreateChannel={openCreateChannel}
+            onCreateClientChannel={openCreateClientChannel}
             onStartDirectMessage={() => setStartDmOpen(true)}
             onAcceptInvite={(invite) => void handleAcceptInvite(invite)}
           />
@@ -909,8 +932,11 @@ export function ChatWorkspace({
 
       <CreateChannelModal
         open={createChannelOpen}
-        onClose={() => setCreateChannelOpen(false)}
+        onClose={closeCreateChannel}
         onCreated={handleChannelCreated}
+        presetType={channelPreset?.type}
+        presetClientOrganizationId={channelPreset?.clientOrganizationId}
+        lockClientOrganization={Boolean(channelPreset?.clientOrganizationId)}
       />
       <StartDirectMessageModal
         open={startDmOpen}

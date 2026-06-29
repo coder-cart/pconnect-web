@@ -15,6 +15,9 @@ interface CreateChannelModalProps {
   open: boolean;
   onClose: () => void;
   onCreated: () => void;
+  presetType?: string;
+  presetClientOrganizationId?: string;
+  lockClientOrganization?: boolean;
 }
 
 interface MemberCandidatesResponse {
@@ -22,20 +25,33 @@ interface MemberCandidatesResponse {
   clientUsers: MemberCandidate[];
 }
 
+interface ClientOption {
+  id: string;
+  name: string;
+}
+
 export function CreateChannelModal({
   open,
   onClose,
   onCreated,
+  presetType,
+  presetClientOrganizationId,
+  lockClientOrganization = false,
 }: CreateChannelModalProps) {
   const [name, setName] = useState('');
   const [type, setType] = useState('public');
+  const [clientOrganizationId, setClientOrganizationId] = useState('');
+  const [clients, setClients] = useState<ClientOption[]>([]);
   const [internalUsers, setInternalUsers] = useState<MemberCandidate[]>([]);
+  const [clientUsers, setClientUsers] = useState<MemberCandidate[]>([]);
   const [selectedMemberIds, setSelectedMemberIds] = useState<string[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  const showMemberPicker = type === 'private';
-  const canSubmit = name.trim().length > 0;
+  const isClientChannel = type === 'client_shared';
+  const showMemberPicker = type === 'private' || isClientChannel;
+  const canSubmit =
+    name.trim().length > 0 && (!isClientChannel || clientOrganizationId.length > 0);
 
   useEffect(() => {
     if (!open) {
@@ -43,14 +59,38 @@ export function CreateChannelModal({
     }
 
     setName('');
-    setType('public');
+    setType(presetType ?? 'public');
+    setClientOrganizationId(presetClientOrganizationId ?? '');
     setSelectedMemberIds([]);
     setErrorMessage(null);
 
-    apiRequest<ApiResponse<MemberCandidatesResponse>>('/channels/member-candidates')
-      .then((response) => setInternalUsers(response.data.internalUsers))
-      .catch(() => setInternalUsers([]));
-  }, [open]);
+    apiRequest<ApiResponse<ClientOption[]>>('/clients')
+      .then((response) => setClients(response.data))
+      .catch(() => setClients([]));
+  }, [open, presetType, presetClientOrganizationId]);
+
+  useEffect(() => {
+    if (!open) {
+      return;
+    }
+
+    const query =
+      isClientChannel && clientOrganizationId
+        ? `?clientOrganizationId=${clientOrganizationId}`
+        : '';
+
+    apiRequest<ApiResponse<MemberCandidatesResponse>>(
+      `/channels/member-candidates${query}`,
+    )
+      .then((response) => {
+        setInternalUsers(response.data.internalUsers);
+        setClientUsers(response.data.clientUsers ?? []);
+      })
+      .catch(() => {
+        setInternalUsers([]);
+        setClientUsers([]);
+      });
+  }, [open, isClientChannel, clientOrganizationId]);
 
   async function handleSubmit(event?: FormEvent) {
     event?.preventDefault();
@@ -65,7 +105,8 @@ export function CreateChannelModal({
         body: JSON.stringify({
           name: name.trim(),
           type,
-          memberUserIds: type === 'private' ? selectedMemberIds : undefined,
+          clientOrganizationId: isClientChannel ? clientOrganizationId : undefined,
+          memberUserIds: showMemberPicker ? selectedMemberIds : undefined,
         }),
       });
       onCreated();
@@ -83,8 +124,12 @@ export function CreateChannelModal({
     <Modal
       open={open}
       onClose={onClose}
-      title="Create team channel"
-      description="Create a public or private internal channel. Client messages use one hub per client from the Clients page."
+      title={isClientChannel ? 'Create client channel' : 'Create team channel'}
+      description={
+        isClientChannel
+          ? 'Create a shared channel with a client. Add client contacts to invite them.'
+          : 'Create a public or private internal channel, or a shared channel with a client.'
+      }
       footer={
         <ModalActions
           onCancel={onClose}
@@ -100,7 +145,7 @@ export function CreateChannelModal({
           label="Channel name"
           value={name}
           onChange={(event) => setName(event.target.value)}
-          placeholder="e.g. engineering"
+          placeholder={isClientChannel ? 'e.g. design' : 'e.g. engineering'}
           required
         />
         <Select
@@ -110,8 +155,25 @@ export function CreateChannelModal({
           options={[
             { value: 'public', label: 'Public (all internal users)' },
             { value: 'private', label: 'Private (members only)' },
+            { value: 'client_shared', label: 'Client channel (shared with a client)' },
           ]}
         />
+
+        {isClientChannel ? (
+          <Select
+            label="Client"
+            value={clientOrganizationId}
+            onChange={(event) => setClientOrganizationId(event.target.value)}
+            disabled={lockClientOrganization}
+            options={[
+              { value: '', label: 'Select a client' },
+              ...clients.map((client) => ({
+                value: client.id,
+                label: client.name,
+              })),
+            ]}
+          />
+        ) : null}
 
         {showMemberPicker ? (
           <div className="space-y-2">
@@ -120,13 +182,16 @@ export function CreateChannelModal({
             </p>
             <p className="text-xs text-[var(--muted)]">
               You are added automatically.
+              {isClientChannel
+                ? ' Client contacts receive an invite to join.'
+                : ''}
             </p>
             <ChannelMemberPicker
               internalUsers={internalUsers}
-              clientUsers={[]}
+              clientUsers={isClientChannel ? clientUsers : []}
               selectedUserIds={selectedMemberIds}
               onChange={setSelectedMemberIds}
-              showClientUsers={false}
+              showClientUsers={isClientChannel}
             />
           </div>
         ) : null}
