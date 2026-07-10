@@ -45,8 +45,37 @@ function buildContentSecurityPolicy(): string {
   ].join('; ');
 }
 
+const ngrokProxy = process.env.NGROK_PROXY_API === 'true';
+const apiProxyTarget =
+  process.env.API_PROXY_TARGET ?? 'http://127.0.0.1:7001';
+
 const nextConfig: NextConfig = {
   poweredByHeader: false,
+  // Allow HMR when the dev server is accessed via ngrok (client demos).
+  allowedDevOrigins: ['*.ngrok-free.dev', '*.ngrok-free.app', '*.ngrok.io'],
+  async rewrites() {
+    if (!ngrokProxy) {
+      return [];
+    }
+    return [
+      {
+        source: '/api/socket.io',
+        destination: `${apiProxyTarget}/socket.io`,
+      },
+      {
+        source: '/api/socket.io/:path*',
+        destination: `${apiProxyTarget}/socket.io/:path*`,
+      },
+      {
+        source: '/api/:path*',
+        destination: `${apiProxyTarget}/api/:path*`,
+      },
+      {
+        source: '/socket.io/:path*',
+        destination: `${apiProxyTarget}/socket.io/:path*`,
+      },
+    ];
+  },
   async headers() {
     return [
       {

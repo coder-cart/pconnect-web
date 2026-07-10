@@ -18,6 +18,12 @@ function isPublicPath(pathname: string): boolean {
 export function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
   const hasSession = request.cookies.get(SESSION_COOKIE)?.value === '1';
+  const isApiOrSocketPath =
+    pathname.startsWith('/api') || pathname.startsWith('/socket.io');
+
+  if (isApiOrSocketPath) {
+    return NextResponse.next();
+  }
 
   if (isPublicPath(pathname)) {
     // Signed-in users shouldn't sit on the login screen.
@@ -37,8 +43,8 @@ export function proxy(request: NextRequest) {
 }
 
 export const config = {
-  // Run on everything except Next internals and static assets.
+  // Run on app routes only; skip API and socket proxy paths.
   matcher: [
-    '/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).*)',
+    '/((?!api|socket\\.io|_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).*)',
   ],
 };

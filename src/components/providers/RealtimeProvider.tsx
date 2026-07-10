@@ -10,7 +10,12 @@ import {
   useState,
 } from 'react';
 import { io, Socket } from 'socket.io-client';
-import { AUTH_TOKEN_KEY, WS_BASE_URL } from '@/lib/config';
+import {
+  AUTH_TOKEN_KEY,
+  IS_REALTIME_ENABLED,
+  WS_BASE_URL,
+  WS_PATH,
+} from '@/lib/config';
 
 type ChannelEventHandler = (payload: {
   channelId: string;
@@ -55,6 +60,10 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
   >(new Set());
 
   useEffect(() => {
+    if (!IS_REALTIME_ENABLED) {
+      return;
+    }
+
     const token =
       typeof window !== 'undefined'
         ? window.localStorage.getItem(AUTH_TOKEN_KEY)
@@ -66,7 +75,11 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
 
     const socket = io(`${WS_BASE_URL}/ws`, {
       auth: { token },
-      transports: ['websocket', 'polling'],
+      path: WS_PATH,
+      transports:
+        process.env.NEXT_PUBLIC_WS_POLLING_ONLY === 'true'
+          ? ['polling']
+          : ['websocket', 'polling'],
       reconnection: true,
       reconnectionAttempts: 10,
     });

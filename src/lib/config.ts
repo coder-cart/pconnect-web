@@ -4,6 +4,14 @@ export const API_BASE_URL =
 export const WS_BASE_URL =
   process.env.NEXT_PUBLIC_WS_URL ?? 'http://localhost:7001';
 
+export const WS_PATH =
+  process.env.NEXT_PUBLIC_WS_PATH ??
+  (process.env.NGROK_PROXY_API === 'true' ? '/api/socket.io' : '/socket.io');
+
+export const IS_REALTIME_ENABLED =
+  process.env.NEXT_PUBLIC_DISABLE_REALTIME !== 'true' &&
+  process.env.NGROK_PROXY_API !== 'true';
+
 export const AUTH_TOKEN_KEY = 'pconnect_access_token';
 export const REFRESH_TOKEN_KEY = 'pconnect_refresh_token';
 
