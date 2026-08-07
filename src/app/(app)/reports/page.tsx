@@ -54,12 +54,41 @@ function formatCurrency(value: number) {
 
 export default function ReportsPage() {
   const [data, setData] = useState<ReportsOverview | null>(null);
+  const [productionDashboard, setProductionDashboard] = useState<{
+    year: number;
+    artistMonthPivot: Array<{
+      artistName: string;
+      months: Record<number, number>;
+      total: number;
+    }>;
+    editorPerformance: Array<{
+      fullName: string;
+      ordersCompleted: number;
+      imagesEdited: number;
+      paymentEarned: number;
+    }>;
+    folderRollup: Array<{
+      status: { name: string };
+      orderCount: number;
+      inFiles: number;
+      outFiles: number;
+      totalCost: number;
+    }>;
+  } | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   useEffect(() => {
-    apiRequest<ApiResponse<ReportsOverview>>('/reports/overview')
-      .then((response) => setData(response.data))
+    Promise.all([
+      apiRequest<ApiResponse<ReportsOverview>>('/reports/overview'),
+      apiRequest<ApiResponse<typeof productionDashboard>>(
+        '/orders/production-dashboard',
+      ).catch(() => ({ data: null })),
+    ])
+      .then(([overviewResponse, productionResponse]) => {
+        setData(overviewResponse.data);
+        setProductionDashboard(productionResponse.data);
+      })
       .catch((error: Error) => setErrorMessage(error.message))
       .finally(() => setIsLoading(false));
   }, []);
@@ -182,6 +211,71 @@ export default function ReportsPage() {
               </ul>
             )}
           </Card>
+
+          {productionDashboard ? (
+            <>
+              <Card padding="none" className="overflow-x-auto">
+                <div className="border-b border-[var(--border)] px-4 py-3">
+                  <h3 className="text-sm font-semibold text-[var(--foreground)]">
+                    Artist cost pivot ({productionDashboard.year})
+                  </h3>
+                </div>
+                <table className="min-w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-[var(--border)] bg-[var(--surface-muted)]">
+                      <th className="px-3 py-2 text-left">Artist</th>
+                      {Array.from({ length: 12 }, (_, index) => (
+                        <th key={index + 1} className="px-3 py-2 text-right">
+                          {new Date(2026, index, 1).toLocaleString('en', {
+                            month: 'short',
+                          })}
+                        </th>
+                      ))}
+                      <th className="px-3 py-2 text-right">Total</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {productionDashboard.artistMonthPivot.map((row) => (
+                      <tr key={row.artistName} className="border-b border-[var(--border)]">
+                        <td className="px-3 py-2">{row.artistName}</td>
+                        {Array.from({ length: 12 }, (_, index) => (
+                          <td key={index + 1} className="px-3 py-2 text-right">
+                            {row.months[index + 1]
+                              ? `₹${row.months[index + 1].toFixed(0)}`
+                              : '—'}
+                          </td>
+                        ))}
+                        <td className="px-3 py-2 text-right font-medium">
+                          ₹{row.total.toFixed(0)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </Card>
+
+              <Card padding="none" className="overflow-hidden">
+                <div className="border-b border-[var(--border)] px-4 py-3">
+                  <h3 className="text-sm font-semibold text-[var(--foreground)]">
+                    Editor performance
+                  </h3>
+                </div>
+                <ul className="divide-y divide-[var(--border)]">
+                  {productionDashboard.editorPerformance.map((row) => (
+                    <li
+                      key={row.fullName}
+                      className="grid grid-cols-4 px-4 py-3 text-sm"
+                    >
+                      <span className="font-medium">{row.fullName}</span>
+                      <span>{row.ordersCompleted} orders</span>
+                      <span>{row.imagesEdited} images</span>
+                      <span className="text-right">₹{row.paymentEarned.toFixed(0)}</span>
+                    </li>
+                  ))}
+                </ul>
+              </Card>
+            </>
+          ) : null}
         </div>
       ) : null}
     </div>

@@ -1,6 +1,6 @@
 'use client';
 
-import { ReactNode, useEffect, useRef } from 'react';
+import { ReactNode, useEffect, useId, useRef } from 'react';
 import { X } from 'lucide-react';
 import { cn } from '@/lib/cn';
 import { Button } from './Button';
@@ -28,6 +28,12 @@ export function Modal({
   size = 'md',
 }: ModalProps) {
   const dialogRef = useRef<HTMLDivElement>(null);
+  const onCloseRef = useRef(onClose);
+  const titleId = useId();
+
+  useEffect(() => {
+    onCloseRef.current = onClose;
+  }, [onClose]);
 
   useEffect(() => {
     if (!open) return;
@@ -38,23 +44,44 @@ export function Modal({
       if (!dialogRef.current) return [];
       return Array.from(
         dialogRef.current.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR),
-      ).filter((element) => element.offsetParent !== null);
+      ).filter((element) => {
+        if (
+          element.hasAttribute('disabled') ||
+          element.getAttribute('aria-hidden') === 'true'
+        ) {
+          return false;
+        }
+        const style = window.getComputedStyle(element);
+        return style.visibility !== 'hidden' && style.display !== 'none';
+      });
     }
 
     function handleKeyDown(event: KeyboardEvent) {
       if (event.key === 'Escape') {
-        onClose();
+        event.preventDefault();
+        onCloseRef.current();
         return;
       }
 
-      if (event.key !== 'Tab') return;
+      if (event.key !== 'Tab' || !dialogRef.current) return;
 
       const focusable = getFocusable();
-      if (focusable.length === 0) return;
+      if (focusable.length === 0) {
+        event.preventDefault();
+        dialogRef.current.focus();
+        return;
+      }
 
       const first = focusable[0];
       const last = focusable[focusable.length - 1];
-      const active = document.activeElement;
+      const active = document.activeElement as HTMLElement | null;
+      const activeInside = active ? dialogRef.current.contains(active) : false;
+
+      if (!activeInside) {
+        event.preventDefault();
+        first.focus();
+        return;
+      }
 
       if (event.shiftKey && active === first) {
         event.preventDefault();
@@ -67,54 +94,60 @@ export function Modal({
 
     document.addEventListener('keydown', handleKeyDown);
 
-    // Move focus into the dialog on open.
+    // Prefer first field input over dismiss/header buttons so typing works immediately.
     const focusable = getFocusable();
-    (focusable[0] ?? dialogRef.current)?.focus();
+    const preferred =
+      focusable.find((el) => {
+        const tag = el.tagName.toLowerCase();
+        return tag === 'input' || tag === 'textarea' || tag === 'select';
+      }) ?? focusable[0];
+    preferred?.focus();
 
     return () => {
       document.removeEventListener('keydown', handleKeyDown);
       previouslyFocused?.focus?.();
     };
-  }, [open, onClose]);
+    // Intentionally omit onClose — use onCloseRef so parent re-renders don't remount focus.
+  }, [open]);
 
   if (!open) return null;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <button
-        type="button"
+      <div
         className="absolute inset-0 bg-black/40 backdrop-blur-sm"
-        aria-label="Close dialog"
-        onClick={onClose}
+        aria-hidden="true"
+        onMouseDown={(event) => {
+          // Only close on direct backdrop press (not bubbled from dialog).
+          if (event.target === event.currentTarget) {
+            onCloseRef.current();
+          }
+        }}
       />
       <div
         ref={dialogRef}
         role="dialog"
         aria-modal="true"
-        aria-labelledby="modal-title"
+        aria-labelledby={titleId}
         tabIndex={-1}
         className={cn(
-          'relative z-10 max-h-[90vh] w-full overflow-y-auto rounded-[var(--radius-lg)] border border-[var(--border)] bg-[var(--surface)] shadow-[var(--shadow-md)]',
+          'relative z-10 max-h-[90vh] w-full overflow-y-auto rounded-[var(--radius-lg)] border border-[var(--border)] bg-[var(--surface)] shadow-[var(--shadow-md)] outline-none',
           size === 'lg' ? 'max-w-2xl' : 'max-w-lg',
         )}
+        onMouseDown={(event) => event.stopPropagation()}
       >
-        <div className="flex items-start justify-between border-b border-[var(--border)] px-5 py-4">
+        <div className="relative border-b border-[var(--border)] px-5 py-4 pr-12">
           <div>
-            <h2 id="modal-title" className="text-base font-semibold text-[var(--foreground)]">
+            <h2
+              id={titleId}
+              className="text-base font-semibold text-[var(--foreground)]"
+            >
               {title}
             </h2>
             {description ? (
               <p className="mt-1 text-sm text-[var(--muted)]">{description}</p>
             ) : null}
           </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded-[var(--radius-md)] p-2 text-[var(--muted)] hover:bg-[var(--surface-muted)] hover:text-[var(--foreground)]"
-            aria-label="Close"
-          >
-            <X className="h-4 w-4" />
-          </button>
         </div>
 
         <div className="px-5 py-4">{children}</div>
@@ -124,6 +157,16 @@ export function Modal({
             {footer}
           </div>
         ) : null}
+
+        {/* Close last in DOM/tab order so Tab from the first field does not land on dismiss. */}
+        <button
+          type="button"
+          onClick={() => onCloseRef.current()}
+          className="absolute right-3 top-3 rounded-[var(--radius-md)] p-2 text-[var(--muted)] hover:bg-[var(--surface-muted)] hover:text-[var(--foreground)]"
+          aria-label="Close"
+        >
+          <X className="h-4 w-4" />
+        </button>
       </div>
     </div>
   );
@@ -146,10 +189,19 @@ export function ModalActions({
 }: ModalActionsProps) {
   return (
     <>
-      <Button variant="secondary" onClick={onCancel} disabled={isSubmitting}>
+      <Button
+        type="button"
+        variant="secondary"
+        onClick={onCancel}
+        disabled={isSubmitting}
+      >
         Cancel
       </Button>
-      <Button onClick={onSubmit} disabled={disabled || isSubmitting}>
+      <Button
+        type="button"
+        onClick={onSubmit}
+        disabled={disabled || isSubmitting}
+      >
         {isSubmitting ? 'Saving...' : submitLabel}
       </Button>
     </>

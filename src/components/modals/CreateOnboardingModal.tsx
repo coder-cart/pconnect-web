@@ -12,12 +12,6 @@ interface ClientOption {
   name: string;
 }
 
-interface ProjectOption {
-  id: string;
-  name: string;
-  code: string;
-}
-
 interface CreateOnboardingModalProps {
   open: boolean;
   onClose: () => void;
@@ -32,24 +26,20 @@ export function CreateOnboardingModal({
   defaultClientId,
 }: CreateOnboardingModalProps) {
   const [clients, setClients] = useState<ClientOption[]>([]);
-  const [projects, setProjects] = useState<ProjectOption[]>([]);
   const [clientOrganizationId, setClientOrganizationId] = useState('');
-  const [projectId, setProjectId] = useState('');
   const [name, setName] = useState('');
   const [itemTitle, setItemTitle] = useState('Kickoff meeting');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
+  const clientLocked = Boolean(defaultClientId);
+
   useEffect(() => {
     if (!open) return;
 
-    Promise.all([
-      apiRequest<ApiResponse<ClientOption[]>>('/clients'),
-      apiRequest<ApiResponse<ProjectOption[]>>('/projects'),
-    ])
-      .then(([clientsResponse, projectsResponse]) => {
+    apiRequest<ApiResponse<ClientOption[]>>('/clients')
+      .then((clientsResponse) => {
         setClients(clientsResponse.data);
-        setProjects(projectsResponse.data);
         const clientId = defaultClientId ?? clientsResponse.data[0]?.id ?? '';
         setClientOrganizationId(clientId);
         const clientName =
@@ -59,7 +49,6 @@ export function CreateOnboardingModal({
       })
       .catch(() => {
         setClients([]);
-        setProjects([]);
       });
   }, [open, defaultClientId]);
 
@@ -77,7 +66,6 @@ export function CreateOnboardingModal({
         method: 'POST',
         body: JSON.stringify({
           clientOrganizationId,
-          projectId: projectId || undefined,
           name: name.trim(),
         }),
       });
@@ -110,7 +98,7 @@ export function CreateOnboardingModal({
     <Modal
       open={open}
       title="Create Onboarding Workflow"
-      description="Start a client onboarding workflow with an initial checklist item."
+      description="Start a client onboarding workflow with an initial checklist item. A default project is attached automatically."
       onClose={onClose}
       size="lg"
       footer={
@@ -124,27 +112,27 @@ export function CreateOnboardingModal({
       }
     >
       <form className="space-y-4" onSubmit={(event) => void handleSubmit(event)}>
-        <Select
-          label="Client"
-          value={clientOrganizationId}
-          onChange={(event) => setClientOrganizationId(event.target.value)}
-          options={clients.map((client) => ({
-            value: client.id,
-            label: client.name,
-          }))}
-        />
-        <Select
-          label="Project (optional)"
-          value={projectId}
-          onChange={(event) => setProjectId(event.target.value)}
-          options={[
-            { value: '', label: 'None' },
-            ...projects.map((project) => ({
-              value: project.id,
-              label: `${project.name} (${project.code})`,
-            })),
-          ]}
-        />
+        {clientLocked ? (
+          <div className="rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface-muted)] px-3 py-2">
+            <p className="text-xs font-medium uppercase tracking-wide text-[var(--muted)]">
+              Client
+            </p>
+            <p className="text-sm font-medium text-[var(--foreground)]">
+              {clients.find((c) => c.id === clientOrganizationId)?.name ??
+                'Client'}
+            </p>
+          </div>
+        ) : (
+          <Select
+            label="Client"
+            value={clientOrganizationId}
+            onChange={(event) => setClientOrganizationId(event.target.value)}
+            options={clients.map((client) => ({
+              value: client.id,
+              label: client.name,
+            }))}
+          />
+        )}
         <Input
           label="Workflow name"
           value={name}

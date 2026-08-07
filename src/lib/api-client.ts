@@ -84,7 +84,17 @@ export async function apiRequest<T>(
     }
   }
 
-  const payload = (await response.json()) as T;
+  const raw = await response.text();
+  let payload: T;
+  try {
+    payload = (raw ? JSON.parse(raw) : {}) as T;
+  } catch {
+    throw new Error(
+      response.ok
+        ? 'Invalid JSON response from API'
+        : `API unavailable (${response.status}). Is the backend running on port 7001?`,
+    );
+  }
 
   if (!response.ok) {
     const errorPayload = payload as unknown as ApiErrorResponse;
@@ -113,7 +123,17 @@ export async function apiUpload<T>(
     body: formData,
   });
 
-  const payload = (await response.json()) as T;
+  const raw = await response.text();
+  let payload: T;
+  try {
+    payload = (raw ? JSON.parse(raw) : {}) as T;
+  } catch {
+    throw new Error(
+      response.ok
+        ? 'Invalid JSON response from API'
+        : `API unavailable (${response.status}). Is the backend running on port 7001?`,
+    );
+  }
 
   if (!response.ok) {
     const errorPayload = payload as unknown as ApiErrorResponse;

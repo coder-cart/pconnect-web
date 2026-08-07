@@ -6,6 +6,7 @@ import {
   AlertTriangle,
   BadgeCheck,
   Brush,
+  ClipboardList,
   CreditCard,
   FileText,
   Package,
@@ -34,7 +35,16 @@ interface DashboardMetrics {
     outstandingInvoices: number;
     myAssignedAssets: number;
     myLoggedMinutes: number;
+    openOrders?: number;
   };
+  ordersDueThisWeek?: Array<{
+    id: string;
+    code: string;
+    name: string;
+    dueDate?: string | null;
+    status: string;
+    clientOrganization?: { name: string } | null;
+  }>;
 }
 
 export default function DashboardPage() {
@@ -54,6 +64,7 @@ export default function DashboardPage() {
   const isEditor = userHasPermission(user, 'assets.manage');
   const isQa = userHasPermission(user, 'qa.review');
   const isManager = userHasPermission(user, 'batches.manage');
+  const canViewOrders = userHasPermission(user, 'orders.view');
 
   const today = new Intl.DateTimeFormat('en-US', {
     weekday: 'long',
@@ -69,6 +80,24 @@ export default function DashboardPage() {
         title={`Welcome, ${user.fullName.split(' ')[0]}`}
         description={`${today} · ${roleLabel} workspace`}
       />
+
+      {user.mustChangePassword ? (
+        <Card className="border-[var(--warning)]/40 bg-[var(--warning)]/10">
+          <p className="text-sm font-medium text-[var(--foreground)]">
+            Password change required
+          </p>
+          <p className="mt-1 text-sm text-[var(--muted)]">
+            You signed in with a temporary password. Update it from your profile
+            or use the forgot-password flow before continuing sensitive work.
+          </p>
+          <Link
+            href="/reset-password"
+            className="mt-3 inline-block text-sm font-medium text-[var(--primary)]"
+          >
+            Change password
+          </Link>
+        </Card>
+      ) : null}
 
       {isLoading ? <ListSkeleton rows={4} /> : null}
 
@@ -135,6 +164,44 @@ export default function DashboardPage() {
                 href="/qa"
                 cta="Open QA queue"
               />
+            ) : null}
+
+            {isManager ? (
+              <QuickPanel
+                title="Open orders"
+                icon={<ClipboardList className="h-4 w-4" />}
+                value={totals?.openOrders ?? 0}
+                valueLabel="orders in draft, active, or production"
+                href="/orders"
+                cta="View orders"
+              />
+            ) : null}
+
+            {canViewOrders && metrics?.ordersDueThisWeek?.length ? (
+              <Card>
+                <h2 className="text-base font-semibold text-[var(--foreground)]">
+                  Due this week
+                </h2>
+                <div className="mt-3 space-y-2">
+                  {metrics.ordersDueThisWeek.map((order) => (
+                    <Link
+                      key={order.id}
+                      href={`/orders/${order.id}`}
+                      className="block rounded-[var(--radius-md)] border border-[var(--border)] px-3 py-2 hover:bg-[var(--surface-muted)]"
+                    >
+                      <p className="text-sm font-medium text-[var(--foreground)]">
+                        {order.code} · {order.name}
+                      </p>
+                      <p className="text-xs text-[var(--muted)]">
+                        {order.clientOrganization?.name ?? 'Internal'} ·{' '}
+                        {order.dueDate
+                          ? new Date(order.dueDate).toLocaleDateString()
+                          : 'No due date'}
+                      </p>
+                    </Link>
+                  ))}
+                </div>
+              </Card>
             ) : null}
 
             {isManager ? (

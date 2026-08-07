@@ -1,14 +1,13 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Upload, Play } from 'lucide-react';
-import { apiRequest } from '@/lib/api-client';
+import { apiRequest, apiUpload } from '@/lib/api-client';
 import { ApiResponse } from '@/lib/auth';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
-import { Input } from '@/components/ui/Input';
 import { Modal, ModalActions } from '@/components/ui/Modal';
 import { ListSkeleton } from '@/components/ui/Skeleton';
 import { EmptyState, ErrorState } from '@/components/ui/StatePanels';
@@ -19,15 +18,27 @@ interface MyWorkAsset extends AssetSummary {
   revisions?: { id: string; round: number; instructions: string }[];
 }
 
+interface UploadedVersion {
+  id: string;
+  storageKey: string | null;
+  mimeType: string | null;
+  sizeBytes: number | null;
+  notes: string | null;
+}
+
 export default function MyWorkPage() {
   const { refreshKey, notifyRefresh } = useWorkspace();
   const [assets, setAssets] = useState<MyWorkAsset[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [submitFor, setSubmitFor] = useState<MyWorkAsset | null>(null);
-  const [storageKey, setStorageKey] = useState('');
+  const [uploadedVersion, setUploadedVersion] = useState<UploadedVersion | null>(
+    null,
+  );
   const [notes, setNotes] = useState('');
   const [busy, setBusy] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   function load() {
     setIsLoading(true);
@@ -49,20 +60,73 @@ export default function MyWorkPage() {
     }
   }
 
+  function openSubmitModal(asset: MyWorkAsset) {
+    setSubmitFor(asset);
+    setUploadedVersion(
+      asset.currentVersion
+        ? {
+            id: asset.currentVersion.id,
+            storageKey: asset.currentVersion.storageKey,
+            mimeType: null,
+            sizeBytes: null,
+            notes: asset.currentVersion.notes,
+          }
+        : null,
+    );
+    setNotes('');
+    setUploadProgress(null);
+  }
+
+  async function handleFileSelected(file: File | null) {
+    if (!submitFor || !file) return;
+
+    setBusy(true);
+    setUploadProgress('Uploading...');
+    setErrorMessage(null);
+
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      if (notes) {
+        formData.append('notes', notes);
+      }
+
+      const response = await apiUpload<ApiResponse<UploadedVersion>>(
+        `/assets/${submitFor.id}/upload`,
+        formData,
+      );
+      setUploadedVersion(response.data);
+      setUploadProgress('Upload complete');
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : 'Upload failed');
+      setUploadProgress(null);
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function handleSubmit() {
     if (!submitFor) return;
+    if (!uploadedVersion?.storageKey) {
+      setErrorMessage('Upload a deliverable file before submitting to QA.');
+      return;
+    }
+
     setBusy(true);
     try {
       await apiRequest(`/assets/${submitFor.id}/submit`, {
         method: 'POST',
         body: JSON.stringify({
-          storageKey: storageKey || undefined,
-          notes: notes || undefined,
+          storageKey: uploadedVersion.storageKey,
+          mimeType: uploadedVersion.mimeType ?? undefined,
+          sizeBytes: uploadedVersion.sizeBytes ?? undefined,
+          notes: notes || uploadedVersion.notes || undefined,
         }),
       });
       setSubmitFor(null);
-      setStorageKey('');
+      setUploadedVersion(null);
       setNotes('');
+      setUploadProgress(null);
       notifyRefresh();
       load();
     } catch (error) {
@@ -154,7 +218,7 @@ export default function MyWorkPage() {
                   ) : null}
                   <Button
                     size="sm"
-                    onClick={() => setSubmitFor(asset)}
+                    onClick={() => openSubmitModal(asset)}
                     disabled={busy}
                   >
                     <Upload className="h-4 w-4" />
@@ -170,7 +234,7 @@ export default function MyWorkPage() {
       <Modal
         open={Boolean(submitFor)}
         title={`Submit ${submitFor?.name ?? ''}`}
-        description="Provide the deliverable reference and notes for QA review."
+        description="Upload your deliverable, then submit it for QA review."
         onClose={() => setSubmitFor(null)}
         footer={
           <ModalActions
@@ -182,12 +246,33 @@ export default function MyWorkPage() {
         }
       >
         <div className="space-y-3">
-          <Input
-            label="Deliverable reference (storage key / URL)"
-            value={storageKey}
-            onChange={(event) => setStorageKey(event.target.value)}
-            placeholder="e.g. deliverables/hero-01-final.jpg"
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*,.pdf,.zip"
+            className="hidden"
+            onChange={(event) => {
+              void handleFileSelected(event.target.files?.[0] ?? null);
+              event.target.value = '';
+            }}
           />
+          <Button
+            type="button"
+            variant="secondary"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={busy}
+          >
+            <Upload className="h-4 w-4" />
+            {uploadedVersion?.storageKey ? 'Replace file' : 'Choose file'}
+          </Button>
+          {uploadProgress ? (
+            <p className="text-xs text-[var(--muted)]">{uploadProgress}</p>
+          ) : null}
+          {uploadedVersion?.storageKey ? (
+            <p className="text-xs text-[var(--foreground)]">
+              Ready: {uploadedVersion.storageKey.split('/').pop()}
+            </p>
+          ) : null}
           <label className="block space-y-1.5">
             <span className="text-sm font-medium text-[var(--foreground)]">
               Notes for QA

@@ -27,6 +27,9 @@ export interface BatchSummary {
   name: string;
   description?: string | null;
   instructions?: string | null;
+  subFolderName?: string | null;
+  clientUploadUrl?: string | null;
+  deliveryFolderUrl?: string | null;
   status: string;
   stage: string;
   priority: string;
@@ -35,6 +38,7 @@ export interface BatchSummary {
   assignedQa?: { id: string; fullName: string } | null;
   clientOrganization?: { id: string; name: string } | null;
   project?: { id: string; name: string } | null;
+  order?: { id: string; code: string; name: string } | null;
   _count?: { assets: number };
 }
 

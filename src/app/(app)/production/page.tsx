@@ -114,6 +114,9 @@ export default function ProductionPage() {
                     <p className="text-xs text-[var(--muted)]">
                       {batch.code} · {batch._count?.assets ?? 0} assets ·{' '}
                       {batch.clientOrganization?.name ?? 'Internal'}
+                      {batch.order
+                        ? ` · Order ${batch.order.code}`
+                        : ''}
                     </p>
                   </div>
                   <Badge

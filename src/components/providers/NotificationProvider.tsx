@@ -52,10 +52,12 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
 
     try {
       const [listResponse] = await Promise.all([
-        apiRequest<ApiResponse<NotificationRecord[]>>('/notifications'),
+        apiRequest<ApiResponse<{ items: NotificationRecord[] }>>(
+          '/notifications?pageSize=50',
+        ),
         loadUnreadCount(),
       ]);
-      setNotifications(listResponse.data);
+      setNotifications(listResponse.data.items);
     } catch (error) {
       setErrorMessage(
         error instanceof Error ? error.message : 'Unable to load notifications',

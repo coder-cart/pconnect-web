@@ -46,6 +46,7 @@ export default function BatchDetailPage() {
   const batchId = params.batchId;
   const { user } = useWorkspace();
   const canAssign = userHasPermission(user, 'batches.assign');
+  const canManageBatch = userHasPermission(user, 'batches.manage');
   const canManageAssets = userHasPermission(user, 'assets.manage');
   const canDeliver = userHasPermission(user, 'delivery.manage');
 
@@ -58,6 +59,9 @@ export default function BatchDetailPage() {
 
   const [editorId, setEditorId] = useState('');
   const [qaId, setQaId] = useState('');
+  const [subFolderName, setSubFolderName] = useState('');
+  const [clientUploadUrl, setClientUploadUrl] = useState('');
+  const [deliveryFolderUrl, setDeliveryFolderUrl] = useState('');
   const [assetModalOpen, setAssetModalOpen] = useState(false);
   const [assetName, setAssetName] = useState('');
   const [busy, setBusy] = useState(false);
@@ -73,6 +77,9 @@ export default function BatchDetailPage() {
         setDeliveries(deliveriesRes.data);
         setEditorId(batchRes.data.assignedEditor?.id ?? '');
         setQaId(batchRes.data.assignedQa?.id ?? '');
+        setSubFolderName(batchRes.data.subFolderName ?? '');
+        setClientUploadUrl(batchRes.data.clientUploadUrl ?? '');
+        setDeliveryFolderUrl(batchRes.data.deliveryFolderUrl ?? '');
       })
       .catch((error: Error) => setErrorMessage(error.message))
       .finally(() => setIsLoading(false));
@@ -96,11 +103,34 @@ export default function BatchDetailPage() {
       await apiRequest(`/batches/${batchId}/assign`, {
         method: 'PUT',
         body: JSON.stringify({
-          assignedEditorUserId: editorId || undefined,
-          assignedQaUserId: qaId || undefined,
+          // Send null so the API clears the seat (undefined was a no-op).
+          assignedEditorUserId: editorId || null,
+          assignedQaUserId: qaId || null,
         }),
       });
       load();
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleSaveFolders() {
+    setBusy(true);
+    setErrorMessage(null);
+    try {
+      await apiRequest(`/batches/${batchId}`, {
+        method: 'PATCH',
+        body: JSON.stringify({
+          subFolderName: subFolderName.trim() || null,
+          clientUploadUrl: clientUploadUrl.trim() || null,
+          deliveryFolderUrl: deliveryFolderUrl.trim() || null,
+        }),
+      });
+      load();
+    } catch (error) {
+      setErrorMessage(
+        error instanceof Error ? error.message : 'Failed to save folder links',
+      );
     } finally {
       setBusy(false);
     }
@@ -164,6 +194,9 @@ export default function BatchDetailPage() {
         description={batch.instructions ?? 'No instructions provided.'}
         breadcrumbs={[
           { label: 'Production', href: '/production' },
+          ...(batch.order
+            ? [{ label: batch.order.code, href: `/orders/${batch.order.id}` }]
+            : []),
           { label: batch.code },
         ]}
       />
@@ -215,6 +248,80 @@ export default function BatchDetailPage() {
             Editor: {batch.assignedEditor?.fullName ?? 'Unassigned'} · QA:{' '}
             {batch.assignedQa?.fullName ?? 'Unassigned'}
           </p>
+        )}
+      </Card>
+
+      <Card className="space-y-3">
+        <h2 className="text-sm font-semibold text-[var(--foreground)]">
+          Client upload folder
+        </h2>
+        <p className="text-xs text-[var(--muted)]">
+          Folder name plus OneDrive / Google Drive (or other) link where the
+          client uploaded source files.
+        </p>
+        {canManageBatch ? (
+          <>
+            <Input
+              label="Sub-folder name"
+              value={subFolderName}
+              onChange={(event) => setSubFolderName(event.target.value)}
+              placeholder="e.g. ORDR11223_Batch1"
+            />
+            <Input
+              label="Client upload URL"
+              value={clientUploadUrl}
+              onChange={(event) => setClientUploadUrl(event.target.value)}
+              placeholder="https://onedrive.live.com/... or Google Drive folder"
+            />
+            <Input
+              label="Delivery folder URL (optional)"
+              value={deliveryFolderUrl}
+              onChange={(event) => setDeliveryFolderUrl(event.target.value)}
+              placeholder="https://..."
+            />
+            <Button size="sm" onClick={handleSaveFolders} disabled={busy}>
+              Save folder links
+            </Button>
+          </>
+        ) : (
+          <div className="space-y-1 text-sm">
+            <p>
+              Folder:{' '}
+              <span className="text-[var(--foreground)]">
+                {batch.subFolderName || '—'}
+              </span>
+            </p>
+            <p>
+              Upload:{' '}
+              {batch.clientUploadUrl ? (
+                <a
+                  href={batch.clientUploadUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-[var(--primary)] hover:underline"
+                >
+                  Open drive folder
+                </a>
+              ) : (
+                '—'
+              )}
+            </p>
+            <p>
+              Delivery:{' '}
+              {batch.deliveryFolderUrl ? (
+                <a
+                  href={batch.deliveryFolderUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-[var(--primary)] hover:underline"
+                >
+                  Open delivery folder
+                </a>
+              ) : (
+                '—'
+              )}
+            </p>
+          </div>
         )}
       </Card>
 

@@ -57,11 +57,11 @@ export default function TasksPage() {
   function loadTasks() {
     setIsLoading(true);
     Promise.all([
-      apiRequest<ApiResponse<TaskItem[]>>('/tasks'),
+      apiRequest<ApiResponse<{ items: TaskItem[] }>>('/tasks?pageSize=100'),
       apiRequest<ApiResponse<{ id: string }>>('/auth/me'),
     ])
       .then(([tasksResponse, meResponse]) => {
-        setTasks(tasksResponse.data);
+        setTasks(tasksResponse.data.items);
         setCurrentUserId(meResponse.data.id);
       })
       .catch((error: Error) => setErrorMessage(error.message))

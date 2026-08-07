@@ -8,6 +8,7 @@ export interface AuthenticatedUser {
   userType: 'internal' | 'external';
   roleCodes: string[];
   permissionCodes: string[];
+  mustChangePassword?: boolean;
 }
 
 export interface ApiResponse<T> {

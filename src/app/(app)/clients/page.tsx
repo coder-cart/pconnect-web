@@ -11,7 +11,7 @@ import { userHasPermission } from '@/lib/auth';
 import { apiRequest } from '@/lib/api-client';
 import { ApiResponse } from '@/lib/auth';
 import { ChatChannel } from '@/lib/chat-types';
-import { CreateClientModal } from '@/components/modals/CreateClientModal';
+import { CreateClientWizard } from '@/components/modals/CreateClientWizard';
 import { CreateOnboardingModal } from '@/components/modals/CreateOnboardingModal';
 import { LinkClientUserModal } from '@/components/modals/LinkClientUserModal';
 import { useWorkspace } from '@/components/providers/WorkspaceProvider';
@@ -63,18 +63,17 @@ export default function ClientsPage() {
   return (
     <>
       <ResourceListPage<ClientItem>
-        title="Client Onboarding"
-        description="Manage onboarding progress for all active clients."
+        title="Clients"
+        description="Client organizations, onboarding, and communication hubs."
         breadcrumbs={[
           { label: 'Clients', href: '/clients' },
-          { label: 'Onboarding' },
         ]}
         endpoint="/clients"
         permission="clients.view"
         searchPlaceholder="Search clients..."
         filterOptions={STATUS_FILTERS}
         filterField="status"
-        createLabel="Invite New Client"
+        createLabel="Create Client"
         onCreateClick={() => setCreateOpen(true)}
         refreshKey={refreshKey}
         emptyTitle="No clients yet"
@@ -139,7 +138,7 @@ export default function ClientsPage() {
         )}
       />
 
-      <CreateClientModal
+      <CreateClientWizard
         open={createOpen}
         onClose={() => setCreateOpen(false)}
         onCreated={notifyRefresh}

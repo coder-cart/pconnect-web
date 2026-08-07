@@ -10,6 +10,9 @@ import { ApiResponse } from '@/lib/auth';
 import { ListSkeleton } from '@/components/ui/Skeleton';
 import { CreateUserModal } from '@/components/modals/CreateUserModal';
 import { RolesPermissionsManager } from '@/components/admin/RolesPermissionsManager';
+import { MasterDataManager } from '@/components/admin/MasterDataManager';
+import { ServiceMasterManager } from '@/components/admin/ServiceMasterManager';
+import { OrderImportPanel } from '@/components/admin/OrderImportPanel';
 import { useWorkspace } from '@/components/providers/WorkspaceProvider';
 import { userHasPermission } from '@/lib/auth';
 
@@ -40,6 +43,7 @@ const STATUS_FILTERS = [
 export default function AdminPage() {
   const { user, refreshKey, notifyRefresh } = useWorkspace();
   const canManageRoles = userHasPermission(user, 'roles.manage');
+  const canManageMasterData = userHasPermission(user, 'master_data.manage');
   const [activeTab, setActiveTab] = useState('users');
   const [auditLogs, setAuditLogs] = useState<AuditLogItem[]>([]);
   const [isLoadingAudit, setIsLoadingAudit] = useState(false);
@@ -63,6 +67,13 @@ export default function AdminPage() {
         onChange={setActiveTab}
         items={[
           { id: 'users', label: 'Users' },
+          ...(canManageMasterData
+            ? [
+                { id: 'service-master', label: 'Service Master' },
+                { id: 'master-data', label: 'Master Data' },
+                { id: 'import', label: 'Excel Import' },
+              ]
+            : []),
           ...(canManageRoles
             ? [{ id: 'roles', label: 'Roles & Permissions' }]
             : []),
@@ -108,6 +119,18 @@ export default function AdminPage() {
             </div>
           )}
         />
+      ) : null}
+
+      {activeTab === 'service-master' && canManageMasterData ? (
+        <ServiceMasterManager />
+      ) : null}
+
+      {activeTab === 'master-data' && canManageMasterData ? (
+        <MasterDataManager />
+      ) : null}
+
+      {activeTab === 'import' && canManageMasterData ? (
+        <OrderImportPanel />
       ) : null}
 
       {activeTab === 'roles' && canManageRoles ? (
