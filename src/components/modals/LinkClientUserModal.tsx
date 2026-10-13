@@ -11,6 +11,8 @@ interface LinkClientUserModalProps {
   clientName: string | null;
   onClose: () => void;
   onLinked: () => void;
+  /** Softer copy for client self-serve invites. */
+  mode?: 'staff' | 'client';
 }
 
 export function LinkClientUserModal({
@@ -19,6 +21,7 @@ export function LinkClientUserModal({
   clientName,
   onClose,
   onLinked,
+  mode = 'staff',
 }: LinkClientUserModalProps) {
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
@@ -61,11 +64,15 @@ export function LinkClientUserModal({
     <Modal
       open={open}
       onClose={onClose}
-      title="Link client user"
+      title={mode === 'client' ? 'Invite teammate' : 'Link client user'}
       description={
-        clientName
-          ? `Invite an external user to ${clientName}. They will be invited to the client messages hub.`
-          : 'Invite an external user to this client organization. They will be invited to the client messages hub.'
+        mode === 'client'
+          ? clientName
+            ? `Invite a teammate to ${clientName}. They will get portal access and join the messages hub.`
+            : 'Invite a teammate to your organization. They will get portal access and join the messages hub.'
+          : clientName
+            ? `Invite an external user to ${clientName}. They will be invited to the client messages hub.`
+            : 'Invite an external user to this client organization. They will be invited to the client messages hub.'
       }
       footer={
         <ModalActions

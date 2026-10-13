@@ -23,15 +23,18 @@ export default function ForgotPasswordPage() {
     setMessage(null);
 
     try {
-      const response = await apiRequest<ApiResponse<{ message: string }>>(
-        '/auth/forgot-password',
-        {
-          method: 'POST',
-          body: JSON.stringify({ email }),
-        },
-      );
+      const response = await apiRequest<
+        ApiResponse<{ message: string; found?: boolean }>
+      >('/auth/forgot-password', {
+        method: 'POST',
+        body: JSON.stringify({ email }),
+      });
 
-      setMessage(response.data.message);
+      if (response.data.found === false) {
+        setErrorMessage(response.data.message);
+      } else {
+        setMessage(response.data.message);
+      }
     } catch (error) {
       setErrorMessage(
         error instanceof Error ? error.message : 'Unable to send reset email',
@@ -51,7 +54,7 @@ export default function ForgotPasswordPage() {
             Forgot password
           </h1>
           <p className="mt-2 text-sm text-[var(--muted)]">
-            Enter your email and we will send a reset link if an account exists.
+            Enter your email and we will send a password reset link.
           </p>
 
           <form className="mt-6 space-y-4" onSubmit={handleSubmit}>

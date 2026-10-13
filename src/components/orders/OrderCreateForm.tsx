@@ -1,21 +1,30 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { type ReactNode, useEffect, useMemo, useState } from 'react';
+import { Trash2 } from 'lucide-react';
 import { apiRequest } from '@/lib/api-client';
 import { ApiResponse } from '@/lib/auth';
+import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Modal, ModalActions } from '@/components/ui/Modal';
 import {
   MasterDataStatus,
-  computeOrderCost,
   parseStatusMetadata,
   statusFillStyle,
 } from '@/lib/order-status';
 import { ServiceMultiSelect } from '@/components/orders/ServiceMultiSelect';
+import { cn } from '@/lib/cn';
+import { formatMoney } from '@/lib/money';
 
 interface ClientOption {
   id: string;
   name: string;
+  currency?: string | null;
+}
+
+interface UserOption {
+  id: string;
+  fullName: string;
 }
 
 interface ClientServiceRow {
@@ -24,8 +33,20 @@ interface ClientServiceRow {
   name: string;
   defaultUnit: string;
   enabled: boolean;
+  currency?: string | null;
   effectivePrice: number | null;
   effectiveEtaHours: number | null;
+}
+
+interface WorkLineDraft {
+  key: string;
+  serviceIds: string[];
+  servicesText: string;
+  inFileCount: string;
+  assignedArtistUserId: string;
+  artistRatePerImage: string;
+  price: string;
+  extraServiceCount: string;
 }
 
 interface OrderCreateModalProps {
@@ -36,6 +57,50 @@ interface OrderCreateModalProps {
   defaultClientId?: string;
   onClose: () => void;
   onCreated: () => void;
+}
+
+// text-base on small screens avoids iOS zoom on focus; sm:text-sm matches desktop Input
+const selectClassName =
+  'h-11 w-full rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface)] px-3 text-base text-[var(--foreground)] transition-colors focus:border-[var(--primary)] focus:outline-none focus:ring-2 focus:ring-[var(--primary-soft)] sm:text-sm';
+
+function emptyWorkLine(): WorkLineDraft {
+  return {
+    key: `line-${Math.random().toString(36).slice(2, 9)}`,
+    serviceIds: [],
+    servicesText: '',
+    inFileCount: '',
+    assignedArtistUserId: '',
+    artistRatePerImage: '',
+    price: '',
+    extraServiceCount: '0',
+  };
+}
+
+function FormSection({
+  title,
+  description,
+  children,
+  action,
+}: {
+  title: string;
+  description?: string;
+  children: ReactNode;
+  action?: ReactNode;
+}) {
+  return (
+    <section className="space-y-3">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between sm:gap-3">
+        <div className="min-w-0">
+          <h3 className="text-sm font-medium text-[var(--foreground)]">{title}</h3>
+          {description ? (
+            <p className="mt-0.5 text-xs text-[var(--muted)]">{description}</p>
+          ) : null}
+        </div>
+        {action ? <div className="shrink-0 self-start">{action}</div> : null}
+      </div>
+      {children}
+    </section>
+  );
 }
 
 export function OrderCreateModal({
@@ -49,50 +114,59 @@ export function OrderCreateModal({
   const [clients, setClients] = useState<ClientOption[]>([]);
   const [folderStatuses, setFolderStatuses] = useState<MasterDataStatus[]>([]);
   const [workflowStatuses, setWorkflowStatuses] = useState<MasterDataStatus[]>([]);
+  const [assignableUsers, setAssignableUsers] = useState<UserOption[]>([]);
   const [isSaving, setIsSaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
+  const [servicesLoadError, setServicesLoadError] = useState<string | null>(null);
 
   const [clientOrganizationId, setClientOrganizationId] = useState('');
   const [name, setName] = useState('');
-  const [services, setServices] = useState('');
-  const [serviceIds, setServiceIds] = useState<string[]>([]);
   const [dueDate, setDueDate] = useState('');
   const [inDate, setInDate] = useState(new Date().toISOString().slice(0, 10));
-  const [inFileCount, setInFileCount] = useState('');
-  const [outFileCount, setOutFileCount] = useState('');
   const [clientNotes, setClientNotes] = useState('');
   const [internalNotes, setInternalNotes] = useState('');
   const [folderStatusId, setFolderStatusId] = useState('');
   const [workflowStatusId, setWorkflowStatusId] = useState('');
-  const [artistRatePerImage, setArtistRatePerImage] = useState('');
-  const [price, setPrice] = useState('');
   const [clientServices, setClientServices] = useState<ClientServiceRow[]>([]);
+  const [workLines, setWorkLines] = useState<WorkLineDraft[]>([emptyWorkLine()]);
+  const [assignedTeamLeadUserId, setAssignedTeamLeadUserId] = useState('');
+  const [assignedQaUserId, setAssignedQaUserId] = useState('');
 
   const clientLocked = Boolean(defaultClientId) || isExternal;
   const selectedClientName =
     clients.find((client) => client.id === clientOrganizationId)?.name ?? null;
+  const clientCurrency =
+    clientServices[0]?.currency ??
+    clients.find((client) => client.id === clientOrganizationId)?.currency ??
+    'USD';
 
   useEffect(() => {
     if (!open) return;
 
     setFormError(null);
+    setServicesLoadError(null);
     setClientOrganizationId(defaultClientId ?? '');
+    setWorkLines([emptyWorkLine()]);
+    setAssignedTeamLeadUserId('');
+    setAssignedQaUserId('');
 
     const requests: Promise<void>[] = [
       apiRequest<ApiResponse<MasterDataStatus[]>>(
-        '/master-data/items?category=folder_status',
+        '/orders/meta/folder-statuses',
       ).then((response) => {
         const items = response.data.map((item) => ({
           ...item,
           metadata: parseStatusMetadata(item.metadata),
         }));
         setFolderStatuses(items);
-        const uploaded = items.find((item) => item.code === 'uploaded');
-        if (uploaded) setFolderStatusId(uploaded.id);
+        const preferred =
+          items.find((item) => item.code === 'new_order') ??
+          items.find((item) => item.code === 'uploaded') ??
+          items[0];
+        if (preferred) setFolderStatusId(preferred.id);
       }),
     ];
 
-    // Always load clients for locked display / external auto-select / manager pick.
     requests.push(
       apiRequest<ApiResponse<ClientOption[]>>('/clients').then((response) => {
         setClients(response.data);
@@ -118,6 +192,13 @@ export function OrderCreateModal({
           if (initial) setWorkflowStatusId(initial.id);
         }),
       );
+      requests.push(
+        apiRequest<ApiResponse<UserOption[]>>(
+          '/orders/meta/assignable-users',
+        ).then((response) => {
+          setAssignableUsers(response.data);
+        }),
+      );
     }
 
     void Promise.all(requests);
@@ -126,9 +207,11 @@ export function OrderCreateModal({
   useEffect(() => {
     if (!open || !clientOrganizationId) {
       setClientServices([]);
+      setServicesLoadError(null);
       return;
     }
     let cancelled = false;
+    setServicesLoadError(null);
     apiRequest<ApiResponse<ClientServiceRow[]>>(
       `/clients/${clientOrganizationId}/services`,
     )
@@ -138,10 +221,21 @@ export function OrderCreateModal({
         const enabledIds = new Set(
           response.data.filter((row) => row.enabled).map((row) => row.serviceId),
         );
-        setServiceIds((current) => current.filter((id) => enabledIds.has(id)));
+        setWorkLines((lines) =>
+          lines.map((line) => ({
+            ...line,
+            serviceIds: line.serviceIds.filter((id) => enabledIds.has(id)),
+          })),
+        );
+        if (!response.data.some((row) => row.enabled)) {
+          setServicesLoadError('No priced services configured for this client.');
+        }
       })
       .catch(() => {
-        if (!cancelled) setClientServices([]);
+        if (!cancelled) {
+          setClientServices([]);
+          setServicesLoadError('Could not load client pricing for services.');
+        }
       });
     return () => {
       cancelled = true;
@@ -157,31 +251,44 @@ export function OrderCreateModal({
           code: row.code,
           name: row.name,
           isActive: true,
+          effectivePrice: row.effectivePrice,
+          effectiveEtaHours: row.effectiveEtaHours,
         })),
     [clientServices],
+  );
+
+  const allSelectedServiceIds = useMemo(
+    () => Array.from(new Set(workLines.flatMap((line) => line.serviceIds))),
+    [workLines],
   );
 
   const selectedServiceConfig = useMemo(
     () =>
       clientServices.filter(
-        (row) => row.enabled && serviceIds.includes(row.serviceId),
+        (row) => row.enabled && allSelectedServiceIds.includes(row.serviceId),
       ),
-    [clientServices, serviceIds],
+    [clientServices, allSelectedServiceIds],
   );
 
-  const computedCost = useMemo(
+  const totalInFiles = useMemo(
     () =>
-      computeOrderCost({
-        outFileCount: Number(outFileCount) || 0,
-        artistRatePerImage: artistRatePerImage || null,
-      }),
-    [outFileCount, artistRatePerImage],
+      workLines.reduce(
+        (sum, line) => sum + (Number(line.inFileCount) || 0),
+        0,
+      ),
+    [workLines],
   );
 
   const selectedFolder = folderStatuses.find((item) => item.id === folderStatusId);
   const selectedWorkflow = workflowStatuses.find(
     (item) => item.id === workflowStatusId,
   );
+
+  function updateWorkLine(key: string, patch: Partial<WorkLineDraft>) {
+    setWorkLines((lines) =>
+      lines.map((line) => (line.key === key ? { ...line, ...patch } : line)),
+    );
+  }
 
   async function handleCreate() {
     if (!name.trim()) {
@@ -193,39 +300,104 @@ export function OrderCreateModal({
       return;
     }
 
+    const allocationPayload = workLines
+      .filter(
+        (line) =>
+          line.serviceIds.length > 0 ||
+          Number(line.inFileCount) > 0 ||
+          Boolean(line.assignedArtistUserId),
+      )
+      .map((line, index) => ({
+        serviceIds: line.serviceIds,
+        inFileCount: Number(line.inFileCount) || 0,
+        outFileCount: 0,
+        rejectedFileCount: 0,
+        sortOrder: index,
+        ...(canManage && line.assignedArtistUserId
+          ? { assignedArtistUserId: line.assignedArtistUserId }
+          : {}),
+        ...(canManage && line.artistRatePerImage
+          ? { artistRatePerImage: Number(line.artistRatePerImage) }
+          : {}),
+        ...(canManage
+          ? {
+              price: line.price ? Number(line.price) : null,
+              extraServiceCount: Number(line.extraServiceCount) || 0,
+            }
+          : {}),
+      }));
+
+    const primaryArtist =
+      allocationPayload.find((row) => row.assignedArtistUserId)
+        ?.assignedArtistUserId ?? undefined;
+    const primaryRate =
+      allocationPayload.find((row) => row.artistRatePerImage != null)
+        ?.artistRatePerImage ?? undefined;
+    const orderPriceSum = canManage
+      ? allocationPayload.reduce(
+          (sum, row) => sum + (typeof row.price === 'number' ? row.price : 0),
+          0,
+        )
+      : 0;
+    const orderExtraSum = canManage
+      ? allocationPayload.reduce(
+          (sum, row) =>
+            sum +
+            (typeof row.extraServiceCount === 'number'
+              ? row.extraServiceCount
+              : 0),
+          0,
+        )
+      : 0;
+
     setIsSaving(true);
     setFormError(null);
     try {
-      await apiRequest('/orders', {
+      const created = await apiRequest<ApiResponse<{ id: string }>>('/orders', {
         method: 'POST',
         body: JSON.stringify({
           name: name.trim(),
           clientOrganizationId: clientOrganizationId || undefined,
-          services: services || undefined,
-          serviceIds: serviceIds.length > 0 ? serviceIds : undefined,
+          services:
+            selectedServiceConfig.map((row) => row.code).join(', ') || undefined,
+          serviceIds:
+            allSelectedServiceIds.length > 0 ? allSelectedServiceIds : undefined,
           dueDate: dueDate || undefined,
           inDate: inDate || undefined,
-          inFileCount: inFileCount ? Number(inFileCount) : undefined,
-          outFileCount: outFileCount ? Number(outFileCount) : undefined,
+          inFileCount: totalInFiles || undefined,
           clientNotes: clientNotes || undefined,
           internalNotes: canManage ? internalNotes || undefined : undefined,
           folderStatusId: folderStatusId || undefined,
-          workflowStatusId: canManage ? workflowStatusId || undefined : undefined,
-          artistRatePerImage: artistRatePerImage
-            ? Number(artistRatePerImage)
+          workflowStatusId: canManage
+            ? workflowStatusId || undefined
             : undefined,
-          price: price ? Number(price) : undefined,
-          cost: computedCost ?? undefined,
+          artistRatePerImage: canManage ? primaryRate : undefined,
+          price: canManage && orderPriceSum > 0 ? orderPriceSum : undefined,
+          assignedArtistUserId: canManage ? primaryArtist : undefined,
+          assignedTeamLeadUserId: canManage
+            ? assignedTeamLeadUserId || undefined
+            : undefined,
+          assignedQaUserId: canManage
+            ? assignedQaUserId || undefined
+            : undefined,
+          extraServiceCount: canManage ? orderExtraSum : undefined,
         }),
       });
+
+      if (allocationPayload.length > 0 && created.data?.id) {
+        await apiRequest(`/orders/${created.data.id}/work-allocations`, {
+          method: 'PUT',
+          body: JSON.stringify({ allocations: allocationPayload }),
+        });
+      }
+
       setName('');
-      setServices('');
-      setServiceIds([]);
       setDueDate('');
-      setInFileCount('');
-      setOutFileCount('');
       setClientNotes('');
       setInternalNotes('');
+      setWorkLines([emptyWorkLine()]);
+      setAssignedTeamLeadUserId('');
+      setAssignedQaUserId('');
       onCreated();
       onClose();
     } catch (error) {
@@ -238,8 +410,13 @@ export function OrderCreateModal({
   return (
     <Modal
       open={open}
+      size="xl"
       title="Create order"
-      description="Excel-style order intake with folder status and workflow pipeline."
+      description={
+        isExternal
+          ? 'Add services and file counts for this job.'
+          : 'Set client, services, assignment, and pricing.'
+      }
       onClose={onClose}
       footer={
         <ModalActions
@@ -250,223 +427,362 @@ export function OrderCreateModal({
         />
       }
     >
-      <div className="space-y-3">
+      <div className="space-y-6">
         {formError ? (
-          <p className="text-sm text-[var(--danger)]">{formError}</p>
-        ) : null}
-
-        {clientLocked ? (
-          <div className="rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface-muted)] px-3 py-2">
-            <p className="text-xs font-medium uppercase tracking-wide text-[var(--muted)]">
-              Client
-            </p>
-            <p className="text-sm font-medium text-[var(--foreground)]">
-              {selectedClientName ?? 'Your organization'}
-            </p>
-          </div>
-        ) : (
-          <label className="block space-y-1.5">
-            <span className="text-sm font-medium text-[var(--foreground)]">
-              Client
-            </span>
-            <select
-              value={clientOrganizationId}
-              onChange={(event) => setClientOrganizationId(event.target.value)}
-              className="w-full rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm"
-            >
-              <option value="">Select client</option>
-              {clients.map((client) => (
-                <option key={client.id} value={client.id}>
-                  {client.name}
-                </option>
-              ))}
-            </select>
-          </label>
-        )}
-
-        <Input
-          label="Order name"
-          value={name}
-          onChange={(event) => setName(event.target.value)}
-          placeholder="e.g. Spring catalog retouch"
-        />
-
-        <div className="grid gap-3 md:grid-cols-2">
-          <label className="block space-y-1.5">
-            <span className="text-sm font-medium text-[var(--foreground)]">
-              Services
-            </span>
-            <ServiceMultiSelect
-              value={serviceIds}
-              options={
-                clientOrganizationId ? enabledServiceOptions : undefined
-              }
-              onChange={(ids, text) => {
-                setServiceIds(ids);
-                setServices(text);
-              }}
-            />
-          </label>
-          <Input
-            label="Due date"
-            type="date"
-            value={dueDate}
-            onChange={(event) => setDueDate(event.target.value)}
-          />
-        </div>
-
-        {clientOrganizationId && selectedServiceConfig.length > 0 ? (
-          <div className="rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface-muted)] p-3">
-            <p className="mb-2 text-xs font-medium text-[var(--foreground)]">
-              Configured client pricing (saved with the order)
-            </p>
-            <ul className="space-y-1 text-sm">
-              {selectedServiceConfig.map((row) => (
-                <li
-                  key={row.serviceId}
-                  className="flex items-center justify-between gap-3"
-                >
-                  <span className="text-[var(--foreground)]">
-                    {row.code} · {row.name}
-                  </span>
-                  <span className="text-[var(--muted)]">
-                    {row.effectivePrice != null ? `₹${row.effectivePrice}` : '—'}
-                    {' · '}
-                    {row.effectiveEtaHours != null
-                      ? `${row.effectiveEtaHours} Hours`
-                      : '—'}
-                    {` · ${row.defaultUnit}`}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          </div>
-        ) : null}
-
-        {canManage && clientOrganizationId && enabledServiceOptions.length === 0 ? (
-          <p className="text-xs text-[var(--muted)]">
-            This client has no enabled services. Configure them in the client&apos;s
-            Service Configuration tab.
-          </p>
-        ) : null}
-
-        {!clientOrganizationId && canManage && !clientLocked ? (
-          <p className="text-xs text-[var(--muted)]">
-            Select a client first to load their enabled services and pricing.
-          </p>
-        ) : null}
-
-        <div className="grid gap-3 md:grid-cols-2">
-          <Input
-            label="In date"
-            type="date"
-            value={inDate}
-            onChange={(event) => setInDate(event.target.value)}
-          />
-          <Input
-            label="In files"
-            type="number"
-            min={0}
-            value={inFileCount}
-            onChange={(event) => setInFileCount(event.target.value)}
-          />
-        </div>
-
-        <label className="block space-y-1.5">
-          <span className="text-sm font-medium text-[var(--foreground)]">
-            Folder status
-          </span>
-          <select
-            value={folderStatusId}
-            onChange={(event) => setFolderStatusId(event.target.value)}
-            disabled={isExternal}
-            className="w-full rounded-[var(--radius-md)] border border-[var(--border)] px-3 py-2 text-sm font-medium"
-            style={statusFillStyle(selectedFolder)}
+          <div
+            role="alert"
+            className="rounded-[var(--radius-md)] border border-[color-mix(in_srgb,var(--danger)_35%,var(--border))] bg-[color-mix(in_srgb,var(--danger)_8%,transparent)] px-3 py-2 text-sm text-[var(--danger)]"
           >
-            {folderStatuses.map((status) => (
-              <option
-                key={status.id}
-                value={status.id}
-                style={statusFillStyle(status)}
-              >
-                {status.name}
-              </option>
-            ))}
-          </select>
-        </label>
+            {formError}
+          </div>
+        ) : null}
 
-        {canManage ? (
-          <>
+        <FormSection
+          title="Order basics"
+          description="Who the job is for and when it is due."
+        >
+          {clientLocked ? (
+            <div className="rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface-muted)] px-3 py-2.5">
+              <p className="text-xs text-[var(--muted)]">Client</p>
+              <p className="text-sm font-medium text-[var(--foreground)]">
+                {selectedClientName ?? 'Your organization'}
+              </p>
+            </div>
+          ) : (
             <label className="block space-y-1.5">
               <span className="text-sm font-medium text-[var(--foreground)]">
-                Workflow status
+                Client
               </span>
               <select
-                value={workflowStatusId}
-                onChange={(event) => setWorkflowStatusId(event.target.value)}
-                className="w-full rounded-[var(--radius-md)] border border-[var(--border)] px-3 py-2 text-sm font-medium"
-                style={statusFillStyle(selectedWorkflow)}
+                value={clientOrganizationId}
+                onChange={(event) => setClientOrganizationId(event.target.value)}
+                className={selectClassName}
               >
-                {workflowStatuses.map((status) => (
-                  <option
-                    key={status.id}
-                    value={status.id}
-                    style={statusFillStyle(status)}
-                  >
-                    {status.name}
+                <option value="">Select client</option>
+                {clients.map((client) => (
+                  <option key={client.id} value={client.id}>
+                    {client.name}
                   </option>
                 ))}
               </select>
             </label>
+          )}
 
-            <div className="grid gap-3 md:grid-cols-3">
+          <Input
+            label="Order name"
+            value={name}
+            onChange={(event) => setName(event.target.value)}
+            placeholder="e.g. Spring catalog retouch"
+            className="text-base sm:text-sm"
+            autoComplete="off"
+          />
+
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Input
+              label="Due date"
+              type="date"
+              value={dueDate}
+              className="text-base sm:text-sm"
+              onChange={(event) => setDueDate(event.target.value)}
+            />
+            <Input
+              label="In date"
+              type="date"
+              value={inDate}
+              className="text-base sm:text-sm"
+              onChange={(event) => setInDate(event.target.value)}
+            />
+          </div>
+
+          <Input
+            label="Notes from client"
+            value={clientNotes}
+            onChange={(event) => setClientNotes(event.target.value)}
+            placeholder="Optional instructions or context"
+            className="text-base sm:text-sm"
+          />
+        </FormSection>
+
+        <FormSection
+          title="Services & files"
+          description="Add one or more lines with services and incoming file counts."
+          action={
+            <Button
+              type="button"
+              size="sm"
+              variant="secondary"
+              className="h-10 w-full sm:h-8 sm:w-auto"
+              onClick={() => setWorkLines((lines) => [...lines, emptyWorkLine()])}
+            >
+              Add line
+            </Button>
+          }
+        >
+          {servicesLoadError ? (
+            <p className="text-xs text-[var(--danger)]">{servicesLoadError}</p>
+          ) : null}
+          {!clientOrganizationId && canManage && !clientLocked ? (
+            <p className="rounded-[var(--radius-md)] border border-dashed border-[var(--border)] px-3 py-2 text-xs text-[var(--muted)]">
+              Select a client first to load their enabled services and pricing.
+            </p>
+          ) : null}
+
+          <div className="space-y-3">
+            {workLines.map((line, index) => (
+              <div
+                key={line.key}
+                className="space-y-3 rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface)] p-3"
+              >
+                <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_7.5rem_auto] sm:items-end">
+                  <label className="block min-w-0 space-y-1.5">
+                    <span className="text-xs font-medium text-[var(--muted)]">
+                      Services · line {index + 1}
+                    </span>
+                    <ServiceMultiSelect
+                      value={line.serviceIds}
+                      options={
+                        clientOrganizationId ? enabledServiceOptions : undefined
+                      }
+                      onChange={(ids, text) =>
+                        updateWorkLine(line.key, {
+                          serviceIds: ids,
+                          servicesText: text,
+                        })
+                      }
+                    />
+                  </label>
+                  <Input
+                    label="In Files"
+                    type="number"
+                    inputMode="numeric"
+                    min={0}
+                    value={line.inFileCount}
+                    className="text-base sm:text-sm"
+                    onChange={(event) =>
+                      updateWorkLine(line.key, {
+                        inFileCount: event.target.value,
+                      })
+                    }
+                  />
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="ghost"
+                    className="h-11 w-11 shrink-0 px-0"
+                    disabled={workLines.length <= 1}
+                    aria-label={`Remove line ${index + 1}`}
+                    onClick={() =>
+                      setWorkLines((lines) =>
+                        lines.length <= 1
+                          ? lines
+                          : lines.filter((row) => row.key !== line.key),
+                      )
+                    }
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                </div>
+                {canManage ? (
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <label className="block space-y-1.5">
+                      <span className="text-xs font-medium text-[var(--muted)]">
+                        Artist
+                      </span>
+                      <select
+                        value={line.assignedArtistUserId}
+                        onChange={(event) =>
+                          updateWorkLine(line.key, {
+                            assignedArtistUserId: event.target.value,
+                          })
+                        }
+                        className={selectClassName}
+                      >
+                        <option value="">Unassigned</option>
+                        {assignableUsers.map((user) => (
+                          <option key={user.id} value={user.id}>
+                            {user.fullName}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <Input
+                      label="Price to artist per image"
+                      type="number"
+                      min={0}
+                      step="0.01"
+                      value={line.artistRatePerImage}
+                      onChange={(event) =>
+                        updateWorkLine(line.key, {
+                          artistRatePerImage: event.target.value,
+                        })
+                      }
+                    />
+                    <Input
+                      label="Extra Service Count"
+                      type="number"
+                      min={0}
+                      value={line.extraServiceCount}
+                      onChange={(event) =>
+                        updateWorkLine(line.key, {
+                          extraServiceCount: event.target.value,
+                        })
+                      }
+                    />
+                    <Input
+                      label="Price"
+                      type="number"
+                      min={0}
+                      step="0.01"
+                      value={line.price}
+                      onChange={(event) =>
+                        updateWorkLine(line.key, { price: event.target.value })
+                      }
+                    />
+                  </div>
+                ) : null}
+              </div>
+            ))}
+          </div>
+
+          <p className="text-xs text-[var(--muted)]">
+            Total In Files:{' '}
+            <span className="font-medium text-[var(--foreground)]">
+              {totalInFiles}
+            </span>
+            {canManage ? (
+              <span className="mt-1 block">
+                Assign artists on each Excel line. Team lead and QA are set below.
+              </span>
+            ) : null}
+          </p>
+
+          {clientOrganizationId && selectedServiceConfig.length > 0 ? (
+            <div className="rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface-muted)] px-3 py-2.5">
+              <p className="mb-2 text-xs font-medium text-[var(--foreground)]">
+                Pricing
+              </p>
+              <ul className="space-y-1.5 text-sm">
+                {selectedServiceConfig.map((row) => (
+                  <li
+                    key={row.serviceId}
+                    className="flex items-center justify-between gap-3"
+                  >
+                    <span className="text-[var(--foreground)]">
+                      {row.code} · {row.name}
+                    </span>
+                    <span className="shrink-0 text-[var(--muted)]">
+                      {row.effectivePrice != null
+                        ? formatMoney(row.effectivePrice, clientCurrency)
+                        : '—'}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
+        </FormSection>
+
+        {canManage ? (
+          <FormSection
+            title="Assignment & billing"
+            description="Team lead, QA, order folder status, and internal remark. Price and Extra Service Count are per artist line above."
+          >
+            <div className="space-y-4 rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface-muted)] p-4">
+              <div className="grid gap-3 sm:grid-cols-2">
+                {!isExternal ? (
+                  <label className="block space-y-1.5">
+                    <span className="text-sm font-medium text-[var(--foreground)]">
+                      Order folder status
+                    </span>
+                    <select
+                      value={folderStatusId}
+                      onChange={(event) => setFolderStatusId(event.target.value)}
+                      className={cn(selectClassName, 'font-medium')}
+                      style={statusFillStyle(selectedFolder)}
+                    >
+                      {folderStatuses.map((status) => (
+                        <option
+                          key={status.id}
+                          value={status.id}
+                          style={statusFillStyle(status)}
+                        >
+                          {status.name}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                ) : null}
+                <label className="block space-y-1.5">
+                  <span className="text-sm font-medium text-[var(--foreground)]">
+                    Workflow status
+                  </span>
+                  <select
+                    value={workflowStatusId}
+                    onChange={(event) => setWorkflowStatusId(event.target.value)}
+                    className={cn(selectClassName, 'font-medium')}
+                    style={statusFillStyle(selectedWorkflow)}
+                  >
+                    {workflowStatuses.map((status) => (
+                      <option
+                        key={status.id}
+                        value={status.id}
+                        style={statusFillStyle(status)}
+                      >
+                        {status.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+
+              <div className="grid gap-3 sm:grid-cols-2">
+                <label className="block space-y-1.5">
+                  <span className="text-sm font-medium text-[var(--foreground)]">
+                    Team lead
+                  </span>
+                  <select
+                    value={assignedTeamLeadUserId}
+                    onChange={(event) =>
+                      setAssignedTeamLeadUserId(event.target.value)
+                    }
+                    className={selectClassName}
+                  >
+                    <option value="">Unassigned</option>
+                    {assignableUsers.map((user) => (
+                      <option key={user.id} value={user.id}>
+                        {user.fullName}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="block space-y-1.5">
+                  <span className="text-sm font-medium text-[var(--foreground)]">
+                    QA
+                  </span>
+                  <select
+                    value={assignedQaUserId}
+                    onChange={(event) => setAssignedQaUserId(event.target.value)}
+                    className={selectClassName}
+                  >
+                    <option value="">Unassigned</option>
+                    {assignableUsers.map((user) => (
+                      <option key={user.id} value={user.id}>
+                        {user.fullName}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+
               <Input
-                label="Out files"
-                type="number"
-                min={0}
-                value={outFileCount}
-                onChange={(event) => setOutFileCount(event.target.value)}
-              />
-              <Input
-                label="Artist rate / image (₹)"
-                type="number"
-                min={0}
-                step="0.01"
-                value={artistRatePerImage}
-                onChange={(event) => setArtistRatePerImage(event.target.value)}
-              />
-              <Input
-                label="Client price"
-                type="number"
-                min={0}
-                step="0.01"
-                value={price}
-                onChange={(event) => setPrice(event.target.value)}
+                label="Remark"
+                value={internalNotes}
+                onChange={(event) => setInternalNotes(event.target.value)}
+                placeholder="Visible to staff only"
               />
             </div>
-
-            {computedCost != null ? (
-              <p className="text-sm text-[var(--muted)]">
-                Total cost (auto):{' '}
-                <span className="font-medium text-[var(--foreground)]">
-                  ₹{computedCost}
-                </span>
-              </p>
-            ) : null}
-
-            <Input
-              label="Internal remark"
-              value={internalNotes}
-              onChange={(event) => setInternalNotes(event.target.value)}
-            />
-          </>
+          </FormSection>
         ) : null}
-
-        <Input
-          label="Notes from client"
-          value={clientNotes}
-          onChange={(event) => setClientNotes(event.target.value)}
-        />
       </div>
     </Modal>
   );

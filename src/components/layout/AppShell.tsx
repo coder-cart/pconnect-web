@@ -1,15 +1,13 @@
 'use client';
 
 import { ReactNode, useState } from 'react';
-import { AuthenticatedUser } from '@/lib/auth';
+import { AuthenticatedUser, userHasPermission, userIsExternal } from '@/lib/auth';
 import { Sidebar } from '@/components/layout/Sidebar';
 import { TopBar, CreateAction } from '@/components/layout/TopBar';
 import { cn } from '@/lib/cn';
-import { CreateTaskModal } from '@/components/modals/CreateTaskModal';
-import { CreateProjectModal } from '@/components/modals/CreateProjectModal';
 import { CreateClientModal } from '@/components/modals/CreateClientModal';
-import { CreateInvoiceModal } from '@/components/modals/CreateInvoiceModal';
 import { CreateUserModal } from '@/components/modals/CreateUserModal';
+import { OrderCreateModal } from '@/components/orders/OrderCreateForm';
 import { WorkspaceProvider } from '@/components/providers/WorkspaceProvider';
 import { RealtimeProvider } from '@/components/providers/RealtimeProvider';
 import { NotificationProvider, useNotifications } from '@/components/providers/NotificationProvider';
@@ -33,6 +31,8 @@ function AppShellContent({
   const { unreadCount } = useNotifications();
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [createAction, setCreateAction] = useState<CreateAction | null>(null);
+  const canManageOrders = userHasPermission(user, 'orders.manage');
+  const isExternal = userIsExternal(user);
 
   return (
     <div className="min-h-screen bg-[var(--background)] text-[var(--foreground)]">
@@ -79,23 +79,15 @@ function AppShellContent({
         </div>
       ) : null}
 
-      <CreateTaskModal
-        open={createAction === 'task'}
-        onClose={() => setCreateAction(null)}
-        onCreated={onCreated}
-      />
-      <CreateProjectModal
-        open={createAction === 'project'}
+      <OrderCreateModal
+        open={createAction === 'order'}
+        canManage={canManageOrders}
+        isExternal={isExternal}
         onClose={() => setCreateAction(null)}
         onCreated={onCreated}
       />
       <CreateClientModal
         open={createAction === 'client'}
-        onClose={() => setCreateAction(null)}
-        onCreated={onCreated}
-      />
-      <CreateInvoiceModal
-        open={createAction === 'invoice'}
         onClose={() => setCreateAction(null)}
         onCreated={onCreated}
       />

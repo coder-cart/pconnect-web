@@ -52,7 +52,7 @@ const EMPTY_GENERAL = {
   whatsapp: '',
   country: '',
   timeZone: '',
-  currency: 'INR',
+  currency: 'USD',
   paymentTerms: '',
   defaultManagerUserId: '',
   notes: '',
@@ -343,16 +343,34 @@ export function CreateClientWizard({
               }
               placeholder="Asia/Kolkata"
             />
-            <Input
-              label="Currency"
-              value={general.currency}
-              onChange={(event) =>
-                setGeneral((prev) => ({
-                  ...prev,
-                  currency: event.target.value,
-                }))
-              }
-            />
+            <label className="block space-y-1.5">
+              <span className="text-sm font-medium text-[var(--foreground)]">
+                Currency
+              </span>
+              <select
+                value={general.currency}
+                onChange={(event) =>
+                  setGeneral((prev) => ({
+                    ...prev,
+                    currency: event.target.value,
+                  }))
+                }
+                className="h-11 w-full rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface)] px-3 text-sm text-[var(--foreground)] focus:border-[var(--primary)] focus:outline-none focus:ring-2 focus:ring-[var(--primary-soft)]"
+              >
+                <option value="USD">USD ($)</option>
+                <option value="EUR">EUR (€)</option>
+                <option value="GBP">GBP (£)</option>
+                <option value="AUD">AUD (A$)</option>
+                <option value="CAD">CAD (C$)</option>
+                <option value="SGD">SGD (S$)</option>
+                <option value="AED">AED</option>
+                <option value="INR">INR (₹)</option>
+              </select>
+              <span className="text-xs text-[var(--muted)]">
+                Used for this client&apos;s service prices. Editor pay stays in
+                INR.
+              </span>
+            </label>
             <Input
               label="Payment terms"
               value={general.paymentTerms}

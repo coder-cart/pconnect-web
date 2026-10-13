@@ -19,7 +19,7 @@ export function WorkflowPipeline({
   const currentIndex = statuses.findIndex((status) => status.code === currentCode);
 
   return (
-    <div className="flex flex-wrap gap-2">
+    <div className="flex gap-1.5 overflow-x-auto pb-0.5">
       {statuses.map((status, index) => {
         const isCurrent = status.code === currentCode;
         const isPast = currentIndex >= 0 && index < currentIndex;
@@ -31,7 +31,11 @@ export function WorkflowPipeline({
               key={status.id}
               label={status.name}
               metadata={metadata}
-              className={isCurrent ? 'ring-2 ring-[var(--primary)] ring-offset-1' : 'opacity-80'}
+              className={
+                isCurrent
+                  ? 'shrink-0 ring-2 ring-[var(--primary)] ring-offset-1'
+                  : 'shrink-0 opacity-80'
+              }
             />
           );
         }
@@ -39,7 +43,7 @@ export function WorkflowPipeline({
         return (
           <span
             key={status.id}
-            className="rounded-full px-3 py-1 text-xs opacity-55"
+            className="shrink-0 rounded-full px-2.5 py-0.5 text-[11px] opacity-50"
             style={statusFillStyle(status)}
           >
             {status.name}

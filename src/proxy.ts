@@ -6,7 +6,12 @@ const SESSION_COOKIE = 'pconnect_session';
 // Routes reachable without a session. Everything else requires the marker
 // cookie. Real authorization is still enforced by the API on every request;
 // this is a first-line UX gate that avoids flashing protected shells.
-const PUBLIC_PATHS = ['/login', '/reset-password', '/forgot-password'];
+const PUBLIC_PATHS = [
+  '/login',
+  '/reset-password',
+  '/forgot-password',
+  '/magic-login',
+];
 
 function isPublicPath(pathname: string): boolean {
   if (pathname === '/') return true;

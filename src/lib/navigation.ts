@@ -1,20 +1,13 @@
 import {
   BadgeCheck,
-  BarChart3,
-  Briefcase,
-  Brush,
   Building2,
   ClipboardList,
-  CreditCard,
-  FolderOpen,
   Home,
-  Inbox,
-  LayoutGrid,
   MessageSquare,
-  Package,
-  Plug,
+  Receipt,
   Settings,
-  ShieldCheck,
+  Users,
+  UsersRound,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -23,49 +16,78 @@ export interface NavItem {
   label: string;
   icon: LucideIcon;
   externalLabel?: string;
+  /** When true, item is only shown to internal users. */
   internalOnly?: boolean;
+  /** When true, item is only shown to external (client) users. */
+  externalOnly?: boolean;
   permission?: string;
   badge?: number;
 }
 
+/**
+ * MVP sidebar:
+ * - Internal: Home, Clients, Orders, Messages, Finance, Staff, Settings
+ * - Client: Home, My Orders, Messages, Approvals, Team
+ */
 export const NAV_ITEMS: NavItem[] = [
   { href: '/dashboard', label: 'Home', icon: Home },
-  { href: '/inbox', label: 'Inbox', icon: Inbox },
-  { href: '/chat', label: 'Chat', externalLabel: 'Messages', icon: MessageSquare },
-  { href: '/projects', label: 'Projects', icon: Briefcase },
+  {
+    href: '/chat',
+    label: 'Messages',
+    externalLabel: 'Messages',
+    icon: MessageSquare,
+  },
   {
     href: '/orders',
     label: 'Orders',
+    externalLabel: 'My Orders',
     icon: ClipboardList,
     permission: 'orders.view',
   },
-  { href: '/production', label: 'Production', icon: Package, internalOnly: true },
-  { href: '/my-work', label: 'My Work', icon: Brush, internalOnly: true },
-  { href: '/qa', label: 'QA Review', icon: ShieldCheck, permission: 'qa.review' },
+  {
+    href: '/clients',
+    label: 'Clients',
+    icon: Building2,
+    permission: 'clients.view',
+    internalOnly: true,
+  },
+  {
+    href: '/finance',
+    label: 'Finance',
+    icon: Receipt,
+    permission: 'finance.invoices.view_all',
+    internalOnly: true,
+  },
+  {
+    href: '/staff',
+    label: 'Staff',
+    icon: Users,
+    permission: 'users.manage',
+    internalOnly: true,
+  },
+  {
+    href: '/team',
+    label: 'Team',
+    externalLabel: 'Team',
+    icon: UsersRound,
+    permission: 'clients.team_invite',
+    externalOnly: true,
+  },
   {
     href: '/approvals',
     label: 'Approvals',
     externalLabel: 'Approvals',
     icon: BadgeCheck,
     permission: 'approvals.respond',
+    externalOnly: true,
   },
-  { href: '/tasks', label: 'Tasks', icon: LayoutGrid },
-  { href: '/clients', label: 'Clients', icon: Building2, permission: 'clients.view' },
-  { href: '/files', label: 'Files', icon: FolderOpen },
   {
-    href: '/finance',
-    label: 'Finance',
-    icon: CreditCard,
+    href: '/admin',
+    label: 'Settings',
+    icon: Settings,
+    permission: 'users.manage',
     internalOnly: true,
   },
-  {
-    href: '/reports',
-    label: 'Reports',
-    icon: BarChart3,
-    permission: 'reports.view',
-  },
-  { href: '/integrations', label: 'Integrations', icon: Plug, internalOnly: true },
-  { href: '/admin', label: 'Settings', icon: Settings, permission: 'users.manage' },
 ];
 
 export function getNavItemLabel(item: NavItem, userType: 'internal' | 'external') {
@@ -82,6 +104,10 @@ export function getVisibleNavItems(
 ): NavItem[] {
   return NAV_ITEMS.filter((item) => {
     if (item.internalOnly && userType === 'external') {
+      return false;
+    }
+
+    if (item.externalOnly && userType === 'internal') {
       return false;
     }
 
@@ -111,13 +137,13 @@ export function getRoleLabel(
     return 'Client';
   }
 
-  for (const [code, label] of ROLE_LABELS) {
-    if (roleCodes.includes(code)) {
-      return label;
-    }
+  const labels = ROLE_LABELS.filter(([code]) => roleCodes.includes(code)).map(
+    ([, label]) => label,
+  );
+  if (labels.length === 0) {
+    return 'Team Member';
   }
-
-  return 'Team Member';
+  return labels.join(' + ');
 }
 
 export function getInitials(name: string): string {

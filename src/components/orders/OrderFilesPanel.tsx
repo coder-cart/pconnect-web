@@ -24,9 +24,15 @@ interface OrderFileItem {
 interface OrderFilesPanelProps {
   orderId: string;
   projectId?: string | null;
+  /** Editors: shared inputs/references + only their own outputs (API-enforced). */
+  isolateEditorOutputs?: boolean;
 }
 
-export function OrderFilesPanel({ orderId, projectId }: OrderFilesPanelProps) {
+export function OrderFilesPanel({
+  orderId,
+  projectId,
+  isolateEditorOutputs = false,
+}: OrderFilesPanelProps) {
   const { user } = useWorkspace();
   // Backend permission code is files.upload_internal (underscore).
   const canUpload =
@@ -134,7 +140,9 @@ export function OrderFilesPanel({ orderId, projectId }: OrderFilesPanelProps) {
             Order files
           </h3>
           <p className="text-xs text-[var(--muted)]">
-            Upload files or paste OneDrive / Google Drive links for this order.
+            {isolateEditorOutputs
+              ? 'Shared input and reference files, plus your output uploads only.'
+              : 'Upload files or paste OneDrive / Google Drive links for this order.'}
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -149,7 +157,9 @@ export function OrderFilesPanel({ orderId, projectId }: OrderFilesPanelProps) {
           >
             <option value="all">All roles</option>
             <option value="input">Input</option>
-            <option value="output">Output</option>
+            <option value="output">
+              {isolateEditorOutputs ? 'Your output' : 'Output'}
+            </option>
             <option value="reference">Reference</option>
           </select>
           {canUpload ? (

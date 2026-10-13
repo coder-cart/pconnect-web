@@ -4,10 +4,8 @@ import { ReactNode, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   Bell,
-  Briefcase,
   Building2,
-  CheckSquare,
-  CreditCard,
+  ClipboardList,
   HelpCircle,
   Menu,
   Moon,
@@ -23,12 +21,7 @@ import { GlobalSearch } from '@/components/layout/GlobalSearch';
 import { NotificationPopover } from '@/components/notifications/NotificationPopover';
 import { ProfileMenu } from '@/components/layout/ProfileMenu';
 
-export type CreateAction =
-  | 'task'
-  | 'project'
-  | 'client'
-  | 'invoice'
-  | 'user';
+export type CreateAction = 'order' | 'client' | 'user';
 
 interface TopBarProps {
   user: AuthenticatedUser;
@@ -52,28 +45,25 @@ export function TopBar({
   const [notificationsOpen, setNotificationsOpen] = useState(false);
 
   const createItems = [
-    { action: 'task' as const, label: 'New Task', icon: <CheckSquare className="h-4 w-4" />, show: true },
     {
-      action: 'project' as const,
-      label: 'New Project',
-      icon: <Briefcase className="h-4 w-4" />,
-      show: user.permissionCodes.includes('projects.create'),
+      action: 'order' as const,
+      label: 'New Order',
+      icon: <ClipboardList className="h-4 w-4" />,
+      show:
+        user.permissionCodes.includes('orders.create') ||
+        user.permissionCodes.includes('orders.manage'),
     },
     {
       action: 'client' as const,
       label: 'New Client',
       icon: <Building2 className="h-4 w-4" />,
-      show: user.permissionCodes.includes('clients.manage'),
-    },
-    {
-      action: 'invoice' as const,
-      label: 'New Invoice',
-      icon: <CreditCard className="h-4 w-4" />,
-      show: user.permissionCodes.includes('finance.invoices.create'),
+      show:
+        user.userType === 'internal' &&
+        user.permissionCodes.includes('clients.manage'),
     },
     {
       action: 'user' as const,
-      label: 'Invite User',
+      label: 'Invite staff',
       icon: <UserPlus className="h-4 w-4" />,
       show: user.permissionCodes.includes('users.manage'),
     },
@@ -188,7 +178,7 @@ export function TopBar({
                   <div className="absolute right-0 top-[calc(100%+8px)] z-20 w-56 rounded-[var(--radius-lg)] border border-[var(--border)] bg-[var(--surface)] p-3 shadow-[var(--shadow-md)]">
                     <p className="text-sm font-medium text-[var(--foreground)]">Need help?</p>
                     <p className="mt-1 text-xs text-[var(--muted)]">
-                      Visit Inbox for updates or contact your workspace admin.
+                      Open Messages for updates or contact your workspace admin.
                     </p>
                     <Button
                       size="sm"
@@ -196,10 +186,10 @@ export function TopBar({
                       className="mt-3 w-full"
                       onClick={() => {
                         setHelpOpen(false);
-                        router.push('/inbox');
+                        router.push('/chat');
                       }}
                     >
-                      Open Inbox
+                      Open Messages
                     </Button>
                   </div>
                 </>

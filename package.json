@@ -6,11 +6,11 @@
     "node": ">=20"
   },
   "scripts": {
-    "dev": "next dev -p 7000 --webpack",
-    "dev:turbopack": "next dev -p 7000",
-    "dev:webpack": "next dev -p 7000 --webpack",
+    "dev": "next dev -p 6001 --webpack",
+    "dev:turbopack": "next dev -p 6001",
+    "dev:webpack": "next dev -p 6001 --webpack",
     "build": "next build",
-    "start": "next start",
+    "start": "next start -p 6001",
     "lint": "eslint"
   },
   "dependencies": {

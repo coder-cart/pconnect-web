@@ -8,10 +8,10 @@ import { Card } from '@/components/ui/Card';
 import { StatCard } from '@/components/ui/StatCard';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
-import { EmptyState, ErrorState } from '@/components/ui/StatePanels';
+import { EmptyState, ErrorState, RestrictedState } from '@/components/ui/StatePanels';
 import { ListSkeleton } from '@/components/ui/Skeleton';
 import { apiRequest } from '@/lib/api-client';
-import { ApiResponse, userHasPermission } from '@/lib/auth';
+import { ApiResponse, userHasPermission, userIsExternal } from '@/lib/auth';
 import { CreateInvoiceModal } from '@/components/modals/CreateInvoiceModal';
 import { CreateExpenseModal } from '@/components/modals/CreateExpenseModal';
 import { PayInvoiceModal } from '@/components/finance/PayInvoiceModal';
@@ -57,15 +57,28 @@ function statusVariant(status: string) {
   return 'neutral' as const;
 }
 
+function isPermissionError(message: string) {
+  return /permission|forbidden|not allowed|restricted/i.test(message);
+}
+
 export default function FinancePage() {
   const { user, refreshKey, notifyRefresh } = useWorkspace();
-  const canManageFinance = userHasPermission(user, 'finance.invoices.create');
+  const isExternal = userIsExternal(user);
+  const canViewFinance =
+    userHasPermission(user, 'finance.invoices.view_all') ||
+    userHasPermission(user, 'finance.invoices.create') ||
+    isExternal;
+  const canCreateInvoice = userHasPermission(user, 'finance.invoices.create');
+  const canManageExpenses =
+    userHasPermission(user, 'finance.invoices.view_all') ||
+    userHasPermission(user, 'payments.manage');
   const [activeTab, setActiveTab] = useState('overview');
   const [summary, setSummary] = useState<FinanceSummary | null>(null);
   const [invoices, setInvoices] = useState<InvoiceRecord[]>([]);
   const [expenses, setExpenses] = useState<ExpenseRecord[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [accessRestricted, setAccessRestricted] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
   const [expenseOpen, setExpenseOpen] = useState(false);
   const [payInvoice, setPayInvoice] = useState<InvoiceRecord | null>(null);
@@ -73,24 +86,61 @@ export default function FinancePage() {
   function loadFinance() {
     setIsLoading(true);
     setErrorMessage(null);
+    setAccessRestricted(false);
 
-    Promise.all([
-      apiRequest<ApiResponse<FinanceSummary>>('/invoices/summary/overview'),
-      apiRequest<ApiResponse<InvoiceRecord[]>>('/invoices'),
-      apiRequest<ApiResponse<ExpenseRecord[]>>('/expenses'),
-    ])
-      .then(([summaryResponse, invoicesResponse, expensesResponse]) => {
-        setSummary(summaryResponse.data);
-        setInvoices(invoicesResponse.data);
-        setExpenses(expensesResponse.data);
+    const requests: Promise<unknown>[] = [
+      apiRequest<ApiResponse<InvoiceRecord[]>>('/invoices').then(
+        (invoicesResponse) => setInvoices(invoicesResponse.data),
+      ),
+    ];
+
+    if (userHasPermission(user, 'finance.invoices.view_all')) {
+      requests.push(
+        apiRequest<ApiResponse<FinanceSummary>>('/invoices/summary/overview')
+          .then((summaryResponse) => setSummary(summaryResponse.data))
+          .catch(() => setSummary(null)),
+      );
+    } else {
+      setSummary(null);
+    }
+
+    if (canManageExpenses) {
+      requests.push(
+        apiRequest<ApiResponse<ExpenseRecord[]>>('/expenses')
+          .then((expensesResponse) => setExpenses(expensesResponse.data))
+          .catch(() => setExpenses([])),
+      );
+    } else {
+      setExpenses([]);
+    }
+
+    Promise.all(requests)
+      .catch((error: Error) => {
+        if (isPermissionError(error.message)) {
+          setAccessRestricted(true);
+        } else {
+          setErrorMessage(error.message);
+        }
       })
-      .catch((error: Error) => setErrorMessage(error.message))
       .finally(() => setIsLoading(false));
   }
 
   useEffect(() => {
-    loadFinance();
-  }, [refreshKey]);
+    if (canViewFinance) {
+      loadFinance();
+    } else {
+      setIsLoading(false);
+    }
+  }, [refreshKey, canViewFinance]);
+
+  if (!canViewFinance || accessRestricted) {
+    return (
+      <RestrictedState
+        title="Finance access restricted"
+        description="You need finance permissions to view invoices and expenses."
+      />
+    );
+  }
 
   function exportInvoices() {
     const rows = [
@@ -149,10 +199,12 @@ export default function FinancePage() {
               <Download className="h-4 w-4" />
               Export
             </Button>
-            <Button onClick={() => setCreateOpen(true)}>
-              <Plus className="h-4 w-4" />
-              Create Invoice
-            </Button>
+            {canCreateInvoice ? (
+              <Button onClick={() => setCreateOpen(true)}>
+                <Plus className="h-4 w-4" />
+                Create Invoice
+              </Button>
+            ) : null}
           </div>
         }
       />
@@ -163,7 +215,9 @@ export default function FinancePage() {
         items={[
           { id: 'overview', label: 'Overview' },
           { id: 'invoices', label: 'Invoices' },
-          { id: 'expenses', label: 'Expenses' },
+          ...(canManageExpenses
+            ? [{ id: 'expenses', label: 'Expenses' }]
+            : []),
           { id: 'reports', label: 'Reports' },
         ]}
       />
@@ -244,7 +298,7 @@ export default function FinancePage() {
             <Card>
               <ExpenseTable
                 expenses={expenses}
-                canManageFinance={canManageFinance}
+                canManageFinance={canManageExpenses}
                 onUpdateStatus={updateExpenseStatus}
               />
             </Card>

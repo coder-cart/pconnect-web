@@ -27,7 +27,7 @@ npm install
 npm run dev
 ```
 
-The app runs at `http://localhost:7000` (and expects the API at `http://localhost:7001`).
+The app runs at `http://localhost:6001` (and expects the API at `http://localhost:6002`).
 
 ## Demo login
 
@@ -53,7 +53,7 @@ This app is a standard Next.js project. The API runs separately (e.g. on Render 
 
 ### 2. Environment variables
 
-Add these in **Project → Settings → Environment Variables** (Production, and Preview if you
+Add these in **Project â†’ Settings â†’ Environment Variables** (Production, and Preview if you
 use preview deploys):
 
 | Variable | Example | Required |
@@ -62,11 +62,11 @@ use preview deploys):
 | `NEXT_PUBLIC_WS_URL` | `https://pconnect-api.onrender.com` | Yes |
 | `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY` | `pk_live_...` | No |
 
-Use your real API hostname. Do **not** append a port — Render serves HTTPS on 443.
+Use your real API hostname. Do **not** append a port â€” Render serves HTTPS on 443.
 
 ### 3. Allow the Vercel origin on the API
 
-On the API host (Render dashboard → `pconnect-api` → Environment), set:
+On the API host (Render dashboard â†’ `pconnect-api` â†’ Environment), set:
 
 ```bash
 FRONTEND_URL=https://your-app.vercel.app
@@ -87,7 +87,7 @@ Push to the connected branch or click **Deploy**. Build command: `npm run build`
 ### 5. Verify
 
 - Open `https://your-app.vercel.app/login` and sign in with a seeded user.
-- Check browser devtools → Network: API calls should go to your `NEXT_PUBLIC_API_URL`.
+- Check browser devtools â†’ Network: API calls should go to your `NEXT_PUBLIC_API_URL`.
 - Chat/realtime needs `NEXT_PUBLIC_WS_URL` and API `REDIS_URL` configured.
 
 ## Sprint 1 scope

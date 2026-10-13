@@ -8,7 +8,7 @@ import { PageHeader } from '@/components/ui/PageHeader';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { ListSkeleton } from '@/components/ui/Skeleton';
-import { EmptyState, ErrorState } from '@/components/ui/StatePanels';
+import { EmptyState, ErrorState, RestrictedState } from '@/components/ui/StatePanels';
 import { useWorkspace } from '@/components/providers/WorkspaceProvider';
 import { OrderSummary } from '@/lib/orders';
 import { MasterDataStatus, parseStatusMetadata } from '@/lib/order-status';
@@ -20,18 +20,31 @@ interface ClientOption {
   name: string;
 }
 
+function isPermissionError(message: string) {
+  return /permission|forbidden|not allowed|do not have access|restricted/i.test(
+    message,
+  );
+}
+
 export default function OrdersPage() {
   const { user, refreshKey, notifyRefresh } = useWorkspace();
+  const canView = userHasPermission(user, 'orders.view');
   const canManage = userHasPermission(user, 'orders.manage');
   const canCreate =
     canManage || userHasPermission(user, 'orders.create');
   const isExternal = userIsExternal(user);
-  const isAssignedView = !canManage && userHasPermission(user, 'orders.view');
+  // Assigned-only list is for internal non-managers (editor/QA).
+  // Externals must see all org-scoped orders — never force assignedToMe.
+  const isAssignedView =
+    !isExternal &&
+    !canManage &&
+    canView;
   const [orders, setOrders] = useState<OrderSummary[]>([]);
   const [clients, setClients] = useState<ClientOption[]>([]);
   const [workflowStatuses, setWorkflowStatuses] = useState<MasterDataStatus[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [accessRestricted, setAccessRestricted] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
@@ -62,16 +75,42 @@ export default function OrdersPage() {
 
   function load() {
     setIsLoading(true);
+    setErrorMessage(null);
+    setAccessRestricted(false);
     apiRequest<ApiResponse<{ items: OrderSummary[] }>>(`/orders?${queryString}`)
       .then((ordersResponse) => {
         setOrders(ordersResponse.data.items);
         setSelectedIds([]);
       })
-      .catch((error: Error) => setErrorMessage(error.message))
+      .catch((error: Error) => {
+        if (isPermissionError(error.message)) {
+          setAccessRestricted(true);
+        } else {
+          setErrorMessage(error.message);
+        }
+      })
       .finally(() => setIsLoading(false));
   }
 
   useEffect(load, [refreshKey, queryString]);
+
+  if (!canView) {
+    return (
+      <RestrictedState
+        title="Orders access restricted"
+        description="You need permission to view orders in this workspace."
+      />
+    );
+  }
+
+  if (accessRestricted) {
+    return (
+      <RestrictedState
+        title="Orders access restricted"
+        description="You do not have permission to view these orders."
+      />
+    );
+  }
 
   useEffect(() => {
     apiRequest<ApiResponse<MasterDataStatus[]>>('/orders/meta/workflow-statuses')
@@ -123,15 +162,17 @@ export default function OrdersPage() {
   return (
     <div className="space-y-4">
       <PageHeader
-        title="Orders"
+        title={isExternal ? 'My Orders' : 'Orders'}
         description={
-          isAssignedView
-            ? 'Orders assigned to you as artist, team lead, QA, or batch editor.'
-            : 'Commercial work units between projects and production batches.'
+          isExternal
+            ? 'Orders for your organization — create requests and track shared progress.'
+            : isAssignedView
+              ? 'Orders assigned to you.'
+              : 'Manage client work units, deadlines, and delivery status.'
         }
         breadcrumbs={[
           { label: 'Workspace', href: '/dashboard' },
-          { label: 'Orders' },
+          { label: isExternal ? 'My Orders' : 'Orders' },
         ]}
         action={
           canCreate ? (
@@ -246,7 +287,7 @@ export default function OrdersPage() {
       {!isLoading && !errorMessage && orders.length === 0 ? (
         <EmptyState
           title="No orders yet"
-          description="Create an order to group batches, deadlines, and client notes."
+          description="Create an order to track deadlines, services, and client notes."
         />
       ) : null}
 

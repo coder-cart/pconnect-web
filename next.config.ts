@@ -47,32 +47,41 @@ function buildContentSecurityPolicy(): string {
 
 const ngrokProxy = process.env.NGROK_PROXY_API === 'true';
 const apiProxyTarget =
-  process.env.API_PROXY_TARGET ?? 'http://127.0.0.1:7001';
+  process.env.API_PROXY_TARGET ?? 'http://127.0.0.1:6002';
 
 const nextConfig: NextConfig = {
   poweredByHeader: false,
+  // Keep `/api/socket.io/?EIO=…` from being 308'd to a slashless URL (Engine.IO).
+  skipTrailingSlashRedirect: ngrokProxy,
   // Allow HMR when the dev server is accessed via ngrok (client demos).
   allowedDevOrigins: ['*.ngrok-free.dev', '*.ngrok-free.app', '*.ngrok.io'],
   async rewrites() {
     if (!ngrokProxy) {
       return [];
     }
+
+    // Engine.IO only matches `/socket.io/` (trailing slash). Next also 308-redirects
+    // `/api/socket.io/` → `/api/socket.io`, so destinations must keep the slash.
     return [
       {
         source: '/api/socket.io',
-        destination: `${apiProxyTarget}/socket.io`,
+        destination: `${apiProxyTarget}/socket.io/`,
       },
       {
         source: '/api/socket.io/:path*',
         destination: `${apiProxyTarget}/socket.io/:path*`,
       },
       {
-        source: '/api/:path*',
-        destination: `${apiProxyTarget}/api/:path*`,
+        source: '/socket.io',
+        destination: `${apiProxyTarget}/socket.io/`,
       },
       {
         source: '/socket.io/:path*',
         destination: `${apiProxyTarget}/socket.io/:path*`,
+      },
+      {
+        source: '/api/:path*',
+        destination: `${apiProxyTarget}/api/:path*`,
       },
     ];
   },

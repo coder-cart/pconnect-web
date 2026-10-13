@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
 import { ListSkeleton } from '@/components/ui/Skeleton';
 import { ErrorState, EmptyState } from '@/components/ui/StatePanels';
+import { currencySymbol, normalizeCurrencyCode } from '@/lib/money';
 
 interface ClientServiceRow {
   serviceId: string;
@@ -16,6 +17,7 @@ interface ClientServiceRow {
   name: string;
   category?: string | null;
   defaultUnit: string;
+  currency?: string | null;
   defaultClientPrice: number | null;
   defaultEtaHours: number | null;
   enabled: boolean;
@@ -24,6 +26,9 @@ interface ClientServiceRow {
   defaultInstructions: string | null;
   effectivePrice: number | null;
   effectiveEtaHours: number | null;
+  defaultArtistRate?: number | null;
+  artistRatePerImage?: number | null;
+  effectiveArtistRate?: number | null;
 }
 
 interface EditableRow {
@@ -31,17 +36,21 @@ interface EditableRow {
   enabled: boolean;
   clientPrice: string;
   clientEtaHours: string;
+  artistRatePerImage: string;
   defaultInstructions: string;
 }
 
 interface ClientServiceConfigProps {
   clientId: string;
   canManage: boolean;
+  /** Client billing currency for service prices (default USD). */
+  currency?: string | null;
 }
 
 export function ClientServiceConfig({
   clientId,
   canManage,
+  currency: currencyProp,
 }: ClientServiceConfigProps) {
   const [rows, setRows] = useState<ClientServiceRow[]>([]);
   const [edits, setEdits] = useState<Record<string, EditableRow>>({});
@@ -50,6 +59,14 @@ export function ClientServiceConfig({
   const [saveError, setSaveError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [savedAt, setSavedAt] = useState<number | null>(null);
+
+  const currency = normalizeCurrencyCode(
+    currencyProp ?? rows[0]?.currency,
+  );
+  const priceSymbol = currencySymbol(currency);
+  const showArtistRate = rows.some(
+    (row) => row.defaultArtistRate !== undefined || row.artistRatePerImage !== undefined,
+  );
 
   const load = useCallback(async () => {
     setIsLoading(true);
@@ -66,6 +83,10 @@ export function ClientServiceConfig({
           clientPrice: row.clientPrice != null ? String(row.clientPrice) : '',
           clientEtaHours:
             row.clientEtaHours != null ? String(row.clientEtaHours) : '',
+          artistRatePerImage:
+            row.artistRatePerImage != null
+              ? String(row.artistRatePerImage)
+              : '',
           defaultInstructions: row.defaultInstructions ?? '',
         };
       }
@@ -105,6 +126,9 @@ export function ClientServiceConfig({
             clientPrice: edit.clientPrice ? Number(edit.clientPrice) : null,
             clientEtaHours: edit.clientEtaHours
               ? Number(edit.clientEtaHours)
+              : null,
+            artistRatePerImage: edit.artistRatePerImage
+              ? Number(edit.artistRatePerImage)
               : null,
             defaultInstructions: edit.defaultInstructions.trim() || null,
           })),
@@ -146,8 +170,8 @@ export function ClientServiceConfig({
           </h2>
           <p className="mt-1 text-xs text-[var(--muted)]">
             Enable services for this client and optionally override the default
-            price and ETA. Blank fields inherit the Service Master defaults.
-            Changes only affect future orders.
+            price ({currency}), artist rate (INR), and ETA. Blank fields inherit
+            the Service Master defaults. Changes only affect future orders.
           </p>
         </div>
         {canManage ? (
@@ -173,7 +197,14 @@ export function ClientServiceConfig({
                 <tr className="border-b border-[var(--border)] text-xs font-medium uppercase tracking-wide text-[var(--muted)]">
                   <th className="pb-2 pr-4 font-medium">Enable</th>
                   <th className="pb-2 pr-4 font-medium">Service</th>
-                  <th className="pb-2 pr-4 text-right font-medium">Client Price</th>
+                  <th className="pb-2 pr-4 text-right font-medium">
+                    Client price ({priceSymbol})
+                  </th>
+                  {showArtistRate ? (
+                    <th className="pb-2 pr-4 text-right font-medium">
+                      Artist rate (₹)
+                    </th>
+                  ) : null}
                   <th className="pb-2 pr-4 text-right font-medium">Client ETA</th>
                   <th className="pb-2 pr-4 font-medium">Unit</th>
                   <th className="pb-2 font-medium">Default Instructions</th>
@@ -239,6 +270,32 @@ export function ClientServiceConfig({
                       <span className="text-[var(--muted)]">—</span>
                     )}
                   </td>
+                  {showArtistRate ? (
+                    <td className="py-3 pr-4 text-right">
+                      {edit.enabled ? (
+                        <input
+                          type="number"
+                          min={0}
+                          step="0.01"
+                          value={edit.artistRatePerImage}
+                          disabled={disabled}
+                          placeholder={
+                            row.defaultArtistRate != null
+                              ? String(row.defaultArtistRate)
+                              : '—'
+                          }
+                          onChange={(event) =>
+                            updateEdit(row.serviceId, {
+                              artistRatePerImage: event.target.value,
+                            })
+                          }
+                          className="w-24 rounded border border-[var(--border)] bg-[var(--surface)] px-2 py-1 text-right text-sm disabled:opacity-60"
+                        />
+                      ) : (
+                        <span className="text-[var(--muted)]">—</span>
+                      )}
+                    </td>
+                  ) : null}
                   <td className="py-3 pr-4 text-right">
                     {edit.enabled ? (
                       <div className="flex items-center justify-end gap-1">

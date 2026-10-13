@@ -59,6 +59,8 @@ interface ClientDetail {
   fileNamingConvention?: string | null;
   workingDays?: string | null;
   specialNotes?: string | null;
+  allowClientTeamInvite?: boolean;
+  maxPortalUsers?: number;
   defaultManager?: { id: string; fullName: string; email?: string } | null;
   contacts?: ClientContact[];
 }
@@ -126,6 +128,7 @@ interface OnboardingWorkflow {
 interface ClientMember {
   id: string;
   linkedAt: string;
+  isOrgAdmin?: boolean;
   user: {
     id: string;
     fullName: string;
@@ -134,8 +137,20 @@ interface ClientMember {
   };
 }
 
-function formatMoney(value: number) {
-  return `₹${value.toLocaleString(undefined, { maximumFractionDigits: 2 })}`;
+interface PortalMembersResponse {
+  items: ClientMember[];
+  seats: {
+    used: number;
+    max: number;
+    allowClientTeamInvite: boolean;
+  };
+  currentUserIsOrgAdmin: boolean;
+}
+
+import { formatMoney as formatClientMoney } from '@/lib/money';
+
+function formatMoney(value: number, currency?: string | null) {
+  return formatClientMoney(value, currency);
 }
 
 function formatDate(value?: string | null) {
@@ -165,6 +180,14 @@ export default function ClientDetailPage() {
   const [hubChannelId, setHubChannelId] = useState<string | null>(null);
   const [workflows, setWorkflows] = useState<OnboardingWorkflow[]>([]);
   const [members, setMembers] = useState<ClientMember[]>([]);
+  const [seatInfo, setSeatInfo] = useState({
+    used: 0,
+    max: 5,
+    allowClientTeamInvite: false,
+  });
+  const [allowTeamInvite, setAllowTeamInvite] = useState(false);
+  const [maxPortalUsers, setMaxPortalUsers] = useState('5');
+  const [memberBusyId, setMemberBusyId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [createOrderOpen, setCreateOrderOpen] = useState(false);
@@ -201,7 +224,7 @@ export default function ClientDetailPage() {
         whatsapp: clientResponse.data.whatsapp ?? '',
         country: clientResponse.data.country ?? '',
         timeZone: clientResponse.data.timeZone ?? '',
-        currency: clientResponse.data.currency ?? 'INR',
+        currency: clientResponse.data.currency ?? 'USD',
         paymentTerms: clientResponse.data.paymentTerms ?? '',
         notes: clientResponse.data.notes ?? '',
         defaultPriority: clientResponse.data.defaultPriority ?? 'medium',
@@ -213,6 +236,8 @@ export default function ClientDetailPage() {
         workingDays: clientResponse.data.workingDays ?? '',
         specialNotes: clientResponse.data.specialNotes ?? '',
       });
+      setAllowTeamInvite(clientResponse.data.allowClientTeamInvite ?? false);
+      setMaxPortalUsers(String(clientResponse.data.maxPortalUsers ?? 5));
       setErrorMessage(null);
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : 'Failed to load');
@@ -270,7 +295,9 @@ export default function ClientDetailPage() {
     if (activeTab !== 'settings') return;
     Promise.all([
       apiRequest<ApiResponse<OnboardingWorkflow[]>>('/onboarding/workflows'),
-      apiRequest<ApiResponse<ClientMember[]>>(`/clients/${clientId}/users`),
+      apiRequest<ApiResponse<PortalMembersResponse>>(
+        `/clients/${clientId}/users`,
+      ),
     ])
       .then(([workflowsResponse, membersResponse]) => {
         setWorkflows(
@@ -278,7 +305,10 @@ export default function ClientDetailPage() {
             (workflow) => workflow.clientOrganization?.id === clientId,
           ),
         );
-        setMembers(membersResponse.data);
+        setMembers(membersResponse.data.items ?? []);
+        setSeatInfo(membersResponse.data.seats);
+        setAllowTeamInvite(membersResponse.data.seats.allowClientTeamInvite);
+        setMaxPortalUsers(String(membersResponse.data.seats.max));
       })
       .catch(() => undefined);
   }, [activeTab, clientId]);
@@ -315,15 +345,74 @@ export default function ClientDetailPage() {
     try {
       await apiRequest(`/clients/${clientId}`, {
         method: 'PATCH',
-        body: JSON.stringify(settingsForm),
+        body: JSON.stringify({
+          ...settingsForm,
+          allowClientTeamInvite: allowTeamInvite,
+          maxPortalUsers: Number(maxPortalUsers) || 5,
+        }),
       });
       await loadCore();
+      if (activeTab === 'settings') {
+        const membersResponse = await apiRequest<
+          ApiResponse<PortalMembersResponse>
+        >(`/clients/${clientId}/users`);
+        setMembers(membersResponse.data.items ?? []);
+        setSeatInfo(membersResponse.data.seats);
+      }
     } catch (error) {
       setErrorMessage(
         error instanceof Error ? error.message : 'Failed to save settings',
       );
     } finally {
       setSettingsBusy(false);
+    }
+  }
+
+  async function toggleOrgAdmin(member: ClientMember, isOrgAdmin: boolean) {
+    setMemberBusyId(member.user.id);
+    try {
+      await apiRequest(`/clients/${clientId}/users/${member.user.id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ isOrgAdmin }),
+      });
+      const membersResponse = await apiRequest<
+        ApiResponse<PortalMembersResponse>
+      >(`/clients/${clientId}/users`);
+      setMembers(membersResponse.data.items ?? []);
+      setSeatInfo(membersResponse.data.seats);
+    } catch (error) {
+      setErrorMessage(
+        error instanceof Error ? error.message : 'Failed to update member',
+      );
+    } finally {
+      setMemberBusyId(null);
+    }
+  }
+
+  async function removeMember(member: ClientMember) {
+    if (
+      !window.confirm(
+        `Remove ${member.user.fullName} from this client portal?`,
+      )
+    ) {
+      return;
+    }
+    setMemberBusyId(member.user.id);
+    try {
+      await apiRequest(`/clients/${clientId}/users/${member.user.id}`, {
+        method: 'DELETE',
+      });
+      const membersResponse = await apiRequest<
+        ApiResponse<PortalMembersResponse>
+      >(`/clients/${clientId}/users`);
+      setMembers(membersResponse.data.items ?? []);
+      setSeatInfo(membersResponse.data.seats);
+    } catch (error) {
+      setErrorMessage(
+        error instanceof Error ? error.message : 'Failed to remove member',
+      );
+    } finally {
+      setMemberBusyId(null);
     }
   }
 
@@ -459,12 +548,12 @@ export default function ClientDetailPage() {
             />
             <StatCard
               label="Total revenue"
-              value={formatMoney(overview.totalRevenue)}
+              value={formatMoney(overview.totalRevenue, client?.currency)}
               icon={Activity}
             />
             <StatCard
               label="Outstanding"
-              value={formatMoney(overview.outstandingAmount)}
+              value={formatMoney(overview.outstandingAmount, client?.currency)}
               icon={Activity}
             />
             <StatCard
@@ -554,7 +643,11 @@ export default function ClientDetailPage() {
       ) : null}
 
       {activeTab === 'services' ? (
-        <ClientServiceConfig clientId={clientId} canManage={canManage} />
+        <ClientServiceConfig
+          clientId={clientId}
+          canManage={canManage}
+          currency={client?.currency}
+        />
       ) : null}
 
       {activeTab === 'contacts' ? (
@@ -861,32 +954,114 @@ export default function ClientDetailPage() {
           </Card>
 
           <Card>
-            <div className="mb-3 flex items-center justify-between gap-3">
-              <div className="flex items-center gap-2">
-                <Users className="h-4 w-4 text-[var(--primary)]" />
-                <h3 className="text-sm font-medium text-[var(--foreground)]">
-                  Portal members
-                </h3>
+            <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+              <div className="flex items-start gap-2">
+                <Users className="mt-0.5 h-4 w-4 text-[var(--primary)]" />
+                <div>
+                  <h3 className="text-sm font-medium text-[var(--foreground)]">
+                    Portal members
+                  </h3>
+                  <p className="mt-0.5 text-xs text-[var(--muted)]">
+                    {seatInfo.used} / {seatInfo.max} seats used. Client
+                    self-invite is{' '}
+                    {allowTeamInvite ? 'enabled' : 'disabled'}.
+                  </p>
+                </div>
               </div>
               {canManage ? (
-                <Button size="sm" variant="secondary" onClick={() => setLinkOpen(true)}>
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  disabled={seatInfo.used >= seatInfo.max}
+                  onClick={() => setLinkOpen(true)}
+                >
                   <UserPlus className="h-4 w-4" />
                   Add member
                 </Button>
               ) : null}
             </div>
+
+            {canManage ? (
+              <div className="mb-4 grid gap-3 rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface-muted)] p-3 sm:grid-cols-2">
+                <label className="flex items-center gap-2 text-sm text-[var(--foreground)]">
+                  <input
+                    type="checkbox"
+                    checked={allowTeamInvite}
+                    onChange={(event) =>
+                      setAllowTeamInvite(event.target.checked)
+                    }
+                  />
+                  Allow client to invite teammates
+                </label>
+                <Input
+                  label="Max team members"
+                  type="number"
+                  min={1}
+                  max={500}
+                  value={maxPortalUsers}
+                  onChange={(event) => setMaxPortalUsers(event.target.value)}
+                />
+                <p className="text-xs text-[var(--muted)] sm:col-span-2">
+                  Only portal org admins can invite when this is on. Save
+                  settings to apply seat limits.
+                </p>
+              </div>
+            ) : null}
+
             {members.length === 0 ? (
-              <p className="text-sm text-[var(--muted)]">No portal users linked.</p>
+              <p className="text-sm text-[var(--muted)]">
+                No portal users linked.
+              </p>
             ) : (
               <ul className="space-y-2 text-sm">
                 {members.map((member) => (
-                  <li key={member.id} className="flex justify-between gap-3">
-                    <span>
-                      {member.user.fullName} · {member.user.email}
-                    </span>
-                    <Badge variant="neutral" className="capitalize">
-                      {member.user.status}
-                    </Badge>
+                  <li
+                    key={member.id}
+                    className="flex flex-col gap-2 rounded-[var(--radius-md)] border border-[var(--border)] px-3 py-2 sm:flex-row sm:items-center sm:justify-between"
+                  >
+                    <div>
+                      <p className="font-medium text-[var(--foreground)]">
+                        {member.user.fullName}
+                        {member.isOrgAdmin ? (
+                          <span className="ml-2 text-xs font-normal text-[var(--primary)]">
+                            Org admin
+                          </span>
+                        ) : null}
+                      </p>
+                      <p className="text-xs text-[var(--muted)]">
+                        {member.user.email}
+                      </p>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Badge variant="neutral" className="capitalize">
+                        {member.user.status}
+                      </Badge>
+                      {canManage ? (
+                        <>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            disabled={memberBusyId === member.user.id}
+                            onClick={() =>
+                              void toggleOrgAdmin(
+                                member,
+                                !member.isOrgAdmin,
+                              )
+                            }
+                          >
+                            {member.isOrgAdmin ? 'Demote' : 'Make admin'}
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            disabled={memberBusyId === member.user.id}
+                            onClick={() => void removeMember(member)}
+                          >
+                            Remove
+                          </Button>
+                        </>
+                      ) : null}
+                    </div>
                   </li>
                 ))}
               </ul>
@@ -901,14 +1076,16 @@ export default function ClientDetailPage() {
                   Onboarding checklists
                 </h3>
               </div>
-              <Button
-                size="sm"
-                variant="secondary"
-                onClick={() => setCreateWorkflowOpen(true)}
-              >
-                <Plus className="h-4 w-4" />
-                New checklist
-              </Button>
+              {canManage ? (
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  onClick={() => setCreateWorkflowOpen(true)}
+                >
+                  <Plus className="h-4 w-4" />
+                  New checklist
+                </Button>
+              ) : null}
             </div>
             {workflows.length === 0 ? (
               <p className="text-sm text-[var(--muted)]">
@@ -980,7 +1157,15 @@ export default function ClientDetailPage() {
         clientId={clientId}
         clientName={client.name}
         onClose={() => setLinkOpen(false)}
-        onLinked={() => setActiveTab('settings')}
+        onLinked={() => {
+          setActiveTab('settings');
+          void apiRequest<ApiResponse<PortalMembersResponse>>(
+            `/clients/${clientId}/users`,
+          ).then((membersResponse) => {
+            setMembers(membersResponse.data.items ?? []);
+            setSeatInfo(membersResponse.data.seats);
+          });
+        }}
       />
     </div>
   );

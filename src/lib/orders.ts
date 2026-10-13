@@ -34,15 +34,58 @@ export interface OrderSummary {
     code: string;
     metadata?: Record<string, unknown> | null;
   } | null;
+  displayFolderStatus?: {
+    id: string;
+    name: string;
+    code?: string | null;
+    metadata?: Record<string, unknown> | null;
+  } | null;
+  conversationChannels?: Array<{
+    id: string;
+    name: string;
+    type: string;
+    conversationKind?: string | null;
+  }>;
   conversationChannel?: { id: string; name: string; type: string } | null;
   assignedArtist?: { id: string; fullName: string } | null;
   assignedTeamLead?: { id: string; fullName: string } | null;
   assignedQa?: { id: string; fullName: string } | null;
+  workAllocations?: Array<{
+    id: string;
+    assignedArtistUserId?: string | null;
+    assignedArtist?: { id: string; fullName: string } | null;
+    folderStatusId?: string | null;
+    folderStatus?: {
+      id: string;
+      name: string;
+      code?: string | null;
+      metadata?: Record<string, unknown> | null;
+    } | null;
+    inFileCount?: number;
+    outFileCount?: number;
+    rejectedFileCount?: number;
+    extraServiceCount?: number;
+    price?: string | null;
+    artistRatePerImage?: string | null;
+    cost?: string | null;
+    sortOrder?: number;
+    label?: string | null;
+    serviceLines?: Array<{
+      service: { id: string; name: string; code: string };
+    }>;
+  }>;
   serviceLines?: Array<{
-    service: { id: string; name: string; code: string };
+    clientPriceSnapshot?: string | number | null;
+    clientEtaSnapshot?: number | null;
+    service: {
+      id: string;
+      name: string;
+      code: string;
+      defaultUnit?: string | null;
+    };
   }>;
   project?: { id: string; name: string; code: string } | null;
-  clientOrganization?: { id: string; name: string } | null;
+  clientOrganization?: { id: string; name: string; currency?: string | null } | null;
   _count?: { batches: number };
   invoices?: Array<{
     id: string;

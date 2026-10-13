@@ -8,6 +8,7 @@ export interface ChatChannel {
   dmPeerUserId?: string | null;
   clientOrganizationId?: string | null;
   clientOrganizationName?: string | null;
+  orderId?: string | null;
   unreadCount?: number;
 }
 

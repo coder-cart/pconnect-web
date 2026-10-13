@@ -1,4 +1,4 @@
-import type { Metadata } from 'next';
+import type { Metadata, Viewport } from 'next';
 import { Inter } from 'next/font/google';
 import { ThemeProvider } from '@/components/providers/ThemeProvider';
 import './globals.css';
@@ -12,6 +12,16 @@ const inter = Inter({
 export const metadata: Metadata = {
   title: 'PConnect',
   description: 'Unified workspace for chat, projects, files, and finance',
+};
+
+export const viewport: Viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  viewportFit: 'cover',
+  themeColor: [
+    { media: '(prefers-color-scheme: light)', color: '#ffffff' },
+    { media: '(prefers-color-scheme: dark)', color: '#0f1115' },
+  ],
 };
 
 export default function RootLayout({

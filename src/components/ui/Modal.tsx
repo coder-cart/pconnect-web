@@ -12,11 +12,17 @@ interface ModalProps {
   onClose: () => void;
   children: ReactNode;
   footer?: ReactNode;
-  size?: 'md' | 'lg';
+  size?: 'md' | 'lg' | 'xl';
 }
 
 const FOCUSABLE_SELECTOR =
   'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])';
+
+const SIZE_CLASS: Record<NonNullable<ModalProps['size']>, string> = {
+  md: 'sm:max-w-lg',
+  lg: 'sm:max-w-2xl',
+  xl: 'sm:max-w-3xl',
+};
 
 export function Modal({
   open,
@@ -39,6 +45,8 @@ export function Modal({
     if (!open) return;
 
     const previouslyFocused = document.activeElement as HTMLElement | null;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
 
     function getFocusable(): HTMLElement[] {
       if (!dialogRef.current) return [];
@@ -94,7 +102,6 @@ export function Modal({
 
     document.addEventListener('keydown', handleKeyDown);
 
-    // Prefer first field input over dismiss/header buttons so typing works immediately.
     const focusable = getFocusable();
     const preferred =
       focusable.find((el) => {
@@ -105,20 +112,28 @@ export function Modal({
 
     return () => {
       document.removeEventListener('keydown', handleKeyDown);
+      document.body.style.overflow = previousOverflow;
       previouslyFocused?.focus?.();
     };
-    // Intentionally omit onClose — use onCloseRef so parent re-renders don't remount focus.
   }, [open]);
 
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+    <div
+      className={cn(
+        'fixed inset-0 z-50 flex justify-center',
+        // Mobile/PWA: bottom sheet; desktop: centered dialog
+        'items-end p-0 sm:items-center sm:p-4',
+      )}
+      style={{
+        paddingBottom: 'env(safe-area-inset-bottom, 0px)',
+      }}
+    >
       <div
-        className="absolute inset-0 bg-black/40 backdrop-blur-sm"
+        className="absolute inset-0 bg-black/35 backdrop-blur-[2px]"
         aria-hidden="true"
         onMouseDown={(event) => {
-          // Only close on direct backdrop press (not bubbled from dialog).
           if (event.target === event.currentTarget) {
             onCloseRef.current();
           }
@@ -131,12 +146,21 @@ export function Modal({
         aria-labelledby={titleId}
         tabIndex={-1}
         className={cn(
-          'relative z-10 max-h-[90vh] w-full overflow-y-auto rounded-[var(--radius-lg)] border border-[var(--border)] bg-[var(--surface)] shadow-[var(--shadow-md)] outline-none',
-          size === 'lg' ? 'max-w-2xl' : 'max-w-lg',
+          'relative z-10 flex w-full flex-col overflow-hidden border border-[var(--border)] bg-[var(--surface)] shadow-[var(--shadow-md)] outline-none',
+          // Full-height sheet on phones (PWA); constrained card on desktop
+          'h-[100dvh] max-h-[100dvh] rounded-none sm:h-auto sm:max-h-[min(90dvh,90vh)] sm:rounded-[var(--radius-lg)]',
+          SIZE_CLASS[size],
         )}
-        onMouseDown={(event) => event.stopPropagation()}
       >
-        <div className="relative border-b border-[var(--border)] px-5 py-4 pr-12">
+        <div
+          className="relative shrink-0 border-b border-[var(--border)] bg-[var(--surface)] px-4 py-3 pr-14 sm:px-5 sm:py-4 sm:pr-12"
+          style={{ paddingTop: 'max(0.75rem, env(safe-area-inset-top, 0px))' }}
+        >
+          {/* Drag affordance for mobile sheet */}
+          <div
+            className="mx-auto mb-2 h-1 w-10 rounded-full bg-[var(--border)] sm:hidden"
+            aria-hidden="true"
+          />
           <div>
             <h2
               id={titleId}
@@ -150,22 +174,32 @@ export function Modal({
           </div>
         </div>
 
-        <div className="px-5 py-4">{children}</div>
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-4 sm:px-5">
+          {children}
+        </div>
 
         {footer ? (
-          <div className="flex justify-end gap-2 border-t border-[var(--border)] px-5 py-4">
+          <div
+            className="flex shrink-0 flex-col gap-2 border-t border-[var(--border)] bg-[var(--surface)] px-4 py-3 sm:flex-row sm:justify-end sm:gap-2 sm:px-5 sm:py-4"
+            style={{
+              paddingBottom:
+                'max(0.75rem, env(safe-area-inset-bottom, 0px))',
+            }}
+          >
             {footer}
           </div>
         ) : null}
 
-        {/* Close last in DOM/tab order so Tab from the first field does not land on dismiss. */}
         <button
           type="button"
           onClick={() => onCloseRef.current()}
-          className="absolute right-3 top-3 rounded-[var(--radius-md)] p-2 text-[var(--muted)] hover:bg-[var(--surface-muted)] hover:text-[var(--foreground)]"
+          className="absolute right-2 top-2 z-10 flex h-11 w-11 items-center justify-center rounded-[var(--radius-md)] text-[var(--muted)] hover:bg-[var(--surface-muted)] hover:text-[var(--foreground)] sm:right-3 sm:top-3 sm:h-9 sm:w-9"
+          style={{
+            top: 'max(0.5rem, env(safe-area-inset-top, 0px))',
+          }}
           aria-label="Close"
         >
-          <X className="h-4 w-4" />
+          <X className="h-5 w-5 sm:h-4 sm:w-4" />
         </button>
       </div>
     </div>
@@ -192,6 +226,7 @@ export function ModalActions({
       <Button
         type="button"
         variant="secondary"
+        className="h-11 w-full sm:h-10 sm:w-auto"
         onClick={onCancel}
         disabled={isSubmitting}
       >
@@ -199,6 +234,7 @@ export function ModalActions({
       </Button>
       <Button
         type="button"
+        className="h-11 w-full sm:h-10 sm:w-auto"
         onClick={onSubmit}
         disabled={disabled || isSubmitting}
       >

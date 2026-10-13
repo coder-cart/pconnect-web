@@ -51,9 +51,9 @@ export function AdminToolsMenu() {
       </DropdownMenuItem>
       <DropdownMenuSeparator />
       <DropdownMenuItem>
-        <Link href="/admin" className="flex items-center gap-2">
+        <Link href="/staff" className="flex items-center gap-2">
           <Users className="h-4 w-4" />
-          Manage members
+          Manage staff
         </Link>
       </DropdownMenuItem>
       <DropdownMenuItem disabled>

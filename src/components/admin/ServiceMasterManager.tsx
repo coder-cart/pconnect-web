@@ -12,6 +12,7 @@ import { Modal, ModalActions } from '@/components/ui/Modal';
 import { ListSkeleton } from '@/components/ui/Skeleton';
 import { ErrorState } from '@/components/ui/StatePanels';
 import { useWorkspace } from '@/components/providers/WorkspaceProvider';
+import { formatEditorMoney, formatMoney } from '@/lib/money';
 
 interface ServiceMasterItem {
   id: string;
@@ -51,13 +52,6 @@ const EMPTY_FORM: ServiceFormState = {
   estimatedTatHours: '',
   isActive: true,
 };
-
-function formatMoney(value?: string | number | null) {
-  if (value === null || value === undefined || value === '') return '—';
-  const num = Number(value);
-  if (Number.isNaN(num)) return '—';
-  return `₹${num % 1 === 0 ? num : num.toFixed(2)}`;
-}
 
 function formatEta(hours?: number | null) {
   if (hours === null || hours === undefined) return '—';
@@ -213,8 +207,12 @@ export function ServiceMasterManager() {
                   <th className="pb-2 pr-4 font-medium">Code</th>
                   <th className="pb-2 pr-4 font-medium">Service</th>
                   <th className="pb-2 pr-4 font-medium">Category</th>
-                  <th className="pb-2 pr-4 text-right font-medium">Client Price</th>
-                  <th className="pb-2 pr-4 text-right font-medium">Artist Rate</th>
+                  <th className="pb-2 pr-4 text-right font-medium">
+                    Client price ($)
+                  </th>
+                  <th className="pb-2 pr-4 text-right font-medium">
+                    Artist rate (₹)
+                  </th>
                   <th className="pb-2 pr-4 font-medium">Unit</th>
                   <th className="pb-2 pr-4 font-medium">Default ETA</th>
                   <th className="pb-2 pr-4 font-medium">Status</th>
@@ -243,10 +241,10 @@ export function ServiceMasterManager() {
                       {service.category || '—'}
                     </td>
                     <td className="py-3 pr-4 text-right">
-                      {formatMoney(service.defaultPrice)}
+                      {formatMoney(service.defaultPrice, 'USD')}
                     </td>
                     <td className="py-3 pr-4 text-right">
-                      {formatMoney(service.artistRatePerImage)}
+                      {formatEditorMoney(service.artistRatePerImage)}
                     </td>
                     <td className="py-3 pr-4 text-[var(--muted-foreground)]">
                       {service.defaultUnit}
@@ -347,7 +345,7 @@ export function ServiceMasterManager() {
 
           <div className="grid gap-3 md:grid-cols-3">
             <Input
-              label="Default client price (₹)"
+              label="Default client price ($)"
               type="number"
               min={0}
               step="0.01"
@@ -356,6 +354,7 @@ export function ServiceMasterManager() {
                 setForm((prev) => ({ ...prev, defaultPrice: event.target.value }))
               }
               placeholder="2"
+              hint="Client billing default in USD; override per client currency on the client page."
             />
             <Input
               label="Default artist rate (₹)"
@@ -370,6 +369,7 @@ export function ServiceMasterManager() {
                 }))
               }
               placeholder="0.50"
+              hint="Editor pay is always INR."
             />
             <Input
               label="Default ETA (hours)"

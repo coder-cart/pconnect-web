@@ -3,38 +3,24 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import {
-  AlertTriangle,
-  BadgeCheck,
-  Brush,
+  Building2,
   ClipboardList,
-  CreditCard,
-  FileText,
-  Package,
-  ShieldCheck,
+  MessageSquare,
 } from 'lucide-react';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { StatCard } from '@/components/ui/StatCard';
 import { Card } from '@/components/ui/Card';
-import { Badge } from '@/components/ui/Badge';
 import { apiRequest } from '@/lib/api-client';
 import { ApiResponse, userHasPermission, userIsExternal } from '@/lib/auth';
 import { ListSkeleton } from '@/components/ui/Skeleton';
+import { EmptyState, ErrorState } from '@/components/ui/StatePanels';
 import { useWorkspace } from '@/components/providers/WorkspaceProvider';
 import { getRoleLabel } from '@/lib/navigation';
-import { humanize } from '@/lib/production';
+import { OrderSummary } from '@/lib/orders';
 
 interface DashboardMetrics {
-  batchesByStatus: Record<string, number>;
-  assetsByStatus: Record<string, number>;
   totals: {
-    batches: number;
-    assets: number;
-    assetsInQa: number;
-    overdueAssets: number;
     pendingApprovals: number;
-    outstandingInvoices: number;
-    myAssignedAssets: number;
-    myLoggedMinutes: number;
     openOrders?: number;
   };
   ordersDueThisWeek?: Array<{
@@ -50,21 +36,55 @@ interface DashboardMetrics {
 export default function DashboardPage() {
   const { user, refreshKey } = useWorkspace();
   const [metrics, setMetrics] = useState<DashboardMetrics | null>(null);
+  const [clientOrders, setClientOrders] = useState<OrderSummary[]>([]);
+  const [clientOrgCount, setClientOrgCount] = useState<number | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-
-  useEffect(() => {
-    setIsLoading(true);
-    apiRequest<ApiResponse<DashboardMetrics>>('/production/dashboard')
-      .then((response) => setMetrics(response.data))
-      .finally(() => setIsLoading(false));
-  }, [refreshKey]);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const isExternal = userIsExternal(user);
   const roleLabel = getRoleLabel(user.userType, user.roleCodes);
-  const isEditor = userHasPermission(user, 'assets.manage');
-  const isQa = userHasPermission(user, 'qa.review');
-  const isManager = userHasPermission(user, 'batches.manage');
   const canViewOrders = userHasPermission(user, 'orders.view');
+  const canViewClients = userHasPermission(user, 'clients.view');
+  const canManageOrders = userHasPermission(user, 'orders.manage');
+
+  useEffect(() => {
+    setIsLoading(true);
+    setErrorMessage(null);
+
+    const tasks: Promise<void>[] = [];
+
+    if (isExternal && canViewOrders) {
+      tasks.push(
+        apiRequest<ApiResponse<{ items: OrderSummary[] }>>(
+          '/orders?pageSize=8',
+        )
+          .then((response) => setClientOrders(response.data.items))
+          .catch((error: Error) => {
+            setClientOrders([]);
+            setErrorMessage(error.message);
+          }),
+      );
+    }
+
+    tasks.push(
+      apiRequest<ApiResponse<DashboardMetrics>>('/production/dashboard')
+        .then((response) => setMetrics(response.data))
+        .catch((error: Error) => {
+          setMetrics(null);
+          setErrorMessage(error.message);
+        }),
+    );
+
+    if (!isExternal && canViewClients) {
+      tasks.push(
+        apiRequest<ApiResponse<unknown[]>>('/clients')
+          .then((response) => setClientOrgCount(response.data.length))
+          .catch(() => setClientOrgCount(null)),
+      );
+    }
+
+    Promise.all(tasks).finally(() => setIsLoading(false));
+  }, [refreshKey, isExternal, canViewOrders, canViewClients]);
 
   const today = new Intl.DateTimeFormat('en-US', {
     weekday: 'long',
@@ -73,6 +93,10 @@ export default function DashboardPage() {
   }).format(new Date());
 
   const totals = metrics?.totals;
+  const openClientOrders = clientOrders.filter(
+    (order) => !['completed', 'cancelled', 'delivered'].includes(order.status),
+  ).length;
+  const dueThisWeek = metrics?.ordersDueThisWeek ?? [];
 
   return (
     <div className="space-y-6">
@@ -101,146 +125,109 @@ export default function DashboardPage() {
 
       {isLoading ? <ListSkeleton rows={4} /> : null}
 
-      {!isLoading && isExternal ? (
-        <ClientPortal
-          totals={totals}
-          deliveredCount={metrics?.assetsByStatus?.delivered ?? 0}
+      {!isLoading && errorMessage ? (
+        <ErrorState
+          title="Unable to load dashboard"
+          description={errorMessage}
         />
       ) : null}
 
-      {!isLoading && !isExternal ? (
+      {!isLoading && !errorMessage && isExternal ? (
+        <ClientPortal
+          openOrders={openClientOrders}
+          recentOrders={clientOrders}
+          pendingApprovals={totals?.pendingApprovals}
+        />
+      ) : null}
+
+      {!isLoading && !errorMessage && !isExternal ? (
         <div className="space-y-6">
-          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-            <StatCard
-              label="Active Batches"
-              value={String(totals?.batches ?? 0)}
-              trend="Live"
-              trendDirection="up"
-              icon={Package}
-            />
-            <StatCard
-              label="Awaiting QA"
-              value={String(totals?.assetsInQa ?? 0)}
-              trend="Queue"
-              trendDirection="up"
-              icon={ShieldCheck}
-            />
-            <StatCard
-              label="Overdue Assets"
-              value={String(totals?.overdueAssets ?? 0)}
-              trend={totals && totals.overdueAssets > 0 ? 'Action' : 'Clear'}
-              trendDirection={
-                totals && totals.overdueAssets > 0 ? 'down' : 'up'
-              }
-              icon={AlertTriangle}
-            />
-            <StatCard
-              label="Pending Approvals"
-              value={String(totals?.pendingApprovals ?? 0)}
-              trend="Client"
-              trendDirection="up"
-              icon={BadgeCheck}
-            />
+          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+            {canViewOrders ? (
+              <StatCard
+                label="Open Orders"
+                value={String(totals?.openOrders ?? 0)}
+                trend="Active"
+                trendDirection="up"
+                icon={ClipboardList}
+              />
+            ) : null}
+            {canViewClients && clientOrgCount != null ? (
+              <StatCard
+                label="Client orgs"
+                value={String(clientOrgCount)}
+                trend="Onboarding"
+                trendDirection="up"
+                icon={Building2}
+              />
+            ) : null}
           </div>
 
-          <div className="grid gap-6 xl:grid-cols-[1fr_1fr]">
-            {isEditor ? (
+          <div className="grid gap-6 xl:grid-cols-2">
+            {canViewOrders ? (
               <QuickPanel
-                title="Editor workspace"
-                icon={<Brush className="h-4 w-4" />}
-                value={totals?.myAssignedAssets ?? 0}
-                valueLabel="assets assigned to you"
-                href="/my-work"
-                cta="Open My Work"
-              />
-            ) : null}
-
-            {isQa ? (
-              <QuickPanel
-                title="QA review queue"
-                icon={<ShieldCheck className="h-4 w-4" />}
-                value={totals?.assetsInQa ?? 0}
-                valueLabel="assets awaiting review"
-                href="/qa"
-                cta="Open QA queue"
-              />
-            ) : null}
-
-            {isManager ? (
-              <QuickPanel
-                title="Open orders"
+                title="Orders"
                 icon={<ClipboardList className="h-4 w-4" />}
                 value={totals?.openOrders ?? 0}
-                valueLabel="orders in draft, active, or production"
+                valueLabel="open orders across the workspace"
                 href="/orders"
-                cta="View orders"
+                cta={canManageOrders ? 'Manage orders' : 'View orders'}
               />
             ) : null}
 
-            {canViewOrders && metrics?.ordersDueThisWeek?.length ? (
+            {canViewClients ? (
+              <QuickPanel
+                title="Clients"
+                icon={<Building2 className="h-4 w-4" />}
+                valueLabel="Onboarding, services, and portal members"
+                href="/clients"
+                cta="Open clients"
+              />
+            ) : null}
+
+            <QuickPanel
+              title="Messages"
+              icon={<MessageSquare className="h-4 w-4" />}
+              valueLabel="Channels and client conversations"
+              href="/chat"
+              cta="Open messages"
+            />
+
+            {canViewOrders ? (
               <Card>
                 <h2 className="text-base font-semibold text-[var(--foreground)]">
                   Due this week
                 </h2>
-                <div className="mt-3 space-y-2">
-                  {metrics.ordersDueThisWeek.map((order) => (
-                    <Link
-                      key={order.id}
-                      href={`/orders/${order.id}`}
-                      className="block rounded-[var(--radius-md)] border border-[var(--border)] px-3 py-2 hover:bg-[var(--surface-muted)]"
-                    >
-                      <p className="text-sm font-medium text-[var(--foreground)]">
-                        {order.code} · {order.name}
-                      </p>
-                      <p className="text-xs text-[var(--muted)]">
-                        {order.clientOrganization?.name ?? 'Internal'} ·{' '}
-                        {order.dueDate
-                          ? new Date(order.dueDate).toLocaleDateString()
-                          : 'No due date'}
-                      </p>
-                    </Link>
-                  ))}
-                </div>
+                {dueThisWeek.length === 0 ? (
+                  <p className="mt-3 text-sm text-[var(--muted)]">
+                    No orders due in the next 7 days.
+                  </p>
+                ) : (
+                  <div className="mt-3 space-y-2">
+                    {dueThisWeek.map((order) => (
+                      <Link
+                        key={order.id}
+                        href={`/orders/${order.id}`}
+                        className="block rounded-[var(--radius-md)] border border-[var(--border)] px-3 py-2 hover:bg-[var(--surface-muted)]"
+                      >
+                        <p className="text-sm font-medium text-[var(--foreground)]">
+                          {order.name}
+                          <span className="text-[var(--muted)]">
+                            {' '}
+                            · {order.code}
+                          </span>
+                        </p>
+                        <p className="text-xs text-[var(--muted)]">
+                          {order.clientOrganization?.name ?? 'Internal'} ·{' '}
+                          {order.dueDate
+                            ? new Date(order.dueDate).toLocaleDateString()
+                            : 'No due date'}
+                        </p>
+                      </Link>
+                    ))}
+                  </div>
+                )}
               </Card>
-            ) : null}
-
-            {isManager ? (
-              <Card>
-                <h2 className="text-base font-semibold text-[var(--foreground)]">
-                  Pipeline by status
-                </h2>
-                <div className="mt-3 flex flex-wrap gap-2">
-                  {Object.entries(metrics?.batchesByStatus ?? {}).map(
-                    ([status, count]) => (
-                      <Badge key={status} variant="neutral" className="capitalize">
-                        {humanize(status)}: {count}
-                      </Badge>
-                    ),
-                  )}
-                  {Object.keys(metrics?.batchesByStatus ?? {}).length === 0 ? (
-                    <p className="text-sm text-[var(--muted)]">
-                      No batches yet.
-                    </p>
-                  ) : null}
-                </div>
-                <Link
-                  href="/production"
-                  className="mt-4 inline-block text-sm font-medium text-[var(--primary)]"
-                >
-                  Manage production
-                </Link>
-              </Card>
-            ) : null}
-
-            {isManager ? (
-              <QuickPanel
-                title="Finance"
-                icon={<CreditCard className="h-4 w-4" />}
-                value={totals?.outstandingInvoices ?? 0}
-                valueLabel="outstanding invoices"
-                href="/finance"
-                cta="Open Finance"
-              />
             ) : null}
           </div>
         </div>
@@ -259,94 +246,107 @@ function QuickPanel({
 }: {
   title: string;
   icon: React.ReactNode;
-  value: number;
+  value?: number;
   valueLabel: string;
   href: string;
   cta: string;
 }) {
   return (
     <Card>
-      <div className="flex items-center gap-2 text-[var(--foreground)]">
-        {icon}
-        <h2 className="text-base font-semibold">{title}</h2>
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <div className="flex items-center gap-2 text-[var(--muted)]">
+            {icon}
+            <h2 className="text-base font-semibold text-[var(--foreground)]">
+              {title}
+            </h2>
+          </div>
+          <p className="mt-2 text-sm text-[var(--muted)]">
+            {typeof value === 'number' ? (
+              <>
+                <span className="font-semibold text-[var(--foreground)]">
+                  {value}
+                </span>{' '}
+                {valueLabel}
+              </>
+            ) : (
+              valueLabel
+            )}
+          </p>
+        </div>
+        <Link
+          href={href}
+          className="text-sm font-medium text-[var(--primary)] hover:underline"
+        >
+          {cta}
+        </Link>
       </div>
-      <p className="mt-3 text-3xl font-semibold text-[var(--foreground)]">
-        {value}
-      </p>
-      <p className="text-sm text-[var(--muted)]">{valueLabel}</p>
-      <Link
-        href={href}
-        className="mt-4 inline-block text-sm font-medium text-[var(--primary)]"
-      >
-        {cta}
-      </Link>
     </Card>
   );
 }
 
 function ClientPortal({
-  totals,
-  deliveredCount,
+  openOrders,
+  recentOrders,
+  pendingApprovals,
 }: {
-  totals?: DashboardMetrics['totals'];
-  deliveredCount: number;
+  openOrders: number;
+  recentOrders: OrderSummary[];
+  pendingApprovals?: number;
 }) {
   return (
     <div className="space-y-6">
-      <div className="grid gap-4 sm:grid-cols-3">
+      <div className="grid gap-4 sm:grid-cols-2">
         <StatCard
-          label="Awaiting Your Approval"
-          value={String(totals?.pendingApprovals ?? 0)}
-          trend="Review"
+          label="Open Orders"
+          value={String(openOrders)}
+          trend="Your jobs"
           trendDirection="up"
-          icon={BadgeCheck}
+          icon={ClipboardList}
         />
         <StatCard
-          label="Outstanding Invoices"
-          value={String(totals?.outstandingInvoices ?? 0)}
-          trend="Billing"
+          label="Pending approvals"
+          value={String(pendingApprovals ?? 0)}
+          trend="Reviews"
           trendDirection="up"
-          icon={FileText}
-        />
-        <StatCard
-          label="Deliverables"
-          value={String(deliveredCount)}
-          trend="Files"
-          trendDirection="up"
-          icon={Package}
+          icon={ClipboardList}
         />
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <PortalLink href="/approvals" title="Approvals" icon={<BadgeCheck className="h-5 w-5" />} />
-        <PortalLink href="/files" title="Deliverables" icon={<Package className="h-5 w-5" />} />
-        <PortalLink href="/finance" title="Invoices" icon={<CreditCard className="h-5 w-5" />} />
-        <PortalLink href="/chat" title="Messages" icon={<FileText className="h-5 w-5" />} />
-      </div>
+      <Card>
+        <div className="mb-3 flex items-center justify-between">
+          <h2 className="text-base font-semibold text-[var(--foreground)]">
+            Recent orders
+          </h2>
+          <Link
+            href="/orders"
+            className="text-sm font-medium text-[var(--primary)]"
+          >
+            View all
+          </Link>
+        </div>
+        {recentOrders.length === 0 ? (
+          <EmptyState
+            title="No orders yet"
+            description="When your studio creates a job for you, it will show up here."
+          />
+        ) : (
+          <div className="space-y-2">
+            {recentOrders.slice(0, 6).map((order) => (
+              <Link
+                key={order.id}
+                href={`/orders/${order.id}`}
+                className="block rounded-[var(--radius-md)] border border-[var(--border)] px-3 py-2 hover:bg-[var(--surface-muted)]"
+              >
+                <p className="text-sm font-medium text-[var(--foreground)]">
+                  {order.name}
+                </p>
+                <p className="text-xs text-[var(--muted)]">{order.code}</p>
+              </Link>
+            ))}
+          </div>
+        )}
+      </Card>
     </div>
-  );
-}
-
-function PortalLink({
-  href,
-  title,
-  icon,
-}: {
-  href: string;
-  title: string;
-  icon: React.ReactNode;
-}) {
-  return (
-    <Link
-      href={href}
-      className="flex items-center gap-3 rounded-[var(--radius-lg)] border border-[var(--border)] bg-[var(--surface)] p-4 transition-colors hover:bg-[var(--surface-muted)]"
-    >
-      <span className="flex h-10 w-10 items-center justify-center rounded-[var(--radius-md)] bg-[var(--primary-soft)] text-[var(--primary)]">
-        {icon}
-      </span>
-      <span className="text-sm font-medium text-[var(--foreground)]">
-        {title}
-      </span>
-    </Link>
   );
 }

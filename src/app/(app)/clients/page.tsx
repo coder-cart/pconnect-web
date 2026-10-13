@@ -73,8 +73,10 @@ export default function ClientsPage() {
         searchPlaceholder="Search clients..."
         filterOptions={STATUS_FILTERS}
         filterField="status"
-        createLabel="Create Client"
-        onCreateClick={() => setCreateOpen(true)}
+        createLabel={canManageClients ? 'Create Client' : undefined}
+        onCreateClick={
+          canManageClients ? () => setCreateOpen(true) : undefined
+        }
         refreshKey={refreshKey}
         emptyTitle="No clients yet"
         emptyDescription="Client organizations will appear here once created."
@@ -115,14 +117,16 @@ export default function ClientsPage() {
                 <MessageSquare className="h-4 w-4" />
                 Open messages
               </Button>
-              <Button
-                size="sm"
-                variant="secondary"
-                onClick={() => setOnboardingClientId(item.id)}
-              >
-                <Workflow className="h-4 w-4" />
-                Start onboarding
-              </Button>
+              {canManageClients ? (
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  onClick={() => setOnboardingClientId(item.id)}
+                >
+                  <Workflow className="h-4 w-4" />
+                  Start onboarding
+                </Button>
+              ) : null}
               {canManageClients ? (
                 <Button
                   size="sm"

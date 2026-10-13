@@ -92,7 +92,7 @@ export async function apiRequest<T>(
     throw new Error(
       response.ok
         ? 'Invalid JSON response from API'
-        : `API unavailable (${response.status}). Is the backend running on port 7001?`,
+        : `API unavailable (${response.status}). Is the backend running on port 6002?`,
     );
   }
 
@@ -131,7 +131,7 @@ export async function apiUpload<T>(
     throw new Error(
       response.ok
         ? 'Invalid JSON response from API'
-        : `API unavailable (${response.status}). Is the backend running on port 7001?`,
+        : `API unavailable (${response.status}). Is the backend running on port 6002?`,
     );
   }
 

@@ -36,15 +36,30 @@ export function OrdersTable({
           <th className="px-4 py-3 font-medium">Client</th>
           <th className="px-4 py-3 font-medium">Priority</th>
           <th className="px-4 py-3 font-medium">Workflow</th>
-          <th className="px-4 py-3 font-medium">Folder</th>
+          <th className="px-4 py-3 font-medium">Folder Status</th>
+          <th className="px-4 py-3 font-medium">Artist</th>
           <th className="px-4 py-3 font-medium">Due</th>
-          <th className="px-4 py-3 font-medium">Batches</th>
-          <th className="px-4 py-3 font-medium">Images</th>
+          <th className="px-4 py-3 font-medium">In Files</th>
         </tr>
       </thead>
       <tbody>
         {orders.map((order) => {
           const overdue = isOverdue(order);
+          const allocationArtists = (order.workAllocations ?? [])
+            .map((row) => row.assignedArtist?.fullName)
+            .filter((name): name is string => Boolean(name));
+          const uniqueArtists = Array.from(new Set(allocationArtists));
+          const primaryArtist =
+            uniqueArtists[0] ?? order.assignedArtist?.fullName ?? null;
+          const extraArtistCount = Math.max(uniqueArtists.length - 1, 0);
+          const allocationFolder =
+            order.workAllocations?.find((row) => row.folderStatus)?.folderStatus ??
+            null;
+          const folderDisplay =
+            allocationFolder ??
+            order.displayFolderStatus ??
+            order.folderStatus ??
+            null;
           return (
             <tr
               key={order.id}
@@ -66,9 +81,9 @@ export function OrdersTable({
                   href={`/orders/${order.id}`}
                   className="font-medium text-[var(--foreground)] hover:text-[var(--primary)]"
                 >
-                  {order.code}
+                  {order.name}
                 </Link>
-                <p className="text-xs text-[var(--muted)]">{order.name}</p>
+                <p className="text-xs text-[var(--muted)]">{order.code}</p>
               </td>
               <td className="px-4 py-3 text-[var(--muted)]">
                 {order.clientOrganization?.name ?? '—'}
@@ -94,11 +109,23 @@ export function OrdersTable({
                 )}
               </td>
               <td className="px-4 py-3">
-                {order.folderStatus ? (
+                {folderDisplay ? (
                   <StatusBadge
-                    label={order.folderStatus.name}
-                    metadata={parseStatusMetadata(order.folderStatus.metadata)}
+                    label={folderDisplay.name}
+                    metadata={parseStatusMetadata(folderDisplay.metadata)}
                   />
+                ) : (
+                  '—'
+                )}
+              </td>
+              <td className="px-4 py-3 text-[var(--muted)]">
+                {primaryArtist ? (
+                  <span>
+                    {primaryArtist}
+                    {extraArtistCount > 0 ? (
+                      <span className="ml-1 text-xs">+{extraArtistCount}</span>
+                    ) : null}
+                  </span>
                 ) : (
                   '—'
                 )}
@@ -113,7 +140,6 @@ export function OrdersTable({
                   : '—'}
                 {overdue ? ' · Overdue' : ''}
               </td>
-              <td className="px-4 py-3">{order._count?.batches ?? 0}</td>
               <td className="px-4 py-3">{order.imageCount}</td>
             </tr>
           );

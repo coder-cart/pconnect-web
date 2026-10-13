@@ -166,8 +166,10 @@ export function ChatWorkspace({
     const response = await apiRequest<
       ApiResponse<{ items: ChatChannel[] }>
     >('/channels?pageSize=100');
-    setChannels(response.data.items);
-    return response.data.items;
+    setChannels(
+      response.data.items.filter((channel) => !channel.orderId),
+    );
+    return response.data.items.filter((channel) => !channel.orderId);
   }, []);
 
   const loadPinnedMessages = useCallback(async (channelId: string) => {

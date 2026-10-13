@@ -1,28 +1,19 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { ResourceListPage } from '@/components/ui/ResourceListPage';
-import { Badge } from '@/components/ui/Badge';
+import Link from 'next/link';
 import { Tabs } from '@/components/ui/Tabs';
 import { Card } from '@/components/ui/Card';
+import { PageHeader } from '@/components/ui/PageHeader';
 import { apiRequest } from '@/lib/api-client';
-import { ApiResponse } from '@/lib/auth';
+import { ApiResponse, userHasPermission } from '@/lib/auth';
 import { ListSkeleton } from '@/components/ui/Skeleton';
-import { CreateUserModal } from '@/components/modals/CreateUserModal';
 import { RolesPermissionsManager } from '@/components/admin/RolesPermissionsManager';
 import { MasterDataManager } from '@/components/admin/MasterDataManager';
 import { ServiceMasterManager } from '@/components/admin/ServiceMasterManager';
 import { OrderImportPanel } from '@/components/admin/OrderImportPanel';
 import { useWorkspace } from '@/components/providers/WorkspaceProvider';
-import { userHasPermission } from '@/lib/auth';
-
-interface UserItem {
-  id: string;
-  fullName: string;
-  email: string;
-  userType: string;
-  status: string;
-}
+import { RestrictedState } from '@/components/ui/StatePanels';
 
 interface AuditLogItem {
   id: string;
@@ -33,21 +24,16 @@ interface AuditLogItem {
   actor?: { fullName: string } | null;
 }
 
-const STATUS_FILTERS = [
-  { value: 'all', label: 'All statuses' },
-  { value: 'active', label: 'Active' },
-  { value: 'inactive', label: 'Inactive' },
-  { value: 'invited', label: 'Invited' },
-];
-
 export default function AdminPage() {
-  const { user, refreshKey, notifyRefresh } = useWorkspace();
+  const { user, refreshKey } = useWorkspace();
+  const canManageUsers = userHasPermission(user, 'users.manage');
   const canManageRoles = userHasPermission(user, 'roles.manage');
   const canManageMasterData = userHasPermission(user, 'master_data.manage');
-  const [activeTab, setActiveTab] = useState('users');
+  const [activeTab, setActiveTab] = useState(
+    canManageMasterData ? 'service-master' : canManageRoles ? 'roles' : 'audit',
+  );
   const [auditLogs, setAuditLogs] = useState<AuditLogItem[]>([]);
   const [isLoadingAudit, setIsLoadingAudit] = useState(false);
-  const [createOpen, setCreateOpen] = useState(false);
 
   useEffect(() => {
     if (activeTab !== 'audit') return;
@@ -60,13 +46,41 @@ export default function AdminPage() {
       .finally(() => setIsLoadingAudit(false));
   }, [activeTab, refreshKey]);
 
+  if (!canManageUsers && !canManageRoles && !canManageMasterData) {
+    return (
+      <RestrictedState
+        title="Settings restricted"
+        description="You need admin permissions to open workspace settings."
+      />
+    );
+  }
+
   return (
     <div className="space-y-4">
+      <PageHeader
+        title="Settings"
+        description="Workspace configuration. Staff accounts live under Staff."
+        breadcrumbs={[
+          { label: 'Workspace', href: '/dashboard' },
+          { label: 'Settings' },
+        ]}
+      />
+
+      <p className="text-sm text-[var(--muted)]">
+        Manage internal people in{' '}
+        <Link
+          href="/staff"
+          className="font-medium text-[var(--primary)] hover:underline"
+        >
+          Staff
+        </Link>
+        . Client portal members are managed on each client.
+      </p>
+
       <Tabs
         activeId={activeTab}
         onChange={setActiveTab}
         items={[
-          { id: 'users', label: 'Users' },
           ...(canManageMasterData
             ? [
                 { id: 'service-master', label: 'Service Master' },
@@ -80,46 +94,6 @@ export default function AdminPage() {
           { id: 'audit', label: 'Audit Logs' },
         ]}
       />
-
-      {activeTab === 'users' ? (
-        <ResourceListPage<UserItem>
-          title="Settings"
-          description="Workspace users, roles, and permission assignments."
-          breadcrumbs={[
-            { label: 'Workspace', href: '/dashboard' },
-            { label: 'Settings' },
-          ]}
-          endpoint="/users"
-          permission="users.manage"
-          searchPlaceholder="Search users..."
-          filterOptions={STATUS_FILTERS}
-          filterField="status"
-          createLabel="Invite User"
-          onCreateClick={() => setCreateOpen(true)}
-          refreshKey={refreshKey}
-          emptyTitle="No users found"
-          emptyDescription="Users will appear here once added to the workspace."
-          getSearchValue={(item) =>
-            `${item.fullName} ${item.email} ${item.userType} ${item.status}`
-          }
-          getItemKey={(item) => item.id}
-          renderItem={(item) => (
-            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-              <div>
-                <p className="text-sm font-medium text-[var(--foreground)]">
-                  {item.fullName}
-                </p>
-                <p className="text-xs text-[var(--muted)]">
-                  {item.email} · {item.userType}
-                </p>
-              </div>
-              <Badge variant={item.status === 'active' ? 'success' : 'neutral'}>
-                {item.status}
-              </Badge>
-            </div>
-          )}
-        />
-      ) : null}
 
       {activeTab === 'service-master' && canManageMasterData ? (
         <ServiceMasterManager />
@@ -164,12 +138,6 @@ export default function AdminPage() {
           ) : null}
         </Card>
       ) : null}
-
-      <CreateUserModal
-        open={createOpen}
-        onClose={() => setCreateOpen(false)}
-        onCreated={notifyRefresh}
-      />
     </div>
   );
 }
