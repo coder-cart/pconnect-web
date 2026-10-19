@@ -19,6 +19,7 @@ interface OrdersTableProps {
   selectedIds: string[];
   onToggle: (orderId: string) => void;
   canBulk: boolean;
+  onOpen?: (orderId: string) => void;
 }
 
 export function OrdersTable({
@@ -26,6 +27,7 @@ export function OrdersTable({
   selectedIds,
   onToggle,
   canBulk,
+  onOpen,
 }: OrdersTableProps) {
   return (
     <table className="w-full text-sm">
@@ -77,12 +79,22 @@ export function OrdersTable({
                 </td>
               ) : null}
               <td className="px-4 py-3">
-                <Link
-                  href={`/orders/${order.id}`}
-                  className="font-medium text-[var(--foreground)] hover:text-[var(--primary)]"
-                >
-                  {order.name}
-                </Link>
+                {onOpen ? (
+                  <button
+                    type="button"
+                    onClick={() => onOpen(order.id)}
+                    className="font-medium text-[var(--foreground)] hover:text-[var(--primary)]"
+                  >
+                    {order.name}
+                  </button>
+                ) : (
+                  <Link
+                    href={`/orders/${order.id}`}
+                    className="font-medium text-[var(--foreground)] hover:text-[var(--primary)]"
+                  >
+                    {order.name}
+                  </Link>
+                )}
                 <p className="text-xs text-[var(--muted)]">{order.code}</p>
               </td>
               <td className="px-4 py-3 text-[var(--muted)]">

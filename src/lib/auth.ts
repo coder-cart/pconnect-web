@@ -41,12 +41,18 @@ export function getStoredRefreshToken(): string | null {
 
 // A non-sensitive marker cookie so Next middleware can gate routes server-side.
 // The real token stays in localStorage; the cookie only signals "has session".
+function sessionCookieAttributes(maxAge: number): string {
+  const secure =
+    window.location.protocol === 'https:' ? '; secure' : '';
+  return `path=/; max-age=${maxAge}; samesite=lax${secure}`;
+}
+
 function setSessionCookie(): void {
-  document.cookie = `${SESSION_COOKIE}=1; path=/; max-age=${60 * 60 * 24 * 30}; samesite=lax`;
+  document.cookie = `${SESSION_COOKIE}=1; ${sessionCookieAttributes(60 * 60 * 24 * 30)}`;
 }
 
 function clearSessionCookie(): void {
-  document.cookie = `${SESSION_COOKIE}=; path=/; max-age=0; samesite=lax`;
+  document.cookie = `${SESSION_COOKIE}=; ${sessionCookieAttributes(0)}`;
 }
 
 export function setStoredToken(token: string, refreshToken?: string): void {
@@ -68,6 +74,13 @@ export function userHasPermission(
   permission: string,
 ): boolean {
   return Boolean(user?.permissionCodes.includes(permission));
+}
+
+export function userHasAnyPermission(
+  user: AuthenticatedUser | null,
+  permissions: string[],
+): boolean {
+  return permissions.some((permission) => userHasPermission(user, permission));
 }
 
 export function userIsExternal(user: AuthenticatedUser | null): boolean {

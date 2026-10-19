@@ -1,10 +1,12 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Check, ChevronDown, X } from 'lucide-react';
 import { apiRequest } from '@/lib/api-client';
 import { ApiResponse } from '@/lib/auth';
 import { cn } from '@/lib/cn';
+import { isHiddenOrderService } from '@/lib/orders';
 
 export interface ProductionServiceOption {
   id: string;
@@ -39,7 +41,15 @@ export function ServiceMultiSelect({
   const [fetched, setFetched] = useState<ProductionServiceOption[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [open, setOpen] = useState(false);
+  const [menuBox, setMenuBox] = useState<{
+    top: number;
+    left: number;
+    width: number;
+    lift: boolean;
+  } | null>(null);
   const rootRef = useRef<HTMLDivElement>(null);
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (options) {
@@ -48,19 +58,31 @@ export function ServiceMultiSelect({
     }
     apiRequest<ApiResponse<ProductionServiceOption[]>>('/master-data/services')
       .then((response) =>
-        setFetched(response.data.filter((item) => item.isActive !== false)),
+        setFetched(
+          response.data.filter(
+            (item) =>
+              item.isActive !== false && !isHiddenOrderService(item.code),
+          ),
+        ),
       )
       .finally(() => setIsLoading(false));
   }, [options]);
 
-  const services = options ?? fetched;
+  const services = (options ?? fetched).filter(
+    (service) => !isHiddenOrderService(service.code),
+  );
 
   useEffect(() => {
     if (!open) return;
     function handlePointer(event: MouseEvent) {
-      if (!rootRef.current?.contains(event.target as Node)) {
-        setOpen(false);
+      const target = event.target as Node;
+      if (
+        rootRef.current?.contains(target) ||
+        menuRef.current?.contains(target)
+      ) {
+        return;
       }
+      setOpen(false);
     }
     function handleKey(event: KeyboardEvent) {
       if (event.key === 'Escape') setOpen(false);
@@ -70,6 +92,33 @@ export function ServiceMultiSelect({
     return () => {
       document.removeEventListener('mousedown', handlePointer);
       document.removeEventListener('keydown', handleKey);
+    };
+  }, [open]);
+
+  useLayoutEffect(() => {
+    if (!open) return;
+
+    function place() {
+      const rect = buttonRef.current?.getBoundingClientRect();
+      if (!rect) return;
+      const width = Math.max(rect.width, 280);
+      const left = Math.min(Math.max(8, rect.left), window.innerWidth - width - 8);
+      const spaceBelow = window.innerHeight - rect.bottom;
+      const lift = spaceBelow < 220 && rect.top > spaceBelow;
+      setMenuBox({
+        top: lift ? rect.top - 4 : rect.bottom + 4,
+        left,
+        width,
+        lift,
+      });
+    }
+
+    place();
+    window.addEventListener('resize', place);
+    window.addEventListener('scroll', place, true);
+    return () => {
+      window.removeEventListener('resize', place);
+      window.removeEventListener('scroll', place, true);
     };
   }, [open]);
 
@@ -107,6 +156,7 @@ export function ServiceMultiSelect({
   return (
     <div ref={rootRef} className={cn('relative', compact ? 'min-w-[140px]' : 'w-full')}>
       <button
+        ref={buttonRef}
         type="button"
         disabled={disabled}
         onClick={() => setOpen((current) => !current)}
@@ -179,12 +229,18 @@ export function ServiceMultiSelect({
         />
       </button>
 
-      {open ? (
+      {open && menuBox
+        ? createPortal(
         <div
-          className={cn(
-            'absolute z-30 mt-1 max-h-[min(16rem,50dvh)] w-full min-w-0 overflow-y-auto overscroll-contain rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface)] p-1 shadow-[var(--shadow-md)] sm:min-w-[240px]',
-            compact ? 'left-0' : '',
-          )}
+          ref={menuRef}
+          style={{
+            position: 'fixed',
+            top: menuBox.top,
+            left: menuBox.left,
+            width: menuBox.width,
+            transform: menuBox.lift ? 'translateY(-100%)' : undefined,
+          }}
+          className="z-[90] max-h-[min(20rem,50dvh)] overflow-y-auto overscroll-contain rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface)] p-1 shadow-[var(--shadow-md)]"
         >
           {services.length === 0 ? (
             <p className="px-2 py-2 text-xs text-[var(--muted)]">
@@ -222,8 +278,10 @@ export function ServiceMultiSelect({
               );
             })
           )}
-        </div>
-      ) : null}
+        </div>,
+          document.body,
+        )
+        : null}
     </div>
   );
 }

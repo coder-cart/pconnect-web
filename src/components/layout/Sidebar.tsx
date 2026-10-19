@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { ChevronUp, X } from 'lucide-react';
-import { AuthenticatedUser, userHasPermission } from '@/lib/auth';
+import { AuthenticatedUser, userHasAnyPermission, userHasPermission } from '@/lib/auth';
 import { getRoleLabel, getNavItemLabel, getVisibleNavItems, NavItem } from '@/lib/navigation';
 import { Avatar } from '@/components/ui/Avatar';
 import { Logo } from '@/components/ui/Logo';
@@ -26,14 +26,23 @@ export function Sidebar({
   onClose,
 }: SidebarProps) {
   const pathname = usePathname();
-  const visibleItems = getVisibleNavItems(user.userType, user.permissionCodes).map(
+  const visibleItems = getVisibleNavItems(
+    user.userType,
+    user.permissionCodes,
+  ).map(
     (item) =>
       item.href === '/inbox' && unreadCount > 0
         ? { ...item, badge: unreadCount }
         : item,
   );
   const roleLabel = getRoleLabel(user.userType, user.roleCodes);
-  const showAdminTools = userHasPermission(user, 'users.manage');
+  const showSettings = userHasAnyPermission(user, [
+    'users.manage',
+    'roles.manage',
+    'master_data.manage',
+    'audit.view',
+  ]);
+  const showStaff = userHasPermission(user, 'users.manage');
 
   return (
     <aside
@@ -70,7 +79,9 @@ export function Sidebar({
       </nav>
 
       <div className="border-t border-[var(--border)] p-4 space-y-2">
-        {showAdminTools ? <AdminToolsMenu /> : null}
+        {showSettings || showStaff ? (
+          <AdminToolsMenu showSettings={showSettings} showStaff={showStaff} />
+        ) : null}
         <div className="flex items-center gap-3 rounded-[var(--radius-lg)] bg-[var(--surface-muted)] p-3">
           <Avatar name={user.fullName} size="md" />
           <div className="min-w-0 flex-1">

@@ -10,8 +10,20 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: 'PConnect',
-  description: 'Unified workspace for chat, projects, files, and finance',
+  title: 'Colabdeck',
+  description: 'Colabdeck workspace for chat, projects, files, and finance',
+  openGraph: {
+    title: 'Colabdeck',
+    description: 'Colabdeck workspace for chat, projects, files, and finance',
+    images: [
+      {
+        url: '/brand/colabdeck-og.png',
+        width: 1200,
+        height: 630,
+        alt: 'Colabdeck',
+      },
+    ],
+  },
 };
 
 export const viewport: Viewport = {
@@ -19,7 +31,7 @@ export const viewport: Viewport = {
   initialScale: 1,
   viewportFit: 'cover',
   themeColor: [
-    { media: '(prefers-color-scheme: light)', color: '#ffffff' },
+    { media: '(prefers-color-scheme: light)', color: '#3d3adf' },
     { media: '(prefers-color-scheme: dark)', color: '#0f1115' },
   ],
 };

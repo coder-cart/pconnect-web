@@ -1,11 +1,21 @@
 'use client';
 
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type MutableRefObject,
+  type ReactNode,
+} from 'react';
+import { createPortal } from 'react-dom';
 import { apiRequest } from '@/lib/api-client';
 import { ApiResponse } from '@/lib/auth';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
-import { OrderSummary } from '@/lib/orders';
+import { OrderSummary, toExternalHref } from '@/lib/orders';
 import {
   MasterDataStatus,
   computeOrderCost,
@@ -43,6 +53,32 @@ interface AllocationDraft {
   artistRatePerImage: string;
   /** Per-editor Excel row status (independent of order folder status). */
   folderStatusId: string;
+}
+
+export type OrderSheetExtraSave = {
+  validate: (deliveryHref: string | null) => string | null;
+  persist: () => Promise<void>;
+};
+
+const OrderSheetExtraSaveContext = createContext<MutableRefObject<OrderSheetExtraSave | null> | null>(
+  null,
+);
+
+export function useOrderSheetExtraSave(save: OrderSheetExtraSave) {
+  const slot = useContext(OrderSheetExtraSaveContext);
+  const latest = useRef(save);
+  latest.current = save;
+
+  useEffect(() => {
+    if (!slot) return;
+    slot.current = {
+      validate: (deliveryHref) => latest.current.validate(deliveryHref),
+      persist: () => latest.current.persist(),
+    };
+    return () => {
+      slot.current = null;
+    };
+  }, [slot]);
 }
 
 interface OrderExcelEditorProps {
@@ -126,6 +162,9 @@ export function OrderExcelEditor({
   const [users, setUsers] = useState<UserOption[]>([]);
   const [busy, setBusy] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [sheetFullPage, setSheetFullPage] = useState(false);
+  const extraSaveRef = useRef<OrderSheetExtraSave | null>(null);
+  const sheetScrollRef = useRef<HTMLDivElement>(null);
 
   const [clientOrganizationId, setClientOrganizationId] = useState(
     order.clientOrganization?.id ?? '',
@@ -142,6 +181,8 @@ export function OrderExcelEditor({
     String(order.timeSpentMinutes ?? 0),
   );
   const [clientNotes, setClientNotes] = useState(order.clientNotes ?? '');
+  const [sourceLink, setSourceLink] = useState(order.sourceLink ?? '');
+  const [deliveryLink, setDeliveryLink] = useState(order.deliveryLink ?? '');
   const [internalNotes, setInternalNotes] = useState(order.internalNotes ?? '');
   const [allocations, setAllocations] = useState<AllocationDraft[]>(() =>
     allocationsFromOrder(order),
@@ -157,6 +198,8 @@ export function OrderExcelEditor({
     setEstimatedTatHours(String(order.estimatedTatHours ?? ''));
     setTimeSpentMinutes(String(order.timeSpentMinutes ?? 0));
     setClientNotes(order.clientNotes ?? '');
+    setSourceLink(order.sourceLink ?? '');
+    setDeliveryLink(order.deliveryLink ?? '');
     setInternalNotes(order.internalNotes ?? '');
     setAllocations(allocationsFromOrder(order));
   }, [order]);
@@ -252,6 +295,11 @@ export function OrderExcelEditor({
 
   function addAllocationRow() {
     setAllocations((rows) => [...rows, emptyAllocation()]);
+    setSheetFullPage(true);
+    window.setTimeout(() => {
+      const scroller = sheetScrollRef.current;
+      scroller?.scrollTo({ top: scroller.scrollHeight, behavior: 'smooth' });
+    }, 50);
   }
 
   function removeAllocationRow(key: string) {
@@ -259,6 +307,23 @@ export function OrderExcelEditor({
   }
 
   async function handleSave() {
+    const sourceHref = toExternalHref(sourceLink);
+    if (sourceLink.trim() && !sourceHref) {
+      setErrorMessage('Enter a valid Drive or file link.');
+      return;
+    }
+    const deliveryHref = toExternalHref(deliveryLink);
+    if (deliveryLink.trim() && !deliveryHref) {
+      setErrorMessage('Enter a valid delivery link.');
+      return;
+    }
+
+    const leadError = extraSaveRef.current?.validate(deliveryHref) ?? null;
+    if (leadError) {
+      setErrorMessage(leadError);
+      return;
+    }
+
     setBusy(true);
     setErrorMessage(null);
     try {
@@ -276,6 +341,8 @@ export function OrderExcelEditor({
             : undefined,
           timeSpentMinutes: Number(timeSpentMinutes) || 0,
           clientNotes: clientNotes.trim() || null,
+          sourceLink: sourceHref,
+          deliveryLink: deliveryHref,
           internalNotes: internalNotes.trim() || null,
         }),
       });
@@ -301,6 +368,7 @@ export function OrderExcelEditor({
           })),
         }),
       });
+      await extraSaveRef.current?.persist();
       onUpdated();
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : 'Save failed');
@@ -344,8 +412,16 @@ export function OrderExcelEditor({
     (item) => item.id === folderStatusId,
   );
 
-  return (
-    <Card padding="none" className="overflow-hidden">
+  const sheet = (
+    <OrderSheetExtraSaveContext.Provider value={extraSaveRef}>
+    <Card
+      padding="none"
+      className={
+        sheetFullPage
+          ? 'flex h-full max-h-full flex-col overflow-hidden rounded-none border-0'
+          : 'flex flex-col overflow-visible'
+      }
+    >
       {errorMessage ? (
         <p className="border-b border-[var(--border)] px-4 py-2 text-sm text-[var(--danger)]">
           {errorMessage}
@@ -358,18 +434,24 @@ export function OrderExcelEditor({
             Production sheet
           </h3>
           <p className="text-xs text-[var(--muted)]">
-            One row per artist · save applies order header and all rows
+            One row per artist. Save updates the sheet, workflow, and leads.
           </p>
         </div>
         <div className="flex shrink-0 items-center gap-2">
           <Button size="sm" variant="secondary" onClick={addAllocationRow} disabled={busy}>
             Add row
           </Button>
-          <Button size="sm" onClick={handleSave} disabled={busy}>
-            Save
+          <Button
+            size="sm"
+            variant="secondary"
+            onClick={() => setSheetFullPage((open) => !open)}
+            disabled={busy}
+          >
+            {sheetFullPage ? 'Minimize' : 'Full page'}
           </Button>
         </div>
       </div>
+      <div ref={sheetScrollRef} className="min-h-0 flex-1 overflow-y-auto">
 
       <div className="grid gap-x-3 gap-y-2 border-b border-[var(--border)] bg-[var(--surface-muted)] px-4 py-3 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-6">
         <label className="text-sm lg:col-span-2">
@@ -482,6 +564,46 @@ export function OrderExcelEditor({
             className="h-9 w-full rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface)] px-2 text-sm"
           />
         </label>
+      </div>
+
+      <div className="border-b border-[var(--border)] px-4 py-3">
+        <label className="block text-sm">
+          <span className="mb-1 block text-[11px] font-medium uppercase tracking-wide text-[var(--muted)]">
+            Drive or file link
+          </span>
+          <input
+            type="url"
+            value={sourceLink}
+            onChange={(event) => setSourceLink(event.target.value)}
+            placeholder="https://drive.google.com/..."
+            className="h-9 w-full rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface)] px-2.5 text-sm"
+          />
+        </label>
+        {toExternalHref(sourceLink) ? (
+          <a
+            href={toExternalHref(sourceLink) ?? undefined}
+            target="_blank"
+            rel="noreferrer"
+            className="mt-1 inline-block break-all text-sm text-[var(--primary)]"
+          >
+            Open file link
+          </a>
+        ) : null}
+        <label className="mt-3 block text-sm">
+          <span className="mb-1 block text-[11px] font-medium uppercase tracking-wide text-[var(--muted)]">
+            Delivery link
+          </span>
+          <input
+            type="url"
+            value={deliveryLink}
+            onChange={(event) => setDeliveryLink(event.target.value)}
+            placeholder="https://..."
+            className="h-9 w-full rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface)] px-2.5 text-sm"
+          />
+        </label>
+        <p className="mt-1 text-xs text-[var(--muted)]">
+          Save this link before marking the order Delivered. Saving the link does not change the status.
+        </p>
       </div>
 
       <div className="grid gap-3 border-b border-[var(--border)] px-4 py-3 md:grid-cols-2">
@@ -698,7 +820,13 @@ export function OrderExcelEditor({
         </table>
       </div>
 
-      <div className="flex flex-wrap items-center justify-between gap-2 border-t border-[var(--border)] bg-[var(--surface-muted)] px-4 py-2.5">
+      </div>
+
+      {footer ? (
+        <div className="shrink-0 border-t border-[var(--border)] px-4 py-3">{footer}</div>
+      ) : null}
+
+      <div className="sticky bottom-0 z-20 flex shrink-0 flex-wrap items-center justify-between gap-2 border-t border-[var(--border)] bg-[var(--surface)] px-4 py-2.5">
         <p className="text-xs text-[var(--muted)]">
           {canViewFinance && totalCost != null ? (
             <>
@@ -708,21 +836,22 @@ export function OrderExcelEditor({
           ) : null}
           All editors Done/Uploaded → Ready for Delivery
         </p>
-        <div className="flex items-center gap-2">
-          <Button size="sm" variant="secondary" onClick={addAllocationRow} disabled={busy}>
-            Add row
-          </Button>
-          <Button size="sm" onClick={handleSave} disabled={busy}>
-            Save sheet
-          </Button>
-        </div>
+        <Button size="sm" onClick={handleSave} disabled={busy}>
+          {busy ? 'Saving…' : 'Save'}
+        </Button>
       </div>
-
-      {footer ? (
-        <div className="border-t border-[var(--border)] px-4 py-3">{footer}</div>
-      ) : null}
     </Card>
+    </OrderSheetExtraSaveContext.Provider>
   );
+
+  if (sheetFullPage && typeof document !== 'undefined') {
+    return createPortal(
+      <div className="fixed inset-0 z-[80] flex flex-col bg-[var(--background)]">{sheet}</div>,
+      document.body,
+    );
+  }
+
+  return sheet;
 }
 
 export function OrderExcelReadOnly({
@@ -785,6 +914,15 @@ export function OrderExcelReadOnly({
               : 'Update status on your row. Done/Uploaded from every editor → Ready for Delivery.'}
           </p>
         </div>
+        {canEditAllocationStatus ? (
+          <Button
+            size="sm"
+            disabled={statusSaveBusy || !allocationStatusDrafts || Object.keys(allocationStatusDrafts).length === 0}
+            onClick={() => onSaveAllocationStatus?.('')}
+          >
+            {statusSaveBusy ? 'Saving…' : 'Save'}
+          </Button>
+        ) : null}
       </div>
       <div className="grid gap-x-4 gap-y-2 border-b border-[var(--border)] bg-[var(--surface-muted)] px-4 py-3 text-sm sm:grid-cols-2 lg:grid-cols-4">
         <div>
@@ -826,6 +964,36 @@ export function OrderExcelReadOnly({
             {formatDate(order.inDate)} → {formatDate(order.outDate)}
           </p>
         </div>
+        {toExternalHref(order.deliveryLink ?? '') ? (
+          <div className="sm:col-span-2 lg:col-span-4">
+            <p className="text-[11px] font-medium uppercase tracking-wide text-[var(--muted)]">
+              Delivery link
+            </p>
+            <a
+              href={toExternalHref(order.deliveryLink ?? '') ?? undefined}
+              target="_blank"
+              rel="noreferrer"
+              className="mt-0.5 inline-block break-all text-[var(--primary)]"
+            >
+              {order.deliveryLink}
+            </a>
+          </div>
+        ) : null}
+        {toExternalHref(order.sourceLink ?? '') ? (
+          <div className="sm:col-span-2 lg:col-span-4">
+            <p className="text-[11px] font-medium uppercase tracking-wide text-[var(--muted)]">
+              Drive or file link
+            </p>
+            <a
+              href={toExternalHref(order.sourceLink ?? '') ?? undefined}
+              target="_blank"
+              rel="noreferrer"
+              className="mt-0.5 inline-block break-all text-[var(--primary)]"
+            >
+              {order.sourceLink}
+            </a>
+          </div>
+        ) : null}
         {order.clientNotes?.trim() ? (
           <div className="sm:col-span-2 lg:col-span-4">
             <p className="text-[11px] font-medium uppercase tracking-wide text-[var(--muted)]">
@@ -851,7 +1019,6 @@ export function OrderExcelReadOnly({
                 ...(canViewFinance
                   ? ['Extra', 'Price', 'Artist rate', 'Cost']
                   : []),
-                ...(canEditAllocationStatus ? [''] : []),
               ].map((heading) => (
                 <th
                   key={heading || 'actions'}
@@ -960,19 +1127,6 @@ export function OrderExcelReadOnly({
                         {row.cost ?? '—'}
                       </td>
                     </>
-                  ) : null}
-                  {canEditAllocationStatus ? (
-                    <td className="px-2.5 py-2 align-middle">
-                      {canEditRow ? (
-                        <Button
-                          size="sm"
-                          disabled={statusSaveBusy}
-                          onClick={() => onSaveAllocationStatus?.(row.id)}
-                        >
-                          Save
-                        </Button>
-                      ) : null}
-                    </td>
                   ) : null}
                 </tr>
               );

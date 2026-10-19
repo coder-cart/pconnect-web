@@ -11,6 +11,7 @@ const PUBLIC_PATHS = [
   '/reset-password',
   '/forgot-password',
   '/magic-login',
+  '/health',
 ];
 
 function isPublicPath(pathname: string): boolean {

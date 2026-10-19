@@ -29,14 +29,21 @@ export default function AdminPage() {
   const canManageUsers = userHasPermission(user, 'users.manage');
   const canManageRoles = userHasPermission(user, 'roles.manage');
   const canManageMasterData = userHasPermission(user, 'master_data.manage');
+  const canViewAudit = userHasPermission(user, 'audit.view');
   const [activeTab, setActiveTab] = useState(
-    canManageMasterData ? 'service-master' : canManageRoles ? 'roles' : 'audit',
+    canManageMasterData
+      ? 'service-master'
+      : canManageRoles
+        ? 'roles'
+        : canViewAudit
+          ? 'audit'
+          : 'service-master',
   );
   const [auditLogs, setAuditLogs] = useState<AuditLogItem[]>([]);
   const [isLoadingAudit, setIsLoadingAudit] = useState(false);
 
   useEffect(() => {
-    if (activeTab !== 'audit') return;
+    if (activeTab !== 'audit' || !canViewAudit) return;
 
     setIsLoadingAudit(true);
     apiRequest<ApiResponse<{ items: AuditLogItem[] }>>(
@@ -44,9 +51,9 @@ export default function AdminPage() {
     )
       .then((response) => setAuditLogs(response.data.items))
       .finally(() => setIsLoadingAudit(false));
-  }, [activeTab, refreshKey]);
+  }, [activeTab, refreshKey, canViewAudit]);
 
-  if (!canManageUsers && !canManageRoles && !canManageMasterData) {
+  if (!canManageUsers && !canManageRoles && !canManageMasterData && !canViewAudit) {
     return (
       <RestrictedState
         title="Settings restricted"
@@ -66,16 +73,18 @@ export default function AdminPage() {
         ]}
       />
 
-      <p className="text-sm text-[var(--muted)]">
-        Manage internal people in{' '}
-        <Link
-          href="/staff"
-          className="font-medium text-[var(--primary)] hover:underline"
-        >
-          Staff
-        </Link>
-        . Client portal members are managed on each client.
-      </p>
+      {canManageUsers ? (
+        <p className="text-sm text-[var(--muted)]">
+          Manage internal people in{' '}
+          <Link
+            href="/staff"
+            className="font-medium text-[var(--primary)] hover:underline"
+          >
+            Staff
+          </Link>
+          . Client portal members are managed on each client.
+        </p>
+      ) : null}
 
       <Tabs
         activeId={activeTab}
@@ -91,7 +100,7 @@ export default function AdminPage() {
           ...(canManageRoles
             ? [{ id: 'roles', label: 'Roles & Permissions' }]
             : []),
-          { id: 'audit', label: 'Audit Logs' },
+          ...(canViewAudit ? [{ id: 'audit', label: 'Audit Logs' }] : []),
         ]}
       />
 
@@ -111,7 +120,7 @@ export default function AdminPage() {
         <RolesPermissionsManager />
       ) : null}
 
-      {activeTab === 'audit' ? (
+      {activeTab === 'audit' && canViewAudit ? (
         <Card padding="none" className="overflow-hidden">
           {isLoadingAudit ? <ListSkeleton rows={5} /> : null}
           {!isLoadingAudit ? (

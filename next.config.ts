@@ -50,6 +50,7 @@ const apiProxyTarget =
   process.env.API_PROXY_TARGET ?? 'http://127.0.0.1:6002';
 
 const nextConfig: NextConfig = {
+  output: 'standalone',
   poweredByHeader: false,
   // Keep `/api/socket.io/?EIO=…` from being 308'd to a slashless URL (Engine.IO).
   skipTrailingSlashRedirect: ngrokProxy,

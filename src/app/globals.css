@@ -105,6 +105,18 @@ body {
   }
 }
 
+.brand-lockup-dark {
+  display: none;
+}
+
+[data-theme='dark'] .brand-lockup {
+  display: none;
+}
+
+[data-theme='dark'] .brand-lockup-dark {
+  display: block;
+}
+
 .animate-fade-in {
   animation: fade-in 0.25s ease-out;
 }

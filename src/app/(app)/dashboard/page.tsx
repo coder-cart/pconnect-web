@@ -16,7 +16,8 @@ import { ListSkeleton } from '@/components/ui/Skeleton';
 import { EmptyState, ErrorState } from '@/components/ui/StatePanels';
 import { useWorkspace } from '@/components/providers/WorkspaceProvider';
 import { getRoleLabel } from '@/lib/navigation';
-import { OrderSummary } from '@/lib/orders';
+import { OrderLifecycleSummary, OrderSummary } from '@/lib/orders';
+import { OrderKanbanBoard } from '@/components/orders/OrderKanbanBoard';
 
 interface DashboardMetrics {
   totals: {
@@ -37,6 +38,7 @@ export default function DashboardPage() {
   const { user, refreshKey } = useWorkspace();
   const [metrics, setMetrics] = useState<DashboardMetrics | null>(null);
   const [clientOrders, setClientOrders] = useState<OrderSummary[]>([]);
+  const [lifecycle, setLifecycle] = useState<OrderLifecycleSummary | null>(null);
   const [clientOrgCount, setClientOrgCount] = useState<number | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -52,6 +54,14 @@ export default function DashboardPage() {
     setErrorMessage(null);
 
     const tasks: Promise<void>[] = [];
+
+    if (isExternal && canViewOrders) {
+      tasks.push(
+        apiRequest<ApiResponse<OrderLifecycleSummary>>('/orders/lifecycle-summary')
+          .then((response) => setLifecycle(response.data))
+          .catch(() => setLifecycle(null)),
+      );
+    }
 
     if (isExternal && canViewOrders) {
       tasks.push(
@@ -84,7 +94,7 @@ export default function DashboardPage() {
     }
 
     Promise.all(tasks).finally(() => setIsLoading(false));
-  }, [refreshKey, isExternal, canViewOrders, canViewClients]);
+  }, [refreshKey, isExternal, canViewOrders, canViewClients, canManageOrders]);
 
   const today = new Intl.DateTimeFormat('en-US', {
     weekday: 'long',
@@ -134,14 +144,16 @@ export default function DashboardPage() {
 
       {!isLoading && !errorMessage && isExternal ? (
         <ClientPortal
-          openOrders={openClientOrders}
+          newOrders={lifecycle?.newOrders ?? 0}
+          revisionOrders={lifecycle?.revisionOrders ?? 0}
+          activeOrders={lifecycle?.activeOrders ?? openClientOrders}
           recentOrders={clientOrders}
-          pendingApprovals={totals?.pendingApprovals}
         />
       ) : null}
 
       {!isLoading && !errorMessage && !isExternal ? (
         <div className="space-y-6">
+          {canManageOrders ? <OrderKanbanBoard refreshKey={refreshKey} /> : null}
           <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
             {canViewOrders ? (
               <StatCard
@@ -286,28 +298,37 @@ function QuickPanel({
 }
 
 function ClientPortal({
-  openOrders,
+  newOrders,
+  revisionOrders,
+  activeOrders,
   recentOrders,
-  pendingApprovals,
 }: {
-  openOrders: number;
+  newOrders: number;
+  revisionOrders: number;
+  activeOrders: number;
   recentOrders: OrderSummary[];
-  pendingApprovals?: number;
 }) {
   return (
     <div className="space-y-6">
-      <div className="grid gap-4 sm:grid-cols-2">
+      <div className="grid gap-4 sm:grid-cols-3">
         <StatCard
-          label="Open Orders"
-          value={String(openOrders)}
-          trend="Your jobs"
+          label="New orders"
+          value={String(newOrders)}
+          trend="Original requests"
           trendDirection="up"
           icon={ClipboardList}
         />
         <StatCard
-          label="Pending approvals"
-          value={String(pendingApprovals ?? 0)}
-          trend="Reviews"
+          label="Revisions"
+          value={String(revisionOrders)}
+          trend="Follow-up orders"
+          trendDirection="up"
+          icon={ClipboardList}
+        />
+        <StatCard
+          label="Active orders"
+          value={String(activeOrders)}
+          trend="Not in history"
           trendDirection="up"
           icon={ClipboardList}
         />

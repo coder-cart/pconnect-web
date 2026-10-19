@@ -1,7 +1,10 @@
 'use client';
 
 import { ReactNode, useState } from 'react';
+import { usePathname } from 'next/navigation';
 import { AuthenticatedUser, userHasPermission, userIsExternal } from '@/lib/auth';
+import { canAccessPath } from '@/lib/navigation';
+import { RestrictedState } from '@/components/ui/StatePanels';
 import { Sidebar } from '@/components/layout/Sidebar';
 import { TopBar, CreateAction } from '@/components/layout/TopBar';
 import { cn } from '@/lib/cn';
@@ -29,6 +32,8 @@ function AppShellContent({
   onCreated: () => void;
 }) {
   const { unreadCount } = useNotifications();
+  const pathname = usePathname();
+  const allowed = canAccessPath(pathname, user.userType, user.permissionCodes);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [createAction, setCreateAction] = useState<CreateAction | null>(null);
   const canManageOrders = userHasPermission(user, 'orders.manage');
@@ -50,7 +55,16 @@ function AppShellContent({
             onCreate={setCreateAction}
           />
 
-          <main className="flex-1 overflow-auto p-4 sm:p-6">{children}</main>
+          <main className="flex-1 overflow-auto p-4 sm:p-6">
+            {allowed ? (
+              children
+            ) : (
+              <RestrictedState
+                title="You do not have access"
+                description="This section is hidden for your role. Ask an admin to grant the permission if you need it."
+              />
+            )}
+          </main>
         </div>
       </div>
 

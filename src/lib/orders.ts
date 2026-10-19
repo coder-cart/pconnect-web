@@ -17,6 +17,12 @@ export interface OrderSummary {
   timeSpentMinutes?: number;
   services?: string | null;
   clientNotes?: string | null;
+  sourceLink?: string | null;
+  outputFormat?: string | null;
+  parentOrderId?: string | null;
+  deliveryLink?: string | null;
+  clientAcknowledgedAt?: string | null;
+  historySavedAt?: string | null;
   internalNotes?: string | null;
   specialRequirements?: string | null;
   price?: string | null;
@@ -146,6 +152,88 @@ export function orderPriorityVariant(priority: string): BadgeVariant {
 
 export function humanize(value: string): string {
   return value.replaceAll('_', ' ');
+}
+
+export type ClientLifecycleStage =
+  | 'order_received'
+  | 'in_progress'
+  | 'quality_check'
+  | 'ready_for_delivery'
+  | 'delivered';
+
+const LIFECYCLE_CODES: Record<ClientLifecycleStage, string[]> = {
+  order_received: ['pending_review', 'waiting_for_files'],
+  in_progress: ['assigned', 'editing', 'culling', 'retouching', 'revision_required'],
+  quality_check: ['qa_review', 'client_review', 'approved'],
+  ready_for_delivery: ['ready_for_delivery'],
+  delivered: ['delivered', 'completed'],
+};
+
+export const MANAGER_WORKFLOW_OPTIONS: Array<{
+  id: ClientLifecycleStage;
+  label: string;
+}> = [
+  { id: 'order_received', label: 'Order received' },
+  { id: 'in_progress', label: 'In-progress' },
+  { id: 'quality_check', label: 'Quality check' },
+  { id: 'ready_for_delivery', label: 'Ready for Delivery' },
+  { id: 'delivered', label: 'Delivered' },
+];
+
+export const CLIENT_LIFECYCLE_LABELS: Record<ClientLifecycleStage, string> = {
+  order_received: 'Order Received',
+  in_progress: 'In Progress',
+  quality_check: 'Quality Check',
+  ready_for_delivery: 'Ready for Delivery',
+  delivered: 'Delivered',
+};
+
+export interface OrderLifecycleSummary {
+  total: number;
+  newOrders: number;
+  revisionOrders: number;
+  activeOrders: number;
+  groups: Array<{
+    stage: ClientLifecycleStage;
+    label: string;
+    count: number;
+    items: Array<{ id: string; code: string; name: string }>;
+  }>;
+}
+
+export function clientLifecycleStage(
+  workflowCode: string | null | undefined,
+): ClientLifecycleStage | null {
+  if (!workflowCode) return null;
+  const match = (
+    Object.entries(LIFECYCLE_CODES) as Array<[ClientLifecycleStage, string[]]>
+  ).find(([, codes]) => codes.includes(workflowCode));
+  return match?.[0] ?? null;
+}
+
+export function toExternalHref(value: string): string | null {
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  const withProtocol = /^https?:\/\//i.test(trimmed)
+    ? trimmed
+    : `https://${trimmed}`;
+  try {
+    const url = new URL(withProtocol);
+    if (url.protocol !== 'http:' && url.protocol !== 'https:') return null;
+    return url.toString();
+  } catch {
+    return null;
+  }
+}
+
+export const HIDDEN_ORDER_SERVICE_CODES = new Set([
+  'PERSON_2_3',
+  'PERSON_4_12',
+  'PERSON_20_PLUS',
+]);
+
+export function isHiddenOrderService(code: string): boolean {
+  return HIDDEN_ORDER_SERVICE_CODES.has(code.trim().toUpperCase());
 }
 
 export const ORDER_STATUS_STEPS = [

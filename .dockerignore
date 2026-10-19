@@ -1,0 +1,16 @@
+node_modules
+.next
+.git
+.github
+.env
+.env.*
+!.env.example
+*.md
+!README.md
+.vscode
+.cursor
+*.log
+npm-debug.log*
+.DS_Store
+Thumbs.db
+coverage

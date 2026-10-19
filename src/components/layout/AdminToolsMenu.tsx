@@ -15,7 +15,13 @@ import {
   DropdownMenuSeparator,
 } from '@/components/ui/DropdownMenu';
 
-export function AdminToolsMenu() {
+export function AdminToolsMenu({
+  showSettings,
+  showStaff,
+}: {
+  showSettings: boolean;
+  showStaff: boolean;
+}) {
   return (
     <DropdownMenu
       align="left"
@@ -39,23 +45,27 @@ export function AdminToolsMenu() {
         <span className="text-xs text-[var(--primary)]">Manage billing</span>
       </div>
       <DropdownMenuSeparator />
-      <DropdownMenuItem>
-        <Link href="/admin" className="flex items-center gap-2">
-          <Building2 className="h-4 w-4" />
-          Workspace settings
-        </Link>
-      </DropdownMenuItem>
+      {showSettings ? (
+        <DropdownMenuItem>
+          <Link href="/admin" className="flex items-center gap-2">
+            <Building2 className="h-4 w-4" />
+            Workspace settings
+          </Link>
+        </DropdownMenuItem>
+      ) : null}
       <DropdownMenuItem disabled>
         <Pencil className="h-4 w-4" />
         Edit workspace
       </DropdownMenuItem>
       <DropdownMenuSeparator />
-      <DropdownMenuItem>
-        <Link href="/staff" className="flex items-center gap-2">
-          <Users className="h-4 w-4" />
-          Manage staff
-        </Link>
-      </DropdownMenuItem>
+      {showStaff ? (
+        <DropdownMenuItem>
+          <Link href="/staff" className="flex items-center gap-2">
+            <Users className="h-4 w-4" />
+            Manage staff
+          </Link>
+        </DropdownMenuItem>
+      ) : null}
       <DropdownMenuItem disabled>
         <CreditCard className="h-4 w-4" />
         Apps & workflows

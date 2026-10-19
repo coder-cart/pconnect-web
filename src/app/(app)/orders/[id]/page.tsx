@@ -3,7 +3,12 @@
 import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { apiRequest } from '@/lib/api-client';
-import { ApiResponse, userHasPermission, userIsExternal } from '@/lib/auth';
+import {
+  ApiResponse,
+  userHasAnyPermission,
+  userHasPermission,
+  userIsExternal,
+} from '@/lib/auth';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
@@ -15,8 +20,11 @@ import { ErrorState, RestrictedState } from '@/components/ui/StatePanels';
 import { useWorkspace } from '@/components/providers/WorkspaceProvider';
 import {
   OrderSummary,
+  clientLifecycleStage,
   humanize,
+  isHiddenOrderService,
   orderPriorityVariant,
+  toExternalHref,
 } from '@/lib/orders';
 import { parseStatusMetadata } from '@/lib/order-status';
 import { OrderAssignmentPanel } from '@/components/orders/OrderAssignmentPanel';
@@ -32,8 +40,6 @@ import {
   ServiceMultiSelect,
   serviceIdsFromLines,
 } from '@/components/orders/ServiceMultiSelect';
-import { formatMoney } from '@/lib/money';
-
 interface OrderDetail extends OrderSummary {
   comments?: Array<{
     id: string;
@@ -65,16 +71,23 @@ interface ChangeLogEntry {
   changes: Array<{ field: string; from: unknown; to: unknown }>;
 }
 
-export default function OrderDetailPage() {
-  const params = useParams<{ id: string }>();
-  const orderId = params.id;
+export function OrderDetailView({
+  orderId,
+  embedded = false,
+  onClose,
+}: {
+  orderId: string;
+  embedded?: boolean;
+  onClose?: () => void;
+}) {
   const router = useRouter();
   const { user, refreshKey, notifyRefresh } = useWorkspace();
   const canManage = userHasPermission(user, 'orders.manage');
   const canView = userHasPermission(user, 'orders.view');
-  const canViewFinance =
-    userHasPermission(user, 'orders.manage') ||
-    userHasPermission(user, 'finance.invoices.view_all');
+  const canViewFinance = userHasAnyPermission(user, [
+    'finance.invoices.view_all',
+    'payments.manage',
+  ]);
   const isExternal = userIsExternal(user);
   const [order, setOrder] = useState<OrderDetail | null>(null);
   const [timeline, setTimeline] = useState<TimelinePayload | null>(null);
@@ -93,6 +106,7 @@ export default function OrderDetailPage() {
   );
   const [busy, setBusy] = useState(false);
   const [clientNotesDraft, setClientNotesDraft] = useState('');
+  const [sourceLinkDraft, setSourceLinkDraft] = useState('');
   const [clientNameDraft, setClientNameDraft] = useState('');
   const [folderStatusDraft, setFolderStatusDraft] = useState('');
   const [allocationStatusDrafts, setAllocationStatusDrafts] = useState<
@@ -106,6 +120,7 @@ export default function OrderDetailPage() {
       inFileCount: string;
     }>
   >([{ key: 'line-0', serviceIds: [], servicesText: '', inFileCount: '0' }]);
+  const [orderLink, setOrderLink] = useState('');
   const [enabledServiceOptions, setEnabledServiceOptions] = useState<
     Array<{
       id: string;
@@ -126,6 +141,7 @@ export default function OrderDetailPage() {
       .then((orderResponse) => {
         setOrder(orderResponse.data);
         setClientNotesDraft(orderResponse.data.clientNotes ?? '');
+        setSourceLinkDraft(orderResponse.data.sourceLink ?? '');
         setClientNameDraft(orderResponse.data.name);
         setFolderStatusDraft(orderResponse.data.folderStatus?.id ?? '');
         const allocations = orderResponse.data.workAllocations ?? [];
@@ -212,6 +228,10 @@ export default function OrderDetailPage() {
   useEffect(load, [orderId, refreshKey, canManage]);
 
   useEffect(() => {
+    setOrderLink(`${window.location.origin}/orders/${orderId}`);
+  }, [orderId]);
+
+  useEffect(() => {
     if (!isExternal || !order?.clientOrganization?.id) {
       setEnabledServiceOptions([]);
       return;
@@ -233,7 +253,7 @@ export default function OrderDetailPage() {
         if (cancelled) return;
         setEnabledServiceOptions(
           response.data
-            .filter((row) => row.enabled)
+            .filter((row) => row.enabled && !isHiddenOrderService(row.code))
             .map((row) => ({
               id: row.serviceId,
               code: row.code,
@@ -252,7 +272,27 @@ export default function OrderDetailPage() {
     };
   }, [isExternal, order?.clientOrganization?.id]);
 
+  async function runClientAction(action: 'acknowledge' | 'save-to-history') {
+    setBusy(true);
+    setErrorMessage(null);
+    try {
+      await apiRequest(`/orders/${orderId}/${action}`, { method: 'POST' });
+      notifyRefresh();
+      load();
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : 'Request failed');
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function handleClientSave() {
+    const sourceHref = toExternalHref(sourceLinkDraft);
+    if (sourceLinkDraft.trim() && !sourceHref) {
+      setErrorMessage('Enter a valid Drive or file link.');
+      return;
+    }
+
     setBusy(true);
     setErrorMessage(null);
     try {
@@ -261,6 +301,7 @@ export default function OrderDetailPage() {
         body: JSON.stringify({
           name: clientNameDraft.trim(),
           clientNotes: clientNotesDraft,
+          sourceLink: sourceHref,
           folderStatusId: folderStatusDraft || undefined,
         }),
       });
@@ -283,19 +324,23 @@ export default function OrderDetailPage() {
     }
   }
 
-  async function handleAllocationStatusSave(allocationId: string) {
+  async function handleAllocationStatusSave() {
+    const entries = Object.entries(allocationStatusDrafts);
+    if (!entries.length) return;
     setBusy(true);
     setErrorMessage(null);
     try {
-      await apiRequest(
-        `/orders/${orderId}/work-allocations/${allocationId}/folder-status`,
-        {
-          method: 'PATCH',
-          body: JSON.stringify({
-            folderStatusId: allocationStatusDrafts[allocationId] || null,
-          }),
-        },
-      );
+      for (const [allocationId, folderStatusId] of entries) {
+        await apiRequest(
+          `/orders/${orderId}/work-allocations/${allocationId}/folder-status`,
+          {
+            method: 'PATCH',
+            body: JSON.stringify({
+              folderStatusId: folderStatusId || null,
+            }),
+          },
+        );
+      }
       notifyRefresh();
       load();
     } catch (error) {
@@ -337,7 +382,8 @@ export default function OrderDetailPage() {
     try {
       await apiRequest(`/orders/${orderId}`, { method: 'DELETE' });
       notifyRefresh();
-      router.push('/orders');
+      if (onClose) onClose();
+      else router.push('/orders');
     } catch (error) {
       setErrorMessage(
         error instanceof Error ? error.message : 'Delete failed',
@@ -369,11 +415,15 @@ export default function OrderDetailPage() {
       <PageHeader
         title={order?.name ?? 'Order'}
         description={order ? `${order.code} · ${order.project?.name ?? ''}` : ''}
-        breadcrumbs={[
-          { label: 'Workspace', href: '/dashboard' },
-          { label: isExternal ? 'My Orders' : 'Orders', href: '/orders' },
-          { label: order?.name ?? order?.code ?? 'Detail' },
-        ]}
+        breadcrumbs={
+          embedded
+            ? undefined
+            : [
+                { label: 'Workspace', href: '/dashboard' },
+                { label: isExternal ? 'My Orders' : 'Orders', href: '/orders' },
+                { label: order?.name ?? order?.code ?? 'Detail' },
+              ]
+        }
         action={
           canManage ? (
             <>
@@ -479,6 +529,14 @@ export default function OrderDetailPage() {
 
           {activeTab === 'overview' ? (
             <div className="space-y-4">
+              {isExternal && order ? (
+                <ClientDeliveryActions
+                  order={order}
+                  busy={busy}
+                  onAcknowledge={() => runClientAction('acknowledge')}
+                  onSaveHistory={() => runClientAction('save-to-history')}
+                />
+              ) : null}
               {canManage ? (
                 <OrderExcelEditor
                   order={order}
@@ -488,13 +546,13 @@ export default function OrderDetailPage() {
                     <OrderAssignmentPanel
                       embedded
                       orderId={orderId}
-                      workflowStatusId={order.workflowStatus?.id}
                       workflowStatusCode={order.workflowStatus?.code}
                       assignedArtistNames={(order.workAllocations ?? [])
                         .map((row) => row.assignedArtist?.fullName)
                         .filter((name): name is string => Boolean(name))}
                       assignedTeamLeadUserId={order.assignedTeamLead?.id}
                       assignedQaUserId={order.assignedQa?.id}
+                      deliveryLink={order.deliveryLink}
                       onUpdated={load}
                     />
                   }
@@ -598,37 +656,39 @@ export default function OrderDetailPage() {
                       </div>
                     ))}
                   </div>
-                  {order.serviceLines && order.serviceLines.length > 0 ? (
-                    <div className="rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface-muted)] p-3">
-                      <p className="mb-2 text-xs font-medium text-[var(--foreground)]">
-                        Your pricing
-                      </p>
-                      <ul className="space-y-1 text-sm">
-                        {order.serviceLines.map((line) => (
-                          <li
-                            key={line.service.id}
-                            className="flex items-center justify-between gap-3"
-                          >
-                            <span>
-                              {line.service.code} · {line.service.name}
-                            </span>
-                            <span className="text-[var(--muted)]">
-                              {line.clientPriceSnapshot != null
-                                ? formatMoney(
-                                    line.clientPriceSnapshot,
-                                    order.clientOrganization?.currency,
-                                  )
-                                : '—'}
-                            </span>
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  ) : null}
+                  <div className="rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface-muted)] p-3">
+                    <p className="mb-2 text-xs font-medium text-[var(--foreground)]">
+                      Order link
+                    </p>
+                    {orderLink ? (
+                      <a
+                        href={orderLink}
+                        className="break-all text-sm text-[var(--primary)]"
+                      >
+                        {orderLink}
+                      </a>
+                    ) : null}
+                  </div>
                   <FolderStatusField
                     value={folderStatusDraft}
                     onChange={setFolderStatusDraft}
                   />
+                  <Input
+                    label="Drive or file link"
+                    value={sourceLinkDraft}
+                    onChange={(event) => setSourceLinkDraft(event.target.value)}
+                    placeholder="https://drive.google.com/..."
+                  />
+                  {toExternalHref(sourceLinkDraft) ? (
+                    <a
+                      href={toExternalHref(sourceLinkDraft) ?? undefined}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="break-all text-sm text-[var(--primary)]"
+                    >
+                      Open file link
+                    </a>
+                  ) : null}
                   <label className="block space-y-1.5">
                     <span className="text-sm font-medium text-[var(--foreground)]">
                       Notes from client
@@ -662,7 +722,9 @@ export default function OrderDetailPage() {
                         [allocationId]: statusId,
                       }))
                     }
-                    onSaveAllocationStatus={handleAllocationStatusSave}
+                    onSaveAllocationStatus={() => {
+                      void handleAllocationStatusSave();
+                    }}
                     statusSaveBusy={busy}
                   />
                 </div>
@@ -919,4 +981,73 @@ export default function OrderDetailPage() {
       ) : null}
     </div>
   );
+}
+
+function ClientDeliveryActions({
+  order,
+  busy,
+  onAcknowledge,
+  onSaveHistory,
+}: {
+  order: OrderSummary;
+  busy: boolean;
+  onAcknowledge: () => void;
+  onSaveHistory: () => void;
+}) {
+  const stage = clientLifecycleStage(order.workflowStatus?.code);
+  const canReceive = stage === 'ready_for_delivery' || stage === 'delivered';
+  const deliveryHref = toExternalHref(order.deliveryLink ?? '');
+
+  if (!canReceive && !order.historySavedAt) {
+    return null;
+  }
+
+  return (
+    <Card className="space-y-3">
+      <h3 className="text-sm font-medium text-[var(--foreground)]">Delivery</h3>
+      {deliveryHref ? (
+        <a
+          href={deliveryHref}
+          target="_blank"
+          rel="noreferrer"
+          className="break-all text-sm text-[var(--primary)]"
+        >
+          {order.deliveryLink}
+        </a>
+      ) : (
+        <p className="text-sm text-[var(--muted)]">
+          The studio has not added a delivery link yet.
+        </p>
+      )}
+      {order.outputFormat ? (
+        <p className="text-xs text-[var(--muted)]">Output {order.outputFormat}</p>
+      ) : null}
+      {order.historySavedAt ? (
+        <p className="text-sm text-[var(--muted)]">Saved to your order history.</p>
+      ) : (
+        <div className="flex flex-wrap gap-2">
+          {order.clientAcknowledgedAt ? (
+            <p className="text-sm text-[var(--muted)]">Delivery acknowledged.</p>
+          ) : (
+            <Button size="sm" onClick={onAcknowledge} disabled={busy || !canReceive}>
+              Acknowledge delivery
+            </Button>
+          )}
+          <Button
+            size="sm"
+            variant="secondary"
+            onClick={onSaveHistory}
+            disabled={busy || !canReceive}
+          >
+            Save to history
+          </Button>
+        </div>
+      )}
+    </Card>
+  );
+}
+
+export default function OrderDetailPage() {
+  const params = useParams<{ id: string }>();
+  return <OrderDetailView orderId={params.id} />;
 }

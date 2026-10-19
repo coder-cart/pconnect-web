@@ -1,4 +1,3 @@
-import { Shield } from 'lucide-react';
 import { cn } from '@/lib/cn';
 
 interface LogoProps {
@@ -7,20 +6,34 @@ interface LogoProps {
 }
 
 export function Logo({ compact = false, className }: LogoProps) {
-  return (
-    <div className={cn('flex items-center gap-3', className)}>
-      <div className="flex h-9 w-9 items-center justify-center rounded-[var(--radius-md)] bg-[var(--primary)] text-white shadow-sm">
-        <Shield className="h-5 w-5" aria-hidden />
-      </div>
+  if (compact) {
+    return (
+      <img
+        src="/brand/colabdeck-mark.png"
+        alt="Colabdeck"
+        width={36}
+        height={36}
+        className={cn('h-9 w-9', className)}
+      />
+    );
+  }
 
-      {!compact ? (
-        <div>
-          <p className="text-sm font-semibold text-[var(--foreground)]">
-            PConnect
-          </p>
-          <p className="text-xs text-[var(--muted)]">Unified operations</p>
-        </div>
-      ) : null}
+  return (
+    <div className={cn('flex items-center', className)} role="img" aria-label="Colabdeck">
+      <img
+        src="/brand/colabdeck-lockup.png"
+        alt=""
+        width={168}
+        height={42}
+        className="brand-lockup h-9 w-auto"
+      />
+      <img
+        src="/brand/colabdeck-lockup-dark.png"
+        alt=""
+        width={168}
+        height={42}
+        className="brand-lockup-dark h-9 w-auto"
+      />
     </div>
   );
 }
