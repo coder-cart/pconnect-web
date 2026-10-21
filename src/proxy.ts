@@ -8,10 +8,22 @@ const SESSION_COOKIE = 'pconnect_session';
 // this is a first-line UX gate that avoids flashing protected shells.
 const PUBLIC_PATHS = [
   '/login',
+  '/sign-in',
   '/reset-password',
   '/forgot-password',
   '/magic-login',
+  '/features',
+  '/solutions',
+  '/pricing',
+  '/about',
+  '/contact',
+  '/book-a-demo',
+  '/security',
+  '/privacy',
+  '/terms',
   '/health',
+  '/sw.js',
+  '/manifest.webmanifest',
 ];
 
 function isPublicPath(pathname: string): boolean {
@@ -51,6 +63,6 @@ export function proxy(request: NextRequest) {
 export const config = {
   // Run on app routes only; skip API and socket proxy paths.
   matcher: [
-    '/((?!api|socket\\.io|_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).*)',
+    '/((?!api|socket\\.io|_next/static|_next/image|favicon.ico|sw\\.js|manifest\\.webmanifest|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|webmanifest)$).*)',
   ],
 };

@@ -2,8 +2,9 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useParams, useRouter } from 'next/navigation';
 import { apiRequest } from '@/lib/api-client';
+import { readEmailLinkToken } from '@/lib/email-link-token';
 import {
   ApiResponse,
   AuthenticatedUser,
@@ -15,11 +16,13 @@ import { ListSkeleton } from '@/components/ui/Skeleton';
 
 export default function MagicLoginClient() {
   const router = useRouter();
-  const searchParams = useSearchParams();
-  const token = searchParams.get('token') ?? '';
+  const params = useParams<{ token?: string }>();
+  const pathToken = typeof params.token === 'string' ? params.token : '';
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   useEffect(() => {
+    const token = readEmailLinkToken(window.location.search, pathToken);
+
     if (!token) {
       setErrorMessage('Missing login token.');
       return;
@@ -54,7 +57,7 @@ export default function MagicLoginClient() {
     return () => {
       cancelled = true;
     };
-  }, [token, router]);
+  }, [pathToken, router]);
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-[var(--background)] p-4">

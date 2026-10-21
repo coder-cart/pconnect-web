@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import { useParams, useRouter } from 'next/navigation';
+import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import {
   Activity,
   CheckCircle2,
@@ -14,7 +14,6 @@ import {
   Plus,
   Settings,
   Upload,
-  UserPlus,
   Users,
   Workflow,
 } from 'lucide-react';
@@ -31,6 +30,7 @@ import { LoadingState, ErrorState, EmptyState } from '@/components/ui/StatePanel
 import { CreateOnboardingModal } from '@/components/modals/CreateOnboardingModal';
 import { LinkClientUserModal } from '@/components/modals/LinkClientUserModal';
 import { ClientServiceConfig } from '@/components/clients/ClientServiceConfig';
+import { ClientPortalUsers } from '@/components/clients/ClientPortalUsers';
 import { OrdersTable } from '@/components/orders/OrdersTable';
 import { OrderCreateModal } from '@/components/orders/OrderCreateForm';
 import { OrderChannelChat } from '@/components/orders/OrderChannelChat';
@@ -80,8 +80,8 @@ interface ClientOverview {
   pendingOrders: number;
   ordersInQa: number;
   completedOrders: number;
-  totalRevenue: number;
-  outstandingAmount: number;
+  totalRevenue?: number;
+  outstandingAmount?: number;
   lastOrderDate: string | null;
   nextDueOrder: {
     id: string;
@@ -129,6 +129,7 @@ interface ClientMember {
   id: string;
   linkedAt: string;
   isOrgAdmin?: boolean;
+  isDefault?: boolean;
   user: {
     id: string;
     fullName: string;
@@ -164,12 +165,15 @@ function formatDate(value?: string | null) {
 
 export default function ClientDetailPage() {
   const params = useParams<{ id: string }>();
+  const searchParams = useSearchParams();
   const clientId = params.id;
   const router = useRouter();
   const { user } = useWorkspace();
   const canManage = userHasPermission(user, 'clients.manage');
 
-  const [activeTab, setActiveTab] = useState('overview');
+  const [activeTab, setActiveTab] = useState(() =>
+    searchParams.get('tab') === 'portal' ? 'portal' : 'overview',
+  );
   const [client, setClient] = useState<ClientDetail | null>(null);
   const [overview, setOverview] = useState<ClientOverview | null>(null);
   const [orders, setOrders] = useState<OrderSummary[]>([]);
@@ -187,12 +191,17 @@ export default function ClientDetailPage() {
   });
   const [allowTeamInvite, setAllowTeamInvite] = useState(false);
   const [maxPortalUsers, setMaxPortalUsers] = useState('5');
-  const [memberBusyId, setMemberBusyId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [createOrderOpen, setCreateOrderOpen] = useState(false);
   const [createWorkflowOpen, setCreateWorkflowOpen] = useState(false);
   const [linkOpen, setLinkOpen] = useState(false);
+  const [invitePrefill, setInvitePrefill] = useState<{
+    fullName: string;
+    email: string;
+  } | null>(null);
+  const [loginNotice, setLoginNotice] = useState<string | null>(null);
+  const [loginError, setLoginError] = useState<string | null>(null);
   const [isActivating, setIsActivating] = useState(false);
   const [contactForm, setContactForm] = useState({
     name: '',
@@ -208,14 +217,22 @@ export default function ClientDetailPage() {
 
   const loadCore = useCallback(async () => {
     try {
-      const [clientResponse, overviewResponse] = await Promise.all([
-        apiRequest<ApiResponse<ClientDetail>>(`/clients/${clientId}`),
-        apiRequest<ApiResponse<ClientOverview>>(
-          `/clients/${clientId}/overview`,
-        ),
-      ]);
+      const [clientResponse, overviewResponse, membersResponse] =
+        await Promise.all([
+          apiRequest<ApiResponse<ClientDetail>>(`/clients/${clientId}`),
+          apiRequest<ApiResponse<ClientOverview>>(
+            `/clients/${clientId}/overview`,
+          ),
+          apiRequest<ApiResponse<PortalMembersResponse>>(
+            `/clients/${clientId}/users`,
+          ).catch(() => null),
+        ]);
       setClient(clientResponse.data);
       setOverview(overviewResponse.data);
+      if (membersResponse) {
+        setMembers(membersResponse.data.items ?? []);
+        setSeatInfo(membersResponse.data.seats);
+      }
       setContacts(clientResponse.data.contacts ?? []);
       setSettingsForm({
         name: clientResponse.data.name ?? '',
@@ -249,6 +266,16 @@ export default function ClientDetailPage() {
   useEffect(() => {
     void loadCore();
   }, [loadCore]);
+
+  useEffect(() => {
+    if (searchParams.get('invite') === 'sent') {
+      setLoginNotice('Portal login details were emailed.');
+    }
+    const inviteError = searchParams.get('inviteError');
+    if (inviteError) {
+      setLoginError(inviteError);
+    }
+  }, [searchParams]);
 
   useEffect(() => {
     if (activeTab !== 'orders') return;
@@ -368,52 +395,56 @@ export default function ClientDetailPage() {
     }
   }
 
-  async function toggleOrgAdmin(member: ClientMember, isOrgAdmin: boolean) {
-    setMemberBusyId(member.user.id);
-    try {
-      await apiRequest(`/clients/${clientId}/users/${member.user.id}`, {
-        method: 'PATCH',
-        body: JSON.stringify({ isOrgAdmin }),
+  const inviteContacts = useMemo(() => {
+    const rows: Array<{
+      id: string;
+      name: string;
+      email: string;
+      isPrimary: boolean;
+    }> = [];
+    const seen = new Set<string>();
+    const primaryEmail = client?.primaryContactEmail?.trim();
+    if (primaryEmail) {
+      seen.add(primaryEmail.toLowerCase());
+      rows.push({
+        id: 'primary-contact',
+        name: client?.primaryContactName?.trim() || client?.name || 'Primary contact',
+        email: primaryEmail,
+        isPrimary: true,
       });
-      const membersResponse = await apiRequest<
-        ApiResponse<PortalMembersResponse>
-      >(`/clients/${clientId}/users`);
-      setMembers(membersResponse.data.items ?? []);
-      setSeatInfo(membersResponse.data.seats);
-    } catch (error) {
-      setErrorMessage(
-        error instanceof Error ? error.message : 'Failed to update member',
-      );
-    } finally {
-      setMemberBusyId(null);
     }
+    for (const contact of contacts) {
+      const email = contact.email?.trim();
+      if (!email || seen.has(email.toLowerCase())) continue;
+      seen.add(email.toLowerCase());
+      rows.push({
+        id: contact.id,
+        name: contact.name,
+        email,
+        isPrimary: contact.isPrimary,
+      });
+    }
+    return rows;
+  }, [client, contacts]);
+
+  function openPortalInvite(prefill?: { fullName: string; email: string }) {
+    const primary =
+      inviteContacts.find((contact) => contact.isPrimary) ?? inviteContacts[0];
+    setInvitePrefill(
+      prefill ??
+        (primary
+          ? { fullName: primary.name, email: primary.email }
+          : null),
+    );
+    setLinkOpen(true);
   }
 
-  async function removeMember(member: ClientMember) {
-    if (
-      !window.confirm(
-        `Remove ${member.user.fullName} from this client portal?`,
-      )
-    ) {
-      return;
-    }
-    setMemberBusyId(member.user.id);
-    try {
-      await apiRequest(`/clients/${clientId}/users/${member.user.id}`, {
-        method: 'DELETE',
-      });
-      const membersResponse = await apiRequest<
-        ApiResponse<PortalMembersResponse>
-      >(`/clients/${clientId}/users`);
-      setMembers(membersResponse.data.items ?? []);
-      setSeatInfo(membersResponse.data.seats);
-    } catch (error) {
-      setErrorMessage(
-        error instanceof Error ? error.message : 'Failed to remove member',
-      );
-    } finally {
-      setMemberBusyId(null);
-    }
+  async function refreshPortalMembers() {
+    const membersResponse = await apiRequest<
+      ApiResponse<PortalMembersResponse>
+    >(`/clients/${clientId}/users`);
+    setMembers(membersResponse.data.items ?? []);
+    setSeatInfo(membersResponse.data.seats);
   }
 
   async function addContact() {
@@ -507,6 +538,12 @@ export default function ClientDetailPage() {
       {errorMessage ? (
         <p className="text-sm text-[var(--danger)]">{errorMessage}</p>
       ) : null}
+      {loginNotice ? (
+        <p className="text-sm text-[var(--foreground)]">{loginNotice}</p>
+      ) : null}
+      {loginError ? (
+        <p className="text-sm text-[var(--danger)]">{loginError}</p>
+      ) : null}
 
       <Tabs
         activeId={activeTab}
@@ -516,6 +553,7 @@ export default function ClientDetailPage() {
           { id: 'orders', label: 'Orders' },
           { id: 'services', label: 'Service Configuration' },
           { id: 'contacts', label: 'Contacts' },
+          { id: 'portal', label: 'Portal users' },
           { id: 'files', label: 'Files' },
           { id: 'conversation', label: 'Conversation' },
           { id: 'activity', label: 'Activity Timeline' },
@@ -546,16 +584,24 @@ export default function ClientDetailPage() {
               value={String(overview.completedOrders)}
               icon={CheckCircle2}
             />
-            <StatCard
-              label="Total revenue"
-              value={formatMoney(overview.totalRevenue, client?.currency)}
-              icon={Activity}
-            />
-            <StatCard
-              label="Outstanding"
-              value={formatMoney(overview.outstandingAmount, client?.currency)}
-              icon={Activity}
-            />
+            {overview.totalRevenue != null &&
+            overview.outstandingAmount != null ? (
+              <>
+                <StatCard
+                  label="Total revenue"
+                  value={formatMoney(overview.totalRevenue, client?.currency)}
+                  icon={Activity}
+                />
+                <StatCard
+                  label="Outstanding"
+                  value={formatMoney(
+                    overview.outstandingAmount,
+                    client?.currency,
+                  )}
+                  icon={Activity}
+                />
+              </>
+            ) : null}
             <StatCard
               label="Last order"
               value={formatDate(overview.lastOrderDate)}
@@ -571,6 +617,29 @@ export default function ClientDetailPage() {
               icon={ClipboardList}
             />
           </div>
+
+          <Card>
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <h3 className="text-sm font-medium text-[var(--foreground)]">
+                  Portal login
+                </h3>
+                <p className="mt-0.5 text-xs text-[var(--muted)]">
+                  {members.length === 0
+                    ? 'This client cannot sign in yet. Send login details from their saved contact.'
+                    : `${members.length} portal login${members.length === 1 ? '' : 's'}. Manage resend, disable, and delete on Portal users.`}
+                </p>
+              </div>
+              <Button
+                size="sm"
+                variant="secondary"
+                onClick={() => setActiveTab('portal')}
+              >
+                <Users className="h-4 w-4" />
+                Portal users
+              </Button>
+            </div>
+          </Card>
 
           <Card>
             <h3 className="text-sm font-medium text-[var(--foreground)]">
@@ -660,7 +729,7 @@ export default function ClientDetailPage() {
               <p className="text-sm text-[var(--muted)]">No contacts yet.</p>
             ) : (
               <div className="overflow-x-auto">
-                <table className="w-full min-w-[560px] text-left text-sm">
+                <table className="w-full min-w-[480px] text-left text-sm sm:min-w-[560px]">
                   <thead>
                     <tr className="border-b border-[var(--border)] text-xs uppercase text-[var(--muted)]">
                       <th className="pb-2 pr-3">Name</th>
@@ -777,6 +846,26 @@ export default function ClientDetailPage() {
             </Card>
           ) : null}
         </div>
+      ) : null}
+
+      {activeTab === 'portal' ? (
+        <ClientPortalUsers
+          clientId={clientId}
+          clientName={client.name}
+          primaryContactName={client.primaryContactName}
+          primaryContactEmail={client.primaryContactEmail}
+          contacts={contacts}
+          members={members}
+          seats={seatInfo}
+          canManage={canManage}
+          onChanged={refreshPortalMembers}
+          onNotice={setLoginNotice}
+          onError={(message) => {
+            setLoginNotice(null);
+            setLoginError(message);
+          }}
+          onInvite={openPortalInvite}
+        />
       ) : null}
 
       {activeTab === 'files' ? (
@@ -968,17 +1057,14 @@ export default function ClientDetailPage() {
                   </p>
                 </div>
               </div>
-              {canManage ? (
-                <Button
-                  size="sm"
-                  variant="secondary"
-                  disabled={seatInfo.used >= seatInfo.max}
-                  onClick={() => setLinkOpen(true)}
-                >
-                  <UserPlus className="h-4 w-4" />
-                  Add member
-                </Button>
-              ) : null}
+              <Button
+                size="sm"
+                variant="secondary"
+                onClick={() => setActiveTab('portal')}
+              >
+                <Users className="h-4 w-4" />
+                Manage portal users
+              </Button>
             </div>
 
             {canManage ? (
@@ -1003,69 +1089,11 @@ export default function ClientDetailPage() {
                 />
                 <p className="text-xs text-[var(--muted)] sm:col-span-2">
                   Only portal org admins can invite when this is on. Save
-                  settings to apply seat limits.
+                  settings to apply seat limits. Resend, disable, and delete
+                  live on the Portal users tab.
                 </p>
               </div>
             ) : null}
-
-            {members.length === 0 ? (
-              <p className="text-sm text-[var(--muted)]">
-                No portal users linked.
-              </p>
-            ) : (
-              <ul className="space-y-2 text-sm">
-                {members.map((member) => (
-                  <li
-                    key={member.id}
-                    className="flex flex-col gap-2 rounded-[var(--radius-md)] border border-[var(--border)] px-3 py-2 sm:flex-row sm:items-center sm:justify-between"
-                  >
-                    <div>
-                      <p className="font-medium text-[var(--foreground)]">
-                        {member.user.fullName}
-                        {member.isOrgAdmin ? (
-                          <span className="ml-2 text-xs font-normal text-[var(--primary)]">
-                            Org admin
-                          </span>
-                        ) : null}
-                      </p>
-                      <p className="text-xs text-[var(--muted)]">
-                        {member.user.email}
-                      </p>
-                    </div>
-                    <div className="flex flex-wrap items-center gap-2">
-                      <Badge variant="neutral" className="capitalize">
-                        {member.user.status}
-                      </Badge>
-                      {canManage ? (
-                        <>
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            disabled={memberBusyId === member.user.id}
-                            onClick={() =>
-                              void toggleOrgAdmin(
-                                member,
-                                !member.isOrgAdmin,
-                              )
-                            }
-                          >
-                            {member.isOrgAdmin ? 'Demote' : 'Make admin'}
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            disabled={memberBusyId === member.user.id}
-                            onClick={() => void removeMember(member)}
-                          >
-                            Remove
-                          </Button>
-                        </>
-                      ) : null}
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            )}
           </Card>
 
           <Card>
@@ -1156,15 +1184,15 @@ export default function ClientDetailPage() {
         open={linkOpen}
         clientId={clientId}
         clientName={client.name}
+        contacts={inviteContacts}
+        initialFullName={invitePrefill?.fullName ?? ''}
+        initialEmail={invitePrefill?.email ?? ''}
         onClose={() => setLinkOpen(false)}
         onLinked={() => {
-          setActiveTab('settings');
-          void apiRequest<ApiResponse<PortalMembersResponse>>(
-            `/clients/${clientId}/users`,
-          ).then((membersResponse) => {
-            setMembers(membersResponse.data.items ?? []);
-            setSeatInfo(membersResponse.data.seats);
-          });
+          setActiveTab('portal');
+          setLoginError(null);
+          setLoginNotice('Portal login details were emailed.');
+          void refreshPortalMembers();
         }}
       />
     </div>

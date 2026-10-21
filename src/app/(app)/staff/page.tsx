@@ -284,8 +284,8 @@ export default function StaffPage() {
 
       {!isLoading && !errorMessage && filtered.length > 0 ? (
         <Card padding="none" className="overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[720px] text-left text-sm">
+          <div className="overflow-x-auto overscroll-x-contain">
+            <table className="w-full min-w-[640px] text-left text-sm md:min-w-[720px]">
               <thead>
                 <tr className="border-b border-[var(--border)] text-xs font-medium uppercase tracking-wide text-[var(--muted)]">
                   <th className="px-4 py-3 font-medium">Name</th>

@@ -6,7 +6,8 @@ import { Modal } from '@/components/ui/Modal';
 import { Input } from '@/components/ui/Input';
 import { Button } from '@/components/ui/Button';
 import { apiRequest } from '@/lib/api-client';
-import { ApiResponse } from '@/lib/auth';
+import { ApiResponse, userHasAnyPermission } from '@/lib/auth';
+import { useWorkspace } from '@/components/providers/WorkspaceProvider';
 
 interface ManagerOption {
   id: string;
@@ -74,6 +75,12 @@ export function CreateClientWizard({
   onCreated,
 }: CreateClientWizardProps) {
   const router = useRouter();
+  const { user } = useWorkspace();
+  const canViewFinance = userHasAnyPermission(user, [
+    'finance.invoices.view_all',
+    'finance.invoices.create',
+    'payments.manage',
+  ]);
   const [step, setStep] = useState(0);
   const [general, setGeneral] = useState(EMPTY_GENERAL);
   const [production, setProduction] = useState(EMPTY_PRODUCTION);
@@ -81,12 +88,14 @@ export function CreateClientWizard({
   const [serviceEdits, setServiceEdits] = useState<ServiceEdit[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [sendPortalLogin, setSendPortalLogin] = useState(true);
 
   useEffect(() => {
     if (!open) return;
     setStep(0);
     setGeneral(EMPTY_GENERAL);
     setProduction(EMPTY_PRODUCTION);
+    setSendPortalLogin(true);
     setErrorMessage(null);
 
     apiRequest<ApiResponse<ManagerOption[]>>('/orders/assignable-users')
@@ -137,6 +146,11 @@ export function CreateClientWizard({
       setErrorMessage('Company name is required.');
       return;
     }
+    if (sendPortalLogin && !general.primaryContactEmail.trim()) {
+      setErrorMessage('Email is required to send portal login details.');
+      setStep(0);
+      return;
+    }
     setIsSubmitting(true);
     setErrorMessage(null);
     try {
@@ -173,7 +187,13 @@ export function CreateClientWizard({
             services: serviceEdits.map((row) => ({
               serviceId: row.serviceId,
               enabled: row.enabled,
-              clientPrice: row.clientPrice ? Number(row.clientPrice) : null,
+              ...(canViewFinance
+                ? {
+                    clientPrice: row.clientPrice
+                      ? Number(row.clientPrice)
+                      : null,
+                  }
+                : {}),
               clientEtaHours: row.clientEtaHours
                 ? Number(row.clientEtaHours)
                 : null,
@@ -196,9 +216,29 @@ export function CreateClientWizard({
           }),
         },
       );
+      const query = new URLSearchParams({ tab: 'portal' });
+      if (sendPortalLogin && general.primaryContactEmail.trim()) {
+        try {
+          await apiRequest(`/clients/${response.data.id}/users`, {
+            method: 'POST',
+            body: JSON.stringify({
+              fullName:
+                general.primaryContactName.trim() || general.name.trim(),
+              email: general.primaryContactEmail.trim(),
+            }),
+          });
+          query.set('invite', 'sent');
+        } catch (inviteError) {
+          const message =
+            inviteError instanceof Error
+              ? inviteError.message
+              : 'Login email was not sent';
+          query.set('inviteError', message);
+        }
+      }
       onCreated?.();
       onClose();
-      router.push(`/clients/${response.data.id}`);
+      router.push(`/clients/${response.data.id}?${query.toString()}`);
     } catch (error) {
       setErrorMessage(
         error instanceof Error ? error.message : 'Failed to create client',
@@ -216,8 +256,8 @@ export function CreateClientWizard({
       size="lg"
       onClose={onClose}
       footer={
-        <div className="flex w-full items-center justify-between gap-2">
-          <div className="flex gap-1">
+        <div className="flex w-full flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-2">
+          <div className="flex justify-center gap-1 sm:justify-start">
             {STEPS.map((label, index) => (
               <span
                 key={label}
@@ -229,22 +269,29 @@ export function CreateClientWizard({
               />
             ))}
           </div>
-          <div className="flex gap-2">
+          <div className="flex w-full flex-col-reverse gap-2 sm:w-auto sm:flex-row">
             {step > 0 ? (
               <Button
                 variant="secondary"
+                className="h-11 w-full sm:h-10 sm:w-auto"
                 onClick={() => setStep((current) => current - 1)}
                 disabled={isSubmitting}
               >
                 Back
               </Button>
             ) : (
-              <Button variant="secondary" onClick={onClose} disabled={isSubmitting}>
+              <Button
+                variant="secondary"
+                className="h-11 w-full sm:h-10 sm:w-auto"
+                onClick={onClose}
+                disabled={isSubmitting}
+              >
                 Cancel
               </Button>
             )}
             {step < STEPS.length - 1 ? (
               <Button
+                className="h-11 w-full sm:h-10 sm:w-auto"
                 onClick={() => setStep((current) => current + 1)}
                 disabled={!canContinue()}
               >
@@ -252,6 +299,7 @@ export function CreateClientWizard({
               </Button>
             ) : (
               <Button
+                className="h-11 w-full sm:h-10 sm:w-auto"
                 onClick={() => void handleSave()}
                 disabled={isSubmitting || !canContinue()}
               >
@@ -308,6 +356,21 @@ export function CreateClientWizard({
                 }))
               }
             />
+            <label className="flex items-start gap-2 text-sm text-[var(--foreground)] md:col-span-2">
+              <input
+                type="checkbox"
+                className="mt-0.5"
+                checked={sendPortalLogin}
+                onChange={(event) => setSendPortalLogin(event.target.checked)}
+              />
+              <span>
+                Email portal login details
+                <span className="mt-0.5 block text-xs text-[var(--muted)]">
+                  Uses the contact name and email above. The message includes
+                  a unique temporary password.
+                </span>
+              </span>
+            </label>
             <Input
               label="Phone number"
               value={general.phone}
@@ -515,7 +578,9 @@ export function CreateClientWizard({
                 <tr className="border-b border-[var(--border)] text-xs uppercase text-[var(--muted)]">
                   <th className="pb-2 pr-3">Enable</th>
                   <th className="pb-2 pr-3">Service</th>
-                  <th className="pb-2 pr-3 text-right">Client price</th>
+                  {canViewFinance ? (
+                    <th className="pb-2 pr-3 text-right">Client price</th>
+                  ) : null}
                   <th className="pb-2 pr-3 text-right">Client ETA</th>
                   <th className="pb-2 pr-3">Unit</th>
                   <th className="pb-2">Default instructions</th>
@@ -549,21 +614,23 @@ export function CreateClientWizard({
                           {service.code}
                         </div>
                       </td>
-                      <td className="py-2 pr-3 text-right">
-                        <input
-                          type="number"
-                          min={0}
-                          step="0.01"
-                          disabled={!edit.enabled}
-                          value={edit.clientPrice}
-                          onChange={(event) =>
-                            updateService(service.id, {
-                              clientPrice: event.target.value,
-                            })
-                          }
-                          className="w-20 rounded border border-[var(--border)] px-2 py-1 text-right text-sm disabled:opacity-50"
-                        />
-                      </td>
+                      {canViewFinance ? (
+                        <td className="py-2 pr-3 text-right">
+                          <input
+                            type="number"
+                            min={0}
+                            step="0.01"
+                            disabled={!edit.enabled}
+                            value={edit.clientPrice}
+                            onChange={(event) =>
+                              updateService(service.id, {
+                                clientPrice: event.target.value,
+                              })
+                            }
+                            className="w-20 rounded border border-[var(--border)] px-2 py-1 text-right text-sm disabled:opacity-50"
+                          />
+                        </td>
+                      ) : null}
                       <td className="py-2 pr-3 text-right">
                         <input
                           type="number"

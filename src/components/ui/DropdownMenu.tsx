@@ -51,7 +51,7 @@ export function DropdownMenu({
       {open ? (
         <div
           className={cn(
-            'absolute top-[calc(100%+4px)] z-40 min-w-44 rounded-[var(--radius-lg)] border border-[var(--border)] bg-[var(--surface)] py-1 shadow-[var(--shadow-md)]',
+            'absolute top-[calc(100%+4px)] z-40 max-h-[min(24rem,70dvh)] min-w-44 max-w-[calc(100vw-1.5rem)] overflow-y-auto overscroll-contain rounded-[var(--radius-lg)] border border-[var(--border)] bg-[var(--surface)] py-1 shadow-[var(--shadow-md)]',
             align === 'right' ? 'right-0' : 'left-0',
             menuClassName,
           )}
@@ -83,7 +83,7 @@ export function DropdownMenuItem({
       disabled={disabled}
       onClick={onClick}
       className={cn(
-        'flex w-full items-center gap-2 px-3 py-2 text-left text-sm transition-colors',
+        'flex min-h-touch w-full items-center gap-2 px-3 py-2 text-left text-sm transition-colors sm:min-h-0',
         disabled && 'cursor-not-allowed opacity-50',
         destructive
           ? 'text-[var(--danger)] hover:bg-[var(--danger-soft)]'

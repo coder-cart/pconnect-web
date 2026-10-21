@@ -34,3 +34,25 @@ export function getNotificationIconType(type: string) {
   if (type.startsWith('task.')) return 'task';
   return 'default';
 }
+
+/** Hide internal DM channel ids from notification titles. */
+export function formatNotificationTitle(notification: NotificationRecord) {
+  const title = notification.title;
+  const looksLikeDmId =
+    /(?:^|\s)dm-[0-9a-f-]{20,}/i.test(title) ||
+    /New message in dm-/i.test(title);
+
+  if (!looksLikeDmId) {
+    return title;
+  }
+
+  const senderFromBody = notification.body.split(':')[0]?.trim();
+  if (senderFromBody) {
+    if (/mentioned you/i.test(title)) {
+      return title.replace(/\s+in\s+#?dm-[^\s]+/i, '');
+    }
+    return `New message from ${senderFromBody}`;
+  }
+
+  return 'New message';
+}

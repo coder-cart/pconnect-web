@@ -1,53 +1,77 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import {
-  Building2,
+  CheckCircle2,
   ClipboardList,
+  Clock,
   MessageSquare,
+  ShieldCheck,
+  SlidersHorizontal,
 } from 'lucide-react';
-import { PageHeader } from '@/components/ui/PageHeader';
-import { StatCard } from '@/components/ui/StatCard';
 import { Card } from '@/components/ui/Card';
 import { apiRequest } from '@/lib/api-client';
-import { ApiResponse, userHasPermission, userIsExternal } from '@/lib/auth';
+import {
+  ApiResponse,
+  isProductionOnlyStaff,
+  userHasPermission,
+  userIsExternal,
+} from '@/lib/auth';
 import { ListSkeleton } from '@/components/ui/Skeleton';
 import { EmptyState, ErrorState } from '@/components/ui/StatePanels';
 import { useWorkspace } from '@/components/providers/WorkspaceProvider';
+import { useNotifications } from '@/components/providers/NotificationProvider';
 import { getRoleLabel } from '@/lib/navigation';
-import { OrderLifecycleSummary, OrderSummary } from '@/lib/orders';
+import {
+  clientLifecycleStage,
+  OrderLifecycleSummary,
+  OrderSummary,
+} from '@/lib/orders';
 import { OrderKanbanBoard } from '@/components/orders/OrderKanbanBoard';
+import { DashboardMetricCard } from '@/components/dashboard/DashboardMetricCard';
+import {
+  buildWeekSeries,
+  OrderStatusDonut,
+  OrderWeekBars,
+} from '@/components/dashboard/OrderStatusCharts';
+import { RecentActivityPanel } from '@/components/dashboard/RecentActivityPanel';
+import { RecentMessagesPanel } from '@/components/dashboard/RecentMessagesPanel';
+import { RecentOrdersTable } from '@/components/dashboard/RecentOrdersTable';
+import { StatCard } from '@/components/ui/StatCard';
 
-interface DashboardMetrics {
-  totals: {
-    pendingApprovals: number;
-    openOrders?: number;
-  };
-  ordersDueThisWeek?: Array<{
-    id: string;
-    code: string;
-    name: string;
-    dueDate?: string | null;
-    status: string;
-    clientOrganization?: { name: string } | null;
-  }>;
+function boardStage(code: string | null | undefined) {
+  if (!code || code === 'cancelled' || code === 'delivered' || code === 'completed') {
+    return null;
+  }
+  if (code === 'new_order' || code === 'on_hold') return 'order_received' as const;
+  const stage = clientLifecycleStage(code);
+  if (
+    stage === 'order_received' ||
+    stage === 'in_progress' ||
+    stage === 'quality_check' ||
+    stage === 'ready_for_delivery'
+  ) {
+    return stage;
+  }
+  return null;
 }
 
 export default function DashboardPage() {
   const { user, refreshKey } = useWorkspace();
-  const [metrics, setMetrics] = useState<DashboardMetrics | null>(null);
+  const { notifications } = useNotifications();
+  const [orders, setOrders] = useState<OrderSummary[]>([]);
   const [clientOrders, setClientOrders] = useState<OrderSummary[]>([]);
   const [lifecycle, setLifecycle] = useState<OrderLifecycleSummary | null>(null);
-  const [clientOrgCount, setClientOrgCount] = useState<number | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const isExternal = userIsExternal(user);
+  const hideClientIdentity = isProductionOnlyStaff(user?.roleCodes);
   const roleLabel = getRoleLabel(user.userType, user.roleCodes);
   const canViewOrders = userHasPermission(user, 'orders.view');
-  const canViewClients = userHasPermission(user, 'clients.view');
   const canManageOrders = userHasPermission(user, 'orders.manage');
+  const firstName = user.fullName.split(' ')[0] || user.fullName;
 
   useEffect(() => {
     setIsLoading(true);
@@ -61,13 +85,8 @@ export default function DashboardPage() {
           .then((response) => setLifecycle(response.data))
           .catch(() => setLifecycle(null)),
       );
-    }
-
-    if (isExternal && canViewOrders) {
       tasks.push(
-        apiRequest<ApiResponse<{ items: OrderSummary[] }>>(
-          '/orders?pageSize=8',
-        )
+        apiRequest<ApiResponse<{ items: OrderSummary[] }>>('/orders?pageSize=8')
           .then((response) => setClientOrders(response.data.items))
           .catch((error: Error) => {
             setClientOrders([]);
@@ -76,44 +95,121 @@ export default function DashboardPage() {
       );
     }
 
-    tasks.push(
-      apiRequest<ApiResponse<DashboardMetrics>>('/production/dashboard')
-        .then((response) => setMetrics(response.data))
-        .catch((error: Error) => {
-          setMetrics(null);
-          setErrorMessage(error.message);
-        }),
-    );
-
-    if (!isExternal && canViewClients) {
+    if (!isExternal && canViewOrders) {
       tasks.push(
-        apiRequest<ApiResponse<unknown[]>>('/clients')
-          .then((response) => setClientOrgCount(response.data.length))
-          .catch(() => setClientOrgCount(null)),
+        apiRequest<ApiResponse<{ items: OrderSummary[] }>>(
+          '/orders?pageSize=100&listScope=active',
+        )
+          .then((response) => setOrders(response.data.items))
+          .catch((error: Error) => {
+            setOrders([]);
+            setErrorMessage(error.message);
+          }),
       );
     }
 
+    if (tasks.length === 0) {
+      setIsLoading(false);
+      return;
+    }
+
     Promise.all(tasks).finally(() => setIsLoading(false));
-  }, [refreshKey, isExternal, canViewOrders, canViewClients, canManageOrders]);
+  }, [refreshKey, isExternal, canViewOrders]);
 
-  const today = new Intl.DateTimeFormat('en-US', {
+  const activeOrders = useMemo(
+    () => orders.filter((order) => !order.historySavedAt),
+    [orders],
+  );
+
+  const stageCounts = useMemo(() => {
+    const counts = {
+      order_received: 0,
+      in_progress: 0,
+      quality_check: 0,
+      ready_for_delivery: 0,
+    };
+    for (const order of activeOrders) {
+      const stage = boardStage(order.workflowStatus?.code);
+      if (stage) counts[stage] += 1;
+    }
+    return counts;
+  }, [activeOrders]);
+
+  const totalActive =
+    stageCounts.order_received +
+    stageCounts.in_progress +
+    stageCounts.quality_check +
+    stageCounts.ready_for_delivery;
+
+  const weekSeries = useMemo(
+    () =>
+      buildWeekSeries(
+        activeOrders.map((order) => ({
+          dueDate: order.dueDate,
+          stage: boardStage(order.workflowStatus?.code),
+        })),
+      ),
+    [activeOrders],
+  );
+
+  const donutStages = [
+    {
+      id: 'pending',
+      label: 'Pending',
+      count: stageCounts.order_received,
+      color: '#f97316',
+    },
+    {
+      id: 'progress',
+      label: 'In progress',
+      count: stageCounts.in_progress,
+      color: '#3b82f6',
+    },
+    {
+      id: 'qc',
+      label: 'Quality check',
+      count: stageCounts.quality_check,
+      color: '#8b5cf6',
+    },
+    {
+      id: 'ready',
+      label: 'Ready',
+      count: stageCounts.ready_for_delivery,
+      color: '#10b981',
+    },
+  ];
+
+  const messageNotifications = useMemo(
+    () =>
+      notifications.filter(
+        (item) =>
+          item.type.startsWith('message.') || item.type === 'channel.invite',
+      ),
+    [notifications],
+  );
+
+  const today = new Intl.DateTimeFormat('en-GB', {
     weekday: 'long',
-    month: 'long',
     day: 'numeric',
+    month: 'long',
+    year: 'numeric',
   }).format(new Date());
-
-  const totals = metrics?.totals;
-  const openClientOrders = clientOrders.filter(
-    (order) => !['completed', 'cancelled', 'delivered'].includes(order.status),
-  ).length;
-  const dueThisWeek = metrics?.ordersDueThisWeek ?? [];
 
   return (
     <div className="space-y-6">
-      <PageHeader
-        title={`Welcome, ${user.fullName.split(' ')[0]}`}
-        description={`${today} · ${roleLabel} workspace`}
-      />
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <h1 className="text-xl font-semibold tracking-tight text-[var(--foreground)] sm:text-2xl">
+            Welcome back, {firstName}
+          </h1>
+          <p className="mt-1 text-sm text-[var(--muted)]">
+            Here&apos;s what&apos;s happening in your workspace today · {roleLabel}
+          </p>
+        </div>
+        <div className="inline-flex items-center rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm text-[var(--muted)] shadow-[var(--shadow-sm)]">
+          {today}
+        </div>
+      </div>
 
       {user.mustChangePassword ? (
         <Card className="border-[var(--warning)]/40 bg-[var(--warning)]/10">
@@ -121,11 +217,11 @@ export default function DashboardPage() {
             Password change required
           </p>
           <p className="mt-1 text-sm text-[var(--muted)]">
-            You signed in with a temporary password. Update it from your profile
-            or use the forgot-password flow before continuing sensitive work.
+            You signed in with a temporary password. Choose a new password before
+            continuing.
           </p>
           <Link
-            href="/reset-password"
+            href="/account/password"
             className="mt-3 inline-block text-sm font-medium text-[var(--primary)]"
           >
             Change password
@@ -133,167 +229,105 @@ export default function DashboardPage() {
         </Card>
       ) : null}
 
-      {isLoading ? <ListSkeleton rows={4} /> : null}
+      {isLoading ? <ListSkeleton rows={5} /> : null}
 
       {!isLoading && errorMessage ? (
-        <ErrorState
-          title="Unable to load dashboard"
-          description={errorMessage}
-        />
+        <ErrorState title="Unable to load dashboard" description={errorMessage} />
       ) : null}
 
       {!isLoading && !errorMessage && isExternal ? (
         <ClientPortal
           newOrders={lifecycle?.newOrders ?? 0}
           revisionOrders={lifecycle?.revisionOrders ?? 0}
-          activeOrders={lifecycle?.activeOrders ?? openClientOrders}
+          activeOrders={
+            lifecycle?.activeOrders ??
+            clientOrders.filter(
+              (order) =>
+                !['completed', 'cancelled', 'delivered'].includes(order.status),
+            ).length
+          }
           recentOrders={clientOrders}
         />
       ) : null}
 
       {!isLoading && !errorMessage && !isExternal ? (
         <div className="space-y-6">
-          {canManageOrders ? <OrderKanbanBoard refreshKey={refreshKey} /> : null}
-          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-            {canViewOrders ? (
-              <StatCard
-                label="Open Orders"
-                value={String(totals?.openOrders ?? 0)}
-                trend="Active"
-                trendDirection="up"
+          {canViewOrders ? (
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
+              <DashboardMetricCard
+                label="Total orders"
+                value={totalActive}
                 icon={ClipboardList}
+                tone="blue"
               />
-            ) : null}
-            {canViewClients && clientOrgCount != null ? (
-              <StatCard
-                label="Client orgs"
-                value={String(clientOrgCount)}
-                trend="Onboarding"
-                trendDirection="up"
-                icon={Building2}
+              <DashboardMetricCard
+                label="Pending orders"
+                value={stageCounts.order_received}
+                icon={Clock}
+                tone="orange"
               />
-            ) : null}
-          </div>
-
-          <div className="grid gap-6 xl:grid-cols-2">
-            {canViewOrders ? (
-              <QuickPanel
-                title="Orders"
-                icon={<ClipboardList className="h-4 w-4" />}
-                value={totals?.openOrders ?? 0}
-                valueLabel="open orders across the workspace"
-                href="/orders"
-                cta={canManageOrders ? 'Manage orders' : 'View orders'}
+              <DashboardMetricCard
+                label="In progress"
+                value={stageCounts.in_progress}
+                icon={SlidersHorizontal}
+                tone="purple"
               />
-            ) : null}
-
-            {canViewClients ? (
-              <QuickPanel
-                title="Clients"
-                icon={<Building2 className="h-4 w-4" />}
-                valueLabel="Onboarding, services, and portal members"
-                href="/clients"
-                cta="Open clients"
+              <DashboardMetricCard
+                label="For quality check"
+                value={stageCounts.quality_check}
+                icon={ShieldCheck}
+                tone="pink"
               />
-            ) : null}
+              <DashboardMetricCard
+                label="Ready for delivery"
+                value={stageCounts.ready_for_delivery}
+                icon={CheckCircle2}
+                tone="green"
+              />
+            </div>
+          ) : (
+            <Card>
+              <p className="text-sm text-[var(--muted)]">
+                Order metrics are hidden for your role. Use Messages or your assigned
+                work areas from the sidebar.
+              </p>
+              <Link
+                href="/chat"
+                className="mt-3 inline-flex items-center gap-2 text-sm font-medium text-[var(--primary)]"
+              >
+                <MessageSquare className="h-4 w-4" />
+                Open messages
+              </Link>
+            </Card>
+          )}
 
-            <QuickPanel
-              title="Messages"
-              icon={<MessageSquare className="h-4 w-4" />}
-              valueLabel="Channels and client conversations"
-              href="/chat"
-              cta="Open messages"
-            />
+          {canManageOrders ? <OrderKanbanBoard refreshKey={refreshKey} /> : null}
 
-            {canViewOrders ? (
-              <Card>
-                <h2 className="text-base font-semibold text-[var(--foreground)]">
-                  Due this week
-                </h2>
-                {dueThisWeek.length === 0 ? (
-                  <p className="mt-3 text-sm text-[var(--muted)]">
-                    No orders due in the next 7 days.
-                  </p>
-                ) : (
-                  <div className="mt-3 space-y-2">
-                    {dueThisWeek.map((order) => (
-                      <Link
-                        key={order.id}
-                        href={`/orders/${order.id}`}
-                        className="block rounded-[var(--radius-md)] border border-[var(--border)] px-3 py-2 hover:bg-[var(--surface-muted)]"
-                      >
-                        <p className="text-sm font-medium text-[var(--foreground)]">
-                          {order.name}
-                          <span className="text-[var(--muted)]">
-                            {' '}
-                            · {order.code}
-                          </span>
-                        </p>
-                        <p className="text-xs text-[var(--muted)]">
-                          {order.clientOrganization?.name ?? 'Internal'} ·{' '}
-                          {order.dueDate
-                            ? new Date(order.dueDate).toLocaleDateString()
-                            : 'No due date'}
-                        </p>
-                      </Link>
-                    ))}
-                  </div>
-                )}
-              </Card>
-            ) : null}
-          </div>
+          {canViewOrders ? (
+            <div className="grid gap-4 xl:grid-cols-3">
+              <OrderWeekBars series={weekSeries} />
+              <OrderStatusDonut stages={donutStages} />
+              <RecentActivityPanel items={notifications} />
+            </div>
+          ) : (
+            <div className="grid gap-4 lg:grid-cols-2">
+              <RecentActivityPanel items={notifications} />
+              <RecentMessagesPanel items={messageNotifications} />
+            </div>
+          )}
+
+          {canViewOrders ? (
+            <div className="grid gap-4 xl:grid-cols-[1.4fr_0.85fr]">
+              <RecentOrdersTable
+                orders={activeOrders}
+                hideClientIdentity={hideClientIdentity}
+              />
+              <RecentMessagesPanel items={messageNotifications} />
+            </div>
+          ) : null}
         </div>
       ) : null}
     </div>
-  );
-}
-
-function QuickPanel({
-  title,
-  icon,
-  value,
-  valueLabel,
-  href,
-  cta,
-}: {
-  title: string;
-  icon: React.ReactNode;
-  value?: number;
-  valueLabel: string;
-  href: string;
-  cta: string;
-}) {
-  return (
-    <Card>
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <div className="flex items-center gap-2 text-[var(--muted)]">
-            {icon}
-            <h2 className="text-base font-semibold text-[var(--foreground)]">
-              {title}
-            </h2>
-          </div>
-          <p className="mt-2 text-sm text-[var(--muted)]">
-            {typeof value === 'number' ? (
-              <>
-                <span className="font-semibold text-[var(--foreground)]">
-                  {value}
-                </span>{' '}
-                {valueLabel}
-              </>
-            ) : (
-              valueLabel
-            )}
-          </p>
-        </div>
-        <Link
-          href={href}
-          className="text-sm font-medium text-[var(--primary)] hover:underline"
-        >
-          {cta}
-        </Link>
-      </div>
-    </Card>
   );
 }
 
@@ -310,7 +344,7 @@ function ClientPortal({
 }) {
   return (
     <div className="space-y-6">
-      <div className="grid gap-4 sm:grid-cols-3">
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 sm:gap-4">
         <StatCard
           label="New orders"
           value={String(newOrders)}

@@ -183,7 +183,9 @@ export function CreateChannelModal({
             <p className="text-xs text-[var(--muted)]">
               You are added automatically.
               {isClientChannel
-                ? ' Client contacts receive an invite to join.'
+                ? clientUsers.length > 0
+                  ? ' Select client team members below — they receive an invite to join.'
+                  : ' This client has no portal team members yet. Add them on Clients → Portal users, then invite them here.'
                 : ''}
             </p>
             <ChannelMemberPicker

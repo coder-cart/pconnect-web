@@ -96,9 +96,9 @@ export function ChannelMemberPicker({
       )}
       {showClientUsers
         ? renderUserList(
-            'Client users',
+            'Client team members',
             clientUsers,
-            'No linked client users. Link users from the Clients page first.',
+            'No portal team members yet. Add them from the Clients → Portal users tab first.',
           )
         : null}
     </div>

@@ -13,6 +13,7 @@ import { Card } from '@/components/ui/Card';
 import {
   NotificationRecord,
   formatNotificationRelativeTime,
+  formatNotificationTitle,
   getNotificationIconType,
 } from '@/lib/notifications';
 import { cn } from '@/lib/cn';
@@ -60,7 +61,7 @@ export function NotificationListItem({
               compact ? 'text-sm' : 'text-sm',
             )}
           >
-            {notification.title}
+            {formatNotificationTitle(notification)}
           </h2>
           {!notification.isRead ? <Badge variant="primary">New</Badge> : null}
         </div>

@@ -6,6 +6,7 @@ import {
   MessageSquare,
   Receipt,
   Settings,
+  UserRound,
   Users,
   UsersRound,
   type LucideIcon,
@@ -36,6 +37,12 @@ export const NAV_ITEMS: NavItem[] = [
     label: 'Messages',
     externalLabel: 'Messages',
     icon: MessageSquare,
+  },
+  {
+    href: '/account',
+    label: 'My Profile',
+    externalLabel: 'My Profile',
+    icon: UserRound,
   },
   {
     href: '/orders',
@@ -167,11 +174,37 @@ const ROUTE_RULES: Array<{
   },
 ];
 
+const EDITOR_ELEVATED_ROLES = [
+  'company_owner',
+  'internal_admin',
+  'internal_manager',
+  'team_lead',
+  'qa',
+];
+
+/** Editor without QA or a higher staff role. Their workspace is messaging and profile. */
+export function isEditorOnly(roleCodes: string[]): boolean {
+  return (
+    roleCodes.includes('editor') &&
+    !roleCodes.some((code) => EDITOR_ELEVATED_ROLES.includes(code))
+  );
+}
+
 export function canAccessPath(
   pathname: string,
   userType: 'internal' | 'external',
   permissionCodes: string[],
+  roleCodes: string[] = [],
 ): boolean {
+  if (isEditorOnly(roleCodes)) {
+    return (
+      pathname === '/chat' ||
+      pathname.startsWith('/chat/') ||
+      pathname === '/account' ||
+      pathname.startsWith('/account/')
+    );
+  }
+
   const rule = ROUTE_RULES.find(
     (item) => pathname === item.prefix || pathname.startsWith(`${item.prefix}/`),
   );
@@ -198,8 +231,9 @@ export function isWorkspaceAdmin(roleCodes: string[]): boolean {
 export function getVisibleNavItems(
   userType: 'internal' | 'external',
   permissionCodes: string[],
+  roleCodes: string[] = [],
 ): NavItem[] {
-  return NAV_ITEMS.filter((item) => {
+  const items = NAV_ITEMS.filter((item) => {
     if (item.internalOnly && userType === 'external') {
       return false;
     }
@@ -217,6 +251,14 @@ export function getVisibleNavItems(
 
     return true;
   });
+
+  if (isEditorOnly(roleCodes)) {
+    return items.filter((item) =>
+      ['/chat', '/account'].includes(item.href),
+    );
+  }
+
+  return items;
 }
 
 const ROLE_LABELS: Array<[string, string]> = [

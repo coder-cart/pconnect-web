@@ -9,6 +9,7 @@ export interface AuthenticatedUser {
   roleCodes: string[];
   permissionCodes: string[];
   mustChangePassword?: boolean;
+  avatarUpdatedAt?: string | null;
 }
 
 export interface ApiResponse<T> {
@@ -85,4 +86,21 @@ export function userHasAnyPermission(
 
 export function userIsExternal(user: AuthenticatedUser | null): boolean {
   return user?.userType === 'external';
+}
+
+const ELEVATED_ROLE_CODES = [
+  'team_lead',
+  'internal_manager',
+  'internal_admin',
+  'company_owner',
+];
+
+/** Editor or QA Reviewer who does not also hold a higher staff role. */
+export function isProductionOnlyStaff(
+  roleCodes: readonly string[] | undefined,
+): boolean {
+  const codes = roleCodes ?? [];
+  const isProduction = codes.includes('editor') || codes.includes('qa');
+  const isElevated = codes.some((code) => ELEVATED_ROLE_CODES.includes(code));
+  return isProduction && !isElevated;
 }

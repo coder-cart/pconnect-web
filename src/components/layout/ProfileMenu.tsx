@@ -2,9 +2,9 @@
 
 import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
-import { Bell, LogOut, Settings, UserRound } from 'lucide-react';
+import { Bell, KeyRound, LogOut, Settings, UserRound } from 'lucide-react';
 import { AuthenticatedUser } from '@/lib/auth';
-import { Avatar } from '@/components/ui/Avatar';
+import { UserAvatar } from '@/components/ui/UserAvatar';
 import { getRoleLabel } from '@/lib/navigation';
 import { apiRequest } from '@/lib/api-client';
 import { ApiResponse } from '@/lib/auth';
@@ -110,12 +110,12 @@ export function ProfileMenu({ user, onLogout }: ProfileMenuProps) {
       <button
         type="button"
         onClick={() => setOpen((value) => !value)}
-        className="hidden items-center gap-2 rounded-[var(--radius-md)] border border-[var(--border)] px-2 py-1.5 transition-colors hover:bg-[var(--surface-muted)] sm:flex"
+        className="inline-flex min-h-touch min-w-touch items-center gap-2 rounded-[var(--radius-md)] border border-[var(--border)] px-1.5 py-1.5 transition-colors hover:bg-[var(--surface-muted)] sm:min-h-0 sm:min-w-0 sm:px-2"
         aria-label="Open profile menu"
         aria-expanded={open}
       >
         <div className="relative">
-          <Avatar name={user.fullName} size="sm" />
+          <UserAvatar user={user} size="sm" />
           <span
             className={cn(
               'absolute bottom-0 right-0 h-2.5 w-2.5 rounded-full border-2 border-[var(--surface)]',
@@ -134,9 +134,9 @@ export function ProfileMenu({ user, onLogout }: ProfileMenuProps) {
       </button>
 
       {open ? (
-        <div className="absolute right-0 top-[calc(100%+8px)] z-30 w-72 rounded-[var(--radius-lg)] border border-[var(--border)] bg-[var(--surface)] p-3 shadow-[var(--shadow-md)]">
+        <div className="fixed inset-x-2 top-[3.75rem] z-30 max-h-[min(28rem,calc(100dvh-5rem))] w-auto overflow-y-auto rounded-[var(--radius-lg)] border border-[var(--border)] bg-[var(--surface)] p-3 shadow-[var(--shadow-md)] sm:absolute sm:inset-x-auto sm:right-0 sm:top-[calc(100%+8px)] sm:max-h-[min(28rem,70dvh)] sm:w-72">
           <div className="flex items-center gap-3 border-b border-[var(--border)] pb-3">
-            <Avatar name={user.fullName} size="md" />
+            <UserAvatar user={user} size="md" />
             <div>
               <p className="text-sm font-semibold text-[var(--foreground)]">
                 {user.fullName}
@@ -195,8 +195,15 @@ export function ProfileMenu({ user, onLogout }: ProfileMenuProps) {
           </div>
 
           <div className="space-y-1 py-2">
-            <MenuLink href="/dashboard" icon={UserRound} onNavigate={() => setOpen(false)}>
+            <MenuLink href="/account" icon={UserRound} onNavigate={() => setOpen(false)}>
               Profile
+            </MenuLink>
+            <MenuLink
+              href="/account/password"
+              icon={KeyRound}
+              onNavigate={() => setOpen(false)}
+            >
+              Change password
             </MenuLink>
             {user.permissionCodes.includes('users.manage') ? (
               <MenuLink href="/admin" icon={Settings} onNavigate={() => setOpen(false)}>

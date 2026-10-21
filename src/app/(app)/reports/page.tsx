@@ -10,7 +10,8 @@ import {
   Wallet,
 } from 'lucide-react';
 import { apiRequest } from '@/lib/api-client';
-import { ApiResponse } from '@/lib/auth';
+import { ApiResponse, userHasAnyPermission } from '@/lib/auth';
+import { useWorkspace } from '@/components/providers/WorkspaceProvider';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { Card } from '@/components/ui/Card';
 import { StatCard } from '@/components/ui/StatCard';
@@ -37,7 +38,7 @@ interface ReportsOverview {
     passRate: number;
     byDecision: Record<string, number>;
   };
-  revenue: {
+  revenue?: {
     billed: number;
     collected: number;
     outstanding: number;
@@ -53,6 +54,12 @@ function formatCurrency(value: number) {
 }
 
 export default function ReportsPage() {
+  const { user } = useWorkspace();
+  const canViewFinance = userHasAnyPermission(user, [
+    'finance.invoices.view_all',
+    'finance.invoices.create',
+    'payments.manage',
+  ]);
   const [data, setData] = useState<ReportsOverview | null>(null);
   const [productionDashboard, setProductionDashboard] = useState<{
     year: number;
@@ -97,7 +104,11 @@ export default function ReportsPage() {
     <div className="space-y-4">
       <PageHeader
         title="Reports & Analytics"
-        description="Production throughput, editor productivity, QA pass rate, and revenue."
+        description={
+          canViewFinance
+            ? 'Production throughput, editor productivity, QA pass rate, and revenue.'
+            : 'Production throughput, editor productivity, and QA pass rate.'
+        }
         breadcrumbs={[
           { label: 'Workspace', href: '/dashboard' },
           { label: 'Reports' },
@@ -134,23 +145,25 @@ export default function ReportsPage() {
             />
           </div>
 
-          <div className="grid gap-4 lg:grid-cols-3">
-            <StatCard
-              icon={DollarSign}
-              label="Billed"
-              value={formatCurrency(data.revenue.billed)}
-            />
-            <StatCard
-              icon={Wallet}
-              label="Collected"
-              value={formatCurrency(data.revenue.collected)}
-            />
-            <StatCard
-              icon={DollarSign}
-              label="Outstanding"
-              value={formatCurrency(data.revenue.outstanding)}
-            />
-          </div>
+          {canViewFinance && data.revenue ? (
+            <div className="grid gap-4 lg:grid-cols-3">
+              <StatCard
+                icon={DollarSign}
+                label="Billed"
+                value={formatCurrency(data.revenue.billed)}
+              />
+              <StatCard
+                icon={Wallet}
+                label="Collected"
+                value={formatCurrency(data.revenue.collected)}
+              />
+              <StatCard
+                icon={DollarSign}
+                label="Outstanding"
+                value={formatCurrency(data.revenue.outstanding)}
+              />
+            </div>
+          ) : null}
 
           <Card>
             <h3 className="text-sm font-semibold text-[var(--foreground)]">
@@ -195,15 +208,15 @@ export default function ReportsPage() {
                 {data.productivity.map((row) => (
                   <li
                     key={row.userId}
-                    className="grid grid-cols-3 items-center px-4 py-3 text-sm"
+                    className="grid grid-cols-1 gap-1 px-4 py-3 text-sm sm:grid-cols-3 sm:items-center sm:gap-0"
                   >
-                    <span className="font-medium text-[var(--foreground)]">
+                    <span className="truncate font-medium text-[var(--foreground)]">
                       {row.fullName}
                     </span>
                     <span className="text-[var(--muted)]">
                       {row.versionsSubmitted} versions
                     </span>
-                    <span className="text-right text-[var(--muted)]">
+                    <span className="text-[var(--muted)] sm:text-right">
                       {row.loggedHours}h logged
                     </span>
                   </li>
@@ -212,15 +225,16 @@ export default function ReportsPage() {
             )}
           </Card>
 
-          {productionDashboard ? (
+          {canViewFinance && productionDashboard ? (
             <>
-              <Card padding="none" className="overflow-x-auto">
+              <Card padding="none" className="overflow-hidden">
                 <div className="border-b border-[var(--border)] px-4 py-3">
                   <h3 className="text-sm font-semibold text-[var(--foreground)]">
                     Artist cost pivot ({productionDashboard.year})
                   </h3>
                 </div>
-                <table className="min-w-full text-sm">
+                <div className="overflow-x-auto overscroll-x-contain">
+                <table className="min-w-[720px] w-full text-sm">
                   <thead>
                     <tr className="border-b border-[var(--border)] bg-[var(--surface-muted)]">
                       <th className="px-3 py-2 text-left">Artist</th>
@@ -252,6 +266,7 @@ export default function ReportsPage() {
                     ))}
                   </tbody>
                 </table>
+                </div>
               </Card>
 
               <Card padding="none" className="overflow-hidden">
@@ -264,12 +279,12 @@ export default function ReportsPage() {
                   {productionDashboard.editorPerformance.map((row) => (
                     <li
                       key={row.fullName}
-                      className="grid grid-cols-4 px-4 py-3 text-sm"
+                      className="grid grid-cols-1 gap-1 px-4 py-3 text-sm sm:grid-cols-2 lg:grid-cols-4 lg:gap-0"
                     >
-                      <span className="font-medium">{row.fullName}</span>
+                      <span className="truncate font-medium">{row.fullName}</span>
                       <span>{row.ordersCompleted} orders</span>
                       <span>{row.imagesEdited} images</span>
-                      <span className="text-right">₹{row.paymentEarned.toFixed(0)}</span>
+                      <span className="lg:text-right">₹{row.paymentEarned.toFixed(0)}</span>
                     </li>
                   ))}
                 </ul>

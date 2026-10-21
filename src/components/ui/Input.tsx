@@ -48,7 +48,7 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
               error ? `${inputId}-error` : hint ? `${inputId}-hint` : undefined
             }
             className={cn(
-              'h-11 w-full rounded-[var(--radius-md)] border bg-[var(--surface)] px-3 text-sm text-[var(--foreground)] transition-colors placeholder:text-[var(--muted)] focus:border-[var(--primary)] focus:outline-none focus:ring-2 focus:ring-[var(--primary-soft)]',
+              'h-11 w-full rounded-[var(--radius-md)] border bg-[var(--surface)] px-3 text-base text-[var(--foreground)] transition-colors placeholder:text-[var(--muted)] focus:border-[var(--primary)] focus:outline-none focus:ring-2 focus:ring-[var(--primary-soft)] sm:text-sm',
               leadingIcon ? 'pl-10' : '',
               trailingIcon ? 'pr-10' : '',
               error

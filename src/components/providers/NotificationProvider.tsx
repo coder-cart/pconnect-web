@@ -15,6 +15,18 @@ import {
   NotificationRecord,
 } from '@/lib/notifications';
 import { useRealtime } from '@/components/providers/RealtimeProvider';
+import {
+  playNotificationSound,
+  shouldPlayForNotification,
+  unlockNotificationSound,
+} from '@/lib/notification-sound';
+import {
+  DevicePushStatus,
+  disableDevicePush,
+  enableDevicePush,
+  readDevicePushStatus,
+  registerPushWorker,
+} from '@/lib/push-notifications';
 
 interface NotificationContextValue {
   notifications: NotificationRecord[];
@@ -24,6 +36,11 @@ interface NotificationContextValue {
   refreshNotifications: () => Promise<void>;
   markRead: (notificationId: string) => Promise<void>;
   markAllRead: () => Promise<void>;
+  pushStatus: DevicePushStatus;
+  pushBusy: boolean;
+  enablePush: () => Promise<void>;
+  disablePush: () => Promise<void>;
+  pushMessage: string | null;
 }
 
 const NotificationContext = createContext<NotificationContextValue | null>(null);
@@ -34,6 +51,9 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
   const [unreadCount, setUnreadCount] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [pushStatus, setPushStatus] = useState<DevicePushStatus>('unsupported');
+  const [pushBusy, setPushBusy] = useState(false);
+  const [pushMessage, setPushMessage] = useState<string | null>(null);
 
   const loadUnreadCount = useCallback(async () => {
     try {
@@ -119,11 +139,75 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
   }, [refreshNotifications, loadUnreadCount]);
 
   useEffect(() => {
+    void registerPushWorker()
+      .then(() => readDevicePushStatus())
+      .then((status) => setPushStatus(status))
+      .catch(() => setPushStatus('unsupported'));
+  }, []);
+
+  const enablePush = useCallback(async () => {
+    setPushBusy(true);
+    setPushMessage(null);
+    try {
+      await enableDevicePush();
+      const next = await readDevicePushStatus();
+      setPushStatus(next);
+      if (next === 'on') {
+        setPushMessage('Device alerts are on for this browser.');
+      } else if (next === 'needs-install') {
+        setPushMessage(
+          'Install Colabdeck to the home screen, then turn device alerts on.',
+        );
+      } else if (next === 'denied') {
+        setPushMessage('The browser blocked device alerts. Check site permissions.');
+      } else {
+        setPushMessage('Device alerts could not be turned on.');
+      }
+    } catch (error) {
+      setPushMessage(
+        error instanceof Error ? error.message : 'Could not turn on device alerts',
+      );
+      setPushStatus(await readDevicePushStatus());
+    } finally {
+      setPushBusy(false);
+    }
+  }, []);
+
+  const disablePush = useCallback(async () => {
+    setPushBusy(true);
+    setPushMessage(null);
+    try {
+      await disableDevicePush();
+      setPushStatus(await readDevicePushStatus());
+      setPushMessage('Device alerts are off for this browser.');
+    } catch (error) {
+      setPushMessage(
+        error instanceof Error ? error.message : 'Could not turn off device alerts',
+      );
+      setPushStatus(await readDevicePushStatus());
+    } finally {
+      setPushBusy(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    function unlock() {
+      unlockNotificationSound();
+    }
+    window.addEventListener('pointerdown', unlock, { once: true });
+    return () => window.removeEventListener('pointerdown', unlock);
+  }, []);
+
+  useEffect(() => {
     return subscribeNotificationCreated((payload) => {
       const notification = payload as NotificationRecord;
       if (!notification?.id) {
         void loadUnreadCount();
         return;
+      }
+
+      if (shouldPlayForNotification(notification)) {
+        playNotificationSound();
       }
 
       setNotifications((current) => {
@@ -147,6 +231,11 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
         refreshNotifications,
         markRead,
         markAllRead,
+        pushStatus,
+        pushBusy,
+        enablePush,
+        disablePush,
+        pushMessage,
       }}
     >
       {children}

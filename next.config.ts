@@ -34,11 +34,12 @@ function buildConnectSrc(): string {
 function buildContentSecurityPolicy(): string {
   return [
     "default-src 'self'",
-    "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
+    "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://js.stripe.com",
     "style-src 'self' 'unsafe-inline'",
-    "img-src 'self' data: blob:",
+    "img-src 'self' data: blob: https://*.stripe.com",
     "font-src 'self' data:",
-    `connect-src ${buildConnectSrc()}`,
+    `connect-src ${buildConnectSrc()} https://api.stripe.com https://m.stripe.network`,
+    "frame-src https://js.stripe.com https://hooks.stripe.com",
     "frame-ancestors 'none'",
     "base-uri 'self'",
     "form-action 'self'",

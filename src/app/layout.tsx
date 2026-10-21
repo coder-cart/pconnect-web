@@ -1,6 +1,8 @@
 import type { Metadata, Viewport } from 'next';
 import { Inter } from 'next/font/google';
 import { ThemeProvider } from '@/components/providers/ThemeProvider';
+import { RegisterServiceWorker } from '@/components/pwa/RegisterServiceWorker';
+import { SITE_URL } from '@/lib/marketing/site';
 import './globals.css';
 
 const inter = Inter({
@@ -10,8 +12,24 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
+  metadataBase: new URL(SITE_URL),
   title: 'Colabdeck',
   description: 'Colabdeck workspace for chat, projects, files, and finance',
+  manifest: '/manifest.webmanifest',
+  appleWebApp: {
+    capable: true,
+    title: 'Colabdeck',
+    statusBarStyle: 'default',
+  },
+  icons: {
+    icon: [
+      { url: '/favicon.png', sizes: '32x32', type: 'image/png' },
+      { url: '/brand/colabdeck-mark.png', type: 'image/png' },
+      { url: '/icons/icon-192.png', sizes: '192x192', type: 'image/png' },
+      { url: '/icons/icon-512.png', sizes: '512x512', type: 'image/png' },
+    ],
+    apple: '/icons/icon-192.png',
+  },
   openGraph: {
     title: 'Colabdeck',
     description: 'Colabdeck workspace for chat, projects, files, and finance',
@@ -49,7 +67,10 @@ export default function RootLayout({
       suppressHydrationWarning
     >
       <body className="min-h-full antialiased">
-        <ThemeProvider>{children}</ThemeProvider>
+        <ThemeProvider>
+          <RegisterServiceWorker />
+          {children}
+        </ThemeProvider>
       </body>
     </html>
   );

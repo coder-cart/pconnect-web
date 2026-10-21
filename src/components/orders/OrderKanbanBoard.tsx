@@ -13,9 +13,6 @@ import {
 } from 'lucide-react';
 import { apiRequest } from '@/lib/api-client';
 import { ApiResponse } from '@/lib/auth';
-import { Button } from '@/components/ui/Button';
-import { Input } from '@/components/ui/Input';
-import { Modal, ModalActions } from '@/components/ui/Modal';
 import { ErrorState } from '@/components/ui/StatePanels';
 import { ListSkeleton } from '@/components/ui/Skeleton';
 import {
@@ -30,7 +27,7 @@ type BoardColumnId =
   | 'order_received'
   | 'in_progress'
   | 'quality_check'
-  | 'delivered';
+  | 'ready_for_delivery';
 
 const COLUMNS: Array<{
   id: BoardColumnId;
@@ -69,10 +66,10 @@ const COLUMNS: Array<{
     iconClass: 'bg-violet-500 text-white',
   },
   {
-    id: 'delivered',
-    label: 'Delivered',
-    hint: 'Completed',
-    footer: 'View all delivered orders',
+    id: 'ready_for_delivery',
+    label: 'Ready for Delivery',
+    hint: 'Waiting to send',
+    footer: 'View orders ready for delivery',
     icon: CheckCircle2,
     tint: 'color-mix(in srgb, #22c55e 14%, var(--surface))',
     iconClass: 'bg-emerald-500 text-white',
@@ -83,19 +80,20 @@ const COLUMN_ENTRY_CODE: Record<BoardColumnId, string> = {
   order_received: 'pending_review',
   in_progress: 'editing',
   quality_check: 'qa_review',
-  delivered: 'delivered',
+  ready_for_delivery: 'ready_for_delivery',
 };
 
 function boardColumn(code: string | null | undefined): BoardColumnId | null {
-  if (!code || code === 'cancelled') return null;
+  if (!code || code === 'cancelled' || code === 'delivered' || code === 'completed') {
+    return null;
+  }
   if (code === 'new_order' || code === 'on_hold') return 'order_received';
-  if (code === 'ready_for_delivery') return 'quality_check';
   const stage = clientLifecycleStage(code);
   if (
     stage === 'order_received' ||
     stage === 'in_progress' ||
     stage === 'quality_check' ||
-    stage === 'delivered'
+    stage === 'ready_for_delivery'
   ) {
     return stage;
   }
@@ -153,9 +151,6 @@ export function OrderKanbanBoard({
   const [moveError, setMoveError] = useState<string | null>(null);
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [overColumn, setOverColumn] = useState<BoardColumnId | null>(null);
-  const [linkPrompt, setLinkPrompt] = useState<OrderSummary | null>(null);
-  const [linkValue, setLinkValue] = useState('');
-  const [linkError, setLinkError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [boardRefresh, setBoardRefresh] = useState(0);
   const hasLoaded = useRef(false);
@@ -166,6 +161,7 @@ export function OrderKanbanBoard({
     setErrorMessage(null);
     const params = new URLSearchParams(queryString);
     params.set('pageSize', '100');
+    if (!params.get('listScope')) params.set('listScope', 'active');
     apiRequest<ApiResponse<{ items: OrderSummary[] }>>(`/orders?${params.toString()}`)
       .then((response) => {
         if (!cancelled) setOrders(response.data.items);
@@ -189,7 +185,7 @@ export function OrderKanbanBoard({
       order_received: [],
       in_progress: [],
       quality_check: [],
-      delivered: [],
+      ready_for_delivery: [],
     };
     for (const order of orders) {
       if (order.historySavedAt) continue;
@@ -235,8 +231,6 @@ export function OrderKanbanBoard({
           ...(deliveryLink ? { deliveryLink } : {}),
         }),
       });
-      setLinkPrompt(null);
-      setLinkValue('');
       onMoved?.();
       setBoardRefresh((value) => value + 1);
     } catch (error) {
@@ -252,12 +246,6 @@ export function OrderKanbanBoard({
     setOverColumn(null);
     setDraggingId(null);
     if (!order || boardColumn(order.workflowStatus?.code) === stage) return;
-    if (stage === 'delivered' && !toExternalHref(order.deliveryLink ?? '')) {
-      setLinkPrompt(order);
-      setLinkValue('');
-      setLinkError(null);
-      return;
-    }
     void moveOrder(order, stage);
   }
 
@@ -292,7 +280,7 @@ export function OrderKanbanBoard({
         <ErrorState title="Order stayed in its column" description={moveError} />
       ) : null}
 
-      <div className="flex gap-3 overflow-x-auto pb-2">
+      <div className="-mx-1 flex gap-3 overflow-x-auto overscroll-x-contain px-1 pb-2 snap-x snap-mandatory">
         {COLUMNS.map((column) => {
           const rows = grouped[column.id];
           const draggingOrder = orders.find((item) => item.id === draggingId) ?? null;
@@ -304,7 +292,7 @@ export function OrderKanbanBoard({
             <section
               key={column.id}
               className={cn(
-                'flex w-[320px] shrink-0 flex-col rounded-[var(--radius-lg)] border-2 transition-colors duration-150',
+                'flex w-[min(280px,85vw)] shrink-0 snap-start flex-col rounded-[var(--radius-lg)] border-2 transition-colors duration-150 sm:w-[320px]',
                 isDropTarget
                   ? 'border-[var(--primary)] bg-[var(--primary-soft)] shadow-[var(--shadow-md)]'
                   : 'border-transparent',
@@ -378,44 +366,6 @@ export function OrderKanbanBoard({
           );
         })}
       </div>
-
-      <Modal
-        open={Boolean(linkPrompt)}
-        title="Delivery link"
-        description={
-          linkPrompt
-            ? `Add the delivery link for ${linkPrompt.name} before it can be marked Delivered.`
-            : undefined
-        }
-        onClose={() => {
-          if (!busy) setLinkPrompt(null);
-        }}
-        footer={
-          <ModalActions
-            onCancel={() => setLinkPrompt(null)}
-            onSubmit={() => {
-              if (!linkPrompt) return;
-              const href = toExternalHref(linkValue);
-              if (!href) {
-                setLinkError('Enter an http or https link.');
-                return;
-              }
-              setLinkError(null);
-              void moveOrder(linkPrompt, 'delivered', href);
-            }}
-            submitLabel="Mark delivered"
-            isSubmitting={busy}
-          />
-        }
-      >
-        <Input
-          label="Delivery link"
-          value={linkValue}
-          onChange={(event) => setLinkValue(event.target.value)}
-          placeholder="https://"
-          error={linkError ?? undefined}
-        />
-      </Modal>
     </div>
   );
 }
@@ -573,9 +523,7 @@ function OrderCard({
                   : 'bg-amber-100 text-amber-800',
             )}
           >
-            {boardColumn(order.workflowStatus?.code) === 'delivered'
-              ? 'Delivered'
-              : priorityLabel(priority)}
+            {priorityLabel(priority)}
           </span>
           {artist ? (
             <span className="flex h-6 w-6 items-center justify-center rounded-full bg-[#0f172a] text-[10px] font-medium text-white">

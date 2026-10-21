@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 import { Plus, Send, Package } from 'lucide-react';
 import { apiRequest } from '@/lib/api-client';
-import { ApiResponse, userHasPermission } from '@/lib/auth';
+import { ApiResponse, isProductionOnlyStaff, userHasPermission } from '@/lib/auth';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
@@ -47,6 +47,7 @@ export default function BatchDetailPage() {
   const { user } = useWorkspace();
   const canAssign = userHasPermission(user, 'batches.assign');
   const canManageBatch = userHasPermission(user, 'batches.manage');
+  const hideClientLinks = isProductionOnlyStaff(user?.roleCodes);
   const canManageAssets = userHasPermission(user, 'assets.manage');
   const canDeliver = userHasPermission(user, 'delivery.manage');
 
@@ -251,6 +252,7 @@ export default function BatchDetailPage() {
         )}
       </Card>
 
+      {hideClientLinks ? null : (
       <Card className="space-y-3">
         <h2 className="text-sm font-semibold text-[var(--foreground)]">
           Client upload folder
@@ -324,6 +326,7 @@ export default function BatchDetailPage() {
           </div>
         )}
       </Card>
+      )}
 
       <Card>
         <div className="flex items-center justify-between">

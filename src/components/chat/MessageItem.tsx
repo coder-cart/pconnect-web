@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { MessageSquare } from 'lucide-react';
-import { Avatar } from '@/components/ui/Avatar';
+import { UserAvatar } from '@/components/ui/UserAvatar';
 import { Badge } from '@/components/ui/Badge';
 import { ChatMessageBody } from '@/components/chat/ChatMessageBody';
 import { MessageHoverToolbar } from '@/components/chat/MessageHoverToolbar';
@@ -18,6 +18,7 @@ interface MessageItemProps {
   currentUserId: string;
   canManageChannel: boolean;
   isActive?: boolean;
+  unread?: boolean;
   highlighted?: boolean;
   onReply: (messageId: string) => void;
   onReact: (messageId: string, emoji: string) => Promise<void>;
@@ -35,6 +36,7 @@ export function MessageItem({
   currentUserId,
   canManageChannel,
   isActive,
+  unread = false,
   highlighted,
   onReply,
   onReact,
@@ -46,13 +48,14 @@ export function MessageItem({
   onMarkUnread,
 }: MessageItemProps) {
   const [hovered, setHovered] = useState(false);
+  const [toolbarLocked, setToolbarLocked] = useState(false);
 
   if (message.deletedAt) {
     return (
       <div
         id={`message-${message.id}`}
         className={cn(
-          'rounded-[var(--radius-md)] px-2 py-2 text-sm italic text-[var(--muted)]',
+          'rounded-[var(--radius-md)] px-3 py-2.5 text-sm italic text-[var(--muted)]',
           highlighted && 'ring-2 ring-[var(--primary)] ring-offset-2',
         )}
       >
@@ -77,24 +80,37 @@ export function MessageItem({
       <div
         id={`message-${message.id}`}
         className={cn(
-          'group relative flex gap-3 rounded-[var(--radius-md)] p-2 transition-colors hover:bg-[var(--surface-muted)]',
+          'group relative flex gap-3 rounded-[var(--radius-md)] px-3 py-2.5 transition-colors hover:bg-[var(--surface-muted)]',
           isActive && 'bg-[var(--surface-muted)]',
           highlighted && 'ring-2 ring-[var(--primary)] ring-offset-2',
         )}
         onMouseEnter={() => setHovered(true)}
-        onMouseLeave={() => setHovered(false)}
+        onMouseLeave={() => {
+          if (!toolbarLocked) {
+            setHovered(false);
+          }
+        }}
       >
-        {hovered ? (
+        {hovered || toolbarLocked ? (
           <MessageHoverToolbar
             onReply={() => onReply(message.id)}
             onReact={(emoji) => void onReact(message.id, emoji)}
             onMore={() => {}}
+            onOpenChange={setToolbarLocked}
           />
         ) : null}
-        <Avatar name={message.sender.fullName} size="sm" />
+        <UserAvatar
+          user={{
+            id: message.sender.id,
+            fullName: message.sender.fullName,
+            avatarUpdatedAt: message.sender.avatarUpdatedAt,
+          }}
+          size="sm"
+          className="mt-0.5 shrink-0"
+        />
         <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-center gap-2">
-            <p className="text-sm font-medium text-[var(--foreground)]">
+          <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+            <p className="text-sm font-semibold text-[var(--primary)]">
               {message.sender.fullName}
             </p>
             <span className="text-xs text-[var(--muted)]">
@@ -104,10 +120,12 @@ export function MessageItem({
               <span className="text-xs text-[var(--muted)]">(edited)</span>
             ) : null}
           </div>
-          <ChatMessageBody
-            body={message.body}
-            attachments={message.attachments}
-          />
+          <div className={cn('mt-0.5 text-sm leading-relaxed text-[var(--foreground)]', unread && 'font-semibold')}>
+            <ChatMessageBody
+              body={message.body}
+              attachments={message.attachments}
+            />
+          </div>
           <ReactionBar
             reactions={message.reactions ?? []}
             onToggle={(emoji) => void onReact(message.id, emoji)}
@@ -124,7 +142,7 @@ export function MessageItem({
             <button
               type="button"
               onClick={() => onReply(message.id)}
-              className="mt-2 inline-flex items-center gap-1 text-xs text-[var(--primary)] hover:underline"
+              className="mt-1.5 inline-flex items-center gap-1 text-xs font-medium text-[var(--primary)] hover:underline"
             >
               <MessageSquare className="h-3 w-3" />
               Reply in thread

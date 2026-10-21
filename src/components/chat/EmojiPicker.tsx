@@ -3,8 +3,26 @@
 import { cn } from '@/lib/cn';
 
 export const COMMON_EMOJIS = [
-  '😀', '😂', '🙂', '😉', '😍', '👍', '🙏', '🎉', '🔥', '✅',
-  '❤️', '👀', '💯', '🚀', '👏', '🤝', '💡', '📎', '📣', '⏰',
+  '😀',
+  '😂',
+  '🙂',
+  '😉',
+  '😍',
+  '👍',
+  '🙏',
+  '🎉',
+  '🔥',
+  '✅',
+  '❤️',
+  '👀',
+  '💯',
+  '🚀',
+  '👏',
+  '🤝',
+  '💡',
+  '📎',
+  '📣',
+  '⏰',
 ];
 
 export const QUICK_REACTIONS = ['✅', '👀', '🙌'];
@@ -12,7 +30,7 @@ export const QUICK_REACTIONS = ['✅', '👀', '🙌'];
 interface EmojiPickerProps {
   onSelect: (emoji: string) => void;
   className?: string;
-  columns?: number;
+  columns?: 4 | 5 | 6;
 }
 
 export function EmojiPicker({
@@ -23,21 +41,35 @@ export function EmojiPicker({
   return (
     <div
       className={cn(
-        'grid gap-1 rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface)] p-2 shadow-lg',
+        'z-50 w-[15.5rem] rounded-[var(--radius-lg)] border border-[var(--border)] bg-[var(--surface)] p-2 shadow-[var(--shadow-md)]',
         className,
       )}
-      style={{ gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))` }}
+      role="listbox"
+      aria-label="Choose an emoji"
     >
-      {COMMON_EMOJIS.map((emoji) => (
-        <button
-          key={emoji}
-          type="button"
-          className="rounded-[var(--radius-sm)] p-1 text-lg hover:bg-[var(--surface-muted)]"
-          onClick={() => onSelect(emoji)}
-        >
-          {emoji}
-        </button>
-      ))}
+      <div
+        className={cn(
+          'grid gap-1',
+          columns === 4 && 'grid-cols-4',
+          columns === 5 && 'grid-cols-5',
+          columns === 6 && 'grid-cols-6',
+        )}
+      >
+        {COMMON_EMOJIS.map((emoji) => (
+          <button
+            key={emoji}
+            type="button"
+            role="option"
+            aria-label={`Insert ${emoji}`}
+            className="flex h-9 w-9 items-center justify-center rounded-[var(--radius-md)] text-[1.25rem] leading-none transition-colors hover:bg-[var(--surface-muted)]"
+            onClick={() => onSelect(emoji)}
+          >
+            <span className="pointer-events-none select-none" aria-hidden>
+              {emoji}
+            </span>
+          </button>
+        ))}
+      </div>
     </div>
   );
 }

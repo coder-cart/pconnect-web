@@ -5,6 +5,7 @@ import { useParams, useRouter } from 'next/navigation';
 import { apiRequest } from '@/lib/api-client';
 import {
   ApiResponse,
+  isProductionOnlyStaff,
   userHasAnyPermission,
   userHasPermission,
   userIsExternal,
@@ -20,6 +21,7 @@ import { ErrorState, RestrictedState } from '@/components/ui/StatePanels';
 import { useWorkspace } from '@/components/providers/WorkspaceProvider';
 import {
   OrderSummary,
+  canMarkOrderReceived,
   clientLifecycleStage,
   humanize,
   isHiddenOrderService,
@@ -86,9 +88,11 @@ export function OrderDetailView({
   const canView = userHasPermission(user, 'orders.view');
   const canViewFinance = userHasAnyPermission(user, [
     'finance.invoices.view_all',
+    'finance.invoices.create',
     'payments.manage',
   ]);
   const isExternal = userIsExternal(user);
+  const hideClientIdentity = isProductionOnlyStaff(user?.roleCodes);
   const [order, setOrder] = useState<OrderDetail | null>(null);
   const [timeline, setTimeline] = useState<TimelinePayload | null>(null);
   const [changeLog, setChangeLog] = useState<ChangeLogEntry[]>([]);
@@ -212,11 +216,14 @@ export function OrderDetailView({
       }>
     >(`/orders/${orderId}/conversation`)
       .then((conversationResponse) => {
+        const clientChannel = hideClientIdentity
+          ? null
+          : conversationResponse.data.client;
         setConversation({
-          client: conversationResponse.data.client,
+          client: clientChannel,
           internal: conversationResponse.data.internal,
         });
-        if (conversationResponse.data.client) {
+        if (clientChannel) {
           setConversationPanel('client');
         } else if (conversationResponse.data.internal) {
           setConversationPanel('internal');
@@ -225,7 +232,7 @@ export function OrderDetailView({
       .catch(() => setConversation({ client: null, internal: null }));
   }
 
-  useEffect(load, [orderId, refreshKey, canManage]);
+  useEffect(load, [orderId, refreshKey, canManage, hideClientIdentity]);
 
   useEffect(() => {
     setOrderLink(`${window.location.origin}/orders/${orderId}`);
@@ -425,39 +432,70 @@ export function OrderDetailView({
               ]
         }
         action={
-          canManage ? (
+          canManage || canViewFinance ? (
             <>
-              <Button
-                variant="secondary"
-                onClick={async () => {
-                  setBusy(true);
-                  try {
-                    await apiRequest(`/orders/${orderId}/generate-invoice`, {
-                      method: 'POST',
-                    });
-                    notifyRefresh();
-                    load();
-                  } catch (error) {
-                    setErrorMessage(
-                      error instanceof Error
-                        ? error.message
-                        : 'Invoice generation failed',
-                    );
-                  } finally {
-                    setBusy(false);
-                  }
-                }}
-                disabled={busy || !canViewFinance}
-              >
-                Generate invoice
-              </Button>
-              <Button
-                variant="danger"
-                onClick={handleDeleteOrder}
-                disabled={busy}
-              >
-                Delete order
-              </Button>
+              {canViewFinance ? (
+                <Button
+                  variant="secondary"
+                  onClick={async () => {
+                    setBusy(true);
+                    try {
+                      await apiRequest(`/orders/${orderId}/generate-invoice`, {
+                        method: 'POST',
+                      });
+                      notifyRefresh();
+                      load();
+                    } catch (error) {
+                      setErrorMessage(
+                        error instanceof Error
+                          ? error.message
+                          : 'Invoice generation failed',
+                      );
+                    } finally {
+                      setBusy(false);
+                    }
+                  }}
+                  disabled={busy}
+                >
+                  Generate invoice
+                </Button>
+              ) : null}
+              {canMarkOrderReceived(user.roleCodes) &&
+              order?.workflowStatus?.code === 'delivered' ? (
+                <Button
+                  onClick={async () => {
+                    setBusy(true);
+                    try {
+                      await apiRequest(`/orders/${orderId}/lifecycle-stage`, {
+                        method: 'POST',
+                        body: JSON.stringify({ stage: 'completed' }),
+                      });
+                      notifyRefresh();
+                      load();
+                    } catch (error) {
+                      setErrorMessage(
+                        error instanceof Error
+                          ? error.message
+                          : 'Could not mark the order as received',
+                      );
+                    } finally {
+                      setBusy(false);
+                    }
+                  }}
+                  disabled={busy}
+                >
+                  Mark order as received
+                </Button>
+              ) : null}
+              {canManage ? (
+                <Button
+                  variant="danger"
+                  onClick={handleDeleteOrder}
+                  disabled={busy}
+                >
+                  Delete order
+                </Button>
+              ) : null}
             </>
           ) : undefined
         }
@@ -492,6 +530,12 @@ export function OrderDetailView({
                   )}
                 />
               ) : null}
+              <Badge variant="primary">{order.outputFormat ?? 'JPG'}</Badge>
+              <span className="text-[var(--muted)]">
+                {order.estimatedTatHours != null
+                  ? `Turnaround ${order.estimatedTatHours} hours`
+                  : 'Turnaround not set'}
+              </span>
               {order.dueDate ? (
                 <span className="text-[var(--muted)]">
                   Due {new Date(order.dueDate).toLocaleDateString()}
@@ -507,11 +551,6 @@ export function OrderDetailView({
               >
                 {humanize(order.priority)}
               </Badge>
-              {order.estimatedTatHours != null ? (
-                <span className="text-[var(--muted)]">
-                  ETA {order.estimatedTatHours}h
-                </span>
-              ) : null}
             </div>
           </Card>
 
@@ -709,6 +748,7 @@ export function OrderDetailView({
                   <OrderExcelReadOnly
                     order={order}
                     canViewFinance={canViewFinance}
+                    hideClientIdentity={hideClientIdentity}
                     showOrderFolderStatus={false}
                     canEditAllocationStatus
                     canEditAllAllocationRows={
@@ -742,7 +782,7 @@ export function OrderDetailView({
                 </Card>
               ) : null}
 
-              {(canViewFinance || isExternal) &&
+              {canViewFinance &&
               order.invoices &&
               order.invoices.length > 0 ? (
                 <Card>
@@ -1019,9 +1059,12 @@ function ClientDeliveryActions({
           The studio has not added a delivery link yet.
         </p>
       )}
-      {order.outputFormat ? (
-        <p className="text-xs text-[var(--muted)]">Output {order.outputFormat}</p>
-      ) : null}
+      <Badge variant="primary">{order.outputFormat ?? 'JPG'}</Badge>
+      <p className="text-sm text-[var(--muted)]">
+        {order.estimatedTatHours != null
+          ? `Turnaround ${order.estimatedTatHours} hours`
+          : 'Turnaround not set'}
+      </p>
       {order.historySavedAt ? (
         <p className="text-sm text-[var(--muted)]">Saved to your order history.</p>
       ) : (

@@ -2,8 +2,9 @@
 
 import { type ReactNode, useEffect, useMemo, useState } from 'react';
 import { Trash2 } from 'lucide-react';
-import { apiRequest, apiUpload } from '@/lib/api-client';
-import { ApiResponse } from '@/lib/auth';
+import { apiRequest } from '@/lib/api-client';
+import { ApiResponse, userHasAnyPermission } from '@/lib/auth';
+import { useWorkspace } from '@/components/providers/WorkspaceProvider';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Modal, ModalActions } from '@/components/ui/Modal';
@@ -13,7 +14,7 @@ import {
   statusFillStyle,
 } from '@/lib/order-status';
 import { ServiceMultiSelect } from '@/components/orders/ServiceMultiSelect';
-import { toExternalHref } from '@/lib/orders';
+import { OUTPUT_FORMATS, toExternalHref } from '@/lib/orders';
 import { cn } from '@/lib/cn';
 import { isHiddenOrderService } from '@/lib/orders';
 
@@ -112,6 +113,12 @@ export function OrderCreateModal({
   onClose,
   onCreated,
 }: OrderCreateModalProps) {
+  const { user } = useWorkspace();
+  const canViewFinance = userHasAnyPermission(user, [
+    'finance.invoices.view_all',
+    'finance.invoices.create',
+    'payments.manage',
+  ]);
   const [clients, setClients] = useState<ClientOption[]>([]);
   const [folderStatuses, setFolderStatuses] = useState<MasterDataStatus[]>([]);
   const [assignableUsers, setAssignableUsers] = useState<UserOption[]>([]);
@@ -121,7 +128,6 @@ export function OrderCreateModal({
 
   const [clientOrganizationId, setClientOrganizationId] = useState('');
   const [name, setName] = useState('');
-  const [dueDate, setDueDate] = useState('');
   const [inDate, setInDate] = useState(new Date().toISOString().slice(0, 10));
   const [clientNotes, setClientNotes] = useState('');
   const [sourceLink, setSourceLink] = useState('');
@@ -129,14 +135,17 @@ export function OrderCreateModal({
   const [parentOrderId, setParentOrderId] = useState('');
   const [outputFormat, setOutputFormat] = useState('JPG');
   const [clientPriority, setClientPriority] = useState<'medium' | 'high' | 'urgent'>('medium');
-  const [uploadFiles, setUploadFiles] = useState<File[]>([]);
-  const [fileDragOver, setFileDragOver] = useState(false);
+  const [suggestedServices, setSuggestedServices] = useState<
+    Array<{ serviceId: string; code: string; name: string; count: number }>
+  >([]);
   const [previousOrders, setPreviousOrders] = useState<
     Array<{
       id: string;
       code: string;
       name: string;
       services?: string | null;
+      outputFormat?: string | null;
+      estimatedTatHours?: number | null;
       serviceLines?: Array<{ service: { id: string } }>;
     }>
   >([]);
@@ -246,19 +255,39 @@ export function OrderCreateModal({
           })),
         );
         if (!response.data.some((row) => row.enabled)) {
-          setServicesLoadError('No priced services configured for this client.');
+          setServicesLoadError('No services are enabled for this client.');
         }
       })
       .catch(() => {
         if (!cancelled) {
           setClientServices([]);
-          setServicesLoadError('Could not load client pricing for services.');
+          setServicesLoadError('Could not load services for this client.');
         }
       });
     return () => {
       cancelled = true;
     };
   }, [open, clientOrganizationId]);
+
+  useEffect(() => {
+    if (!open || !clientOrganizationId || orderMode === 'revision') {
+      setSuggestedServices([]);
+      return;
+    }
+    let cancelled = false;
+    apiRequest<
+      ApiResponse<Array<{ serviceId: string; code: string; name: string; count: number }>>
+    >(`/orders/service-suggestions?clientOrganizationId=${clientOrganizationId}`)
+      .then((response) => {
+        if (!cancelled) setSuggestedServices(response.data);
+      })
+      .catch(() => {
+        if (!cancelled) setSuggestedServices([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [open, clientOrganizationId, orderMode]);
 
   const enabledServiceOptions = useMemo(
     () =>
@@ -288,6 +317,18 @@ export function OrderCreateModal({
     [clientServices, allSelectedServiceIds],
   );
 
+  const turnaroundHours = useMemo(() => {
+    const hours = selectedServiceConfig
+      .map((row) => row.effectiveEtaHours)
+      .filter((value): value is number => typeof value === 'number' && value > 0);
+    if (hours.length === 0) return null;
+    return Math.max(...hours);
+  }, [selectedServiceConfig]);
+
+  const selectedParent =
+    previousOrders.find((order) => order.id === parentOrderId) ?? null;
+  const revisionReady = orderMode === 'revision' && Boolean(parentOrderId);
+
   const totalInFiles = useMemo(
     () =>
       workLines.reduce(
@@ -314,11 +355,11 @@ export function OrderCreateModal({
       setFormError('Select the previous order to revise.');
       return;
     }
-    if (isExternal && !sourceLink.trim() && uploadFiles.length === 0) {
-      setFormError('Add a file or a Drive, Dropbox, or WeTransfer link.');
+    if (isExternal && orderMode !== 'revision' && !sourceLink.trim()) {
+      setFormError('Add a Drive or file link.');
       return;
     }
-    if (isExternal) {
+    if (isExternal && orderMode !== 'revision') {
       const startedRows = workLines.filter(
         (line) => line.serviceIds.length > 0 || line.inFileCount.trim() !== '',
       );
@@ -356,14 +397,14 @@ export function OrderCreateModal({
         ...(canManage && line.assignedArtistUserId
           ? { assignedArtistUserId: line.assignedArtistUserId }
           : {}),
-        ...(canManage && line.artistRatePerImage
+        ...(canViewFinance && line.artistRatePerImage
           ? { artistRatePerImage: Number(line.artistRatePerImage) }
           : {}),
         ...(canManage
-          ? {
-              price: line.price ? Number(line.price) : null,
-              extraServiceCount: Number(line.extraServiceCount) || 0,
-            }
+          ? { extraServiceCount: Number(line.extraServiceCount) || 0 }
+          : {}),
+        ...(canViewFinance
+          ? { price: line.price ? Number(line.price) : null }
           : {}),
       }));
 
@@ -373,7 +414,7 @@ export function OrderCreateModal({
     const primaryRate =
       allocationPayload.find((row) => row.artistRatePerImage != null)
         ?.artistRatePerImage ?? undefined;
-    const orderPriceSum = canManage
+    const orderPriceSum = canViewFinance
       ? allocationPayload.reduce(
           (sum, row) => sum + (typeof row.price === 'number' ? row.price : 0),
           0,
@@ -405,41 +446,48 @@ export function OrderCreateModal({
           name: name.trim(),
           clientOrganizationId: clientOrganizationId || undefined,
           services:
-            selectedServiceConfig.map((row) => row.code).join(', ') || undefined,
+            orderMode === 'revision'
+              ? undefined
+              : selectedServiceConfig.map((row) => row.code).join(', ') || undefined,
           serviceIds:
-            allSelectedServiceIds.length > 0 ? allSelectedServiceIds : undefined,
-          dueDate: dueDate || undefined,
-          inDate: inDate || undefined,
-          inFileCount: totalInFiles || undefined,
-          priority: isExternal ? clientPriority : undefined,
-          outputFormat: isExternal ? outputFormat : undefined,
+            orderMode === 'revision'
+              ? undefined
+              : allSelectedServiceIds.length > 0
+                ? allSelectedServiceIds
+                : undefined,
+          inDate: orderMode === 'revision' ? undefined : inDate || undefined,
+          inFileCount: orderMode === 'revision' ? undefined : totalInFiles || undefined,
+          priority: isExternal && orderMode !== 'revision' ? clientPriority : undefined,
+          outputFormat: orderMode === 'revision' ? undefined : outputFormat,
           parentOrderId: orderMode === 'revision' ? parentOrderId : undefined,
           clientNotes: clientNotes || undefined,
-          sourceLink: sourceHref ?? undefined,
-          internalNotes: canManage ? internalNotes || undefined : undefined,
-          folderStatusId: folderStatusId || undefined,
-          artistRatePerImage: canManage ? primaryRate : undefined,
-          price: canManage && orderPriceSum > 0 ? orderPriceSum : undefined,
-          assignedArtistUserId: canManage ? primaryArtist : undefined,
-          assignedTeamLeadUserId: canManage
-            ? assignedTeamLeadUserId || undefined
-            : undefined,
-          assignedQaUserId: canManage
-            ? assignedQaUserId || undefined
-            : undefined,
-          extraServiceCount: canManage ? orderExtraSum : undefined,
+          sourceLink: orderMode === 'revision' ? undefined : sourceHref ?? undefined,
+          internalNotes:
+            canManage && orderMode !== 'revision' ? internalNotes || undefined : undefined,
+          folderStatusId:
+            orderMode === 'revision' ? undefined : folderStatusId || undefined,
+          artistRatePerImage:
+            canViewFinance && orderMode !== 'revision' ? primaryRate : undefined,
+          price:
+            canViewFinance && orderMode !== 'revision' && orderPriceSum > 0
+              ? orderPriceSum
+              : undefined,
+          assignedArtistUserId:
+            canManage && orderMode !== 'revision' ? primaryArtist : undefined,
+          assignedTeamLeadUserId:
+            canManage && orderMode !== 'revision'
+              ? assignedTeamLeadUserId || undefined
+              : undefined,
+          assignedQaUserId:
+            canManage && orderMode !== 'revision'
+              ? assignedQaUserId || undefined
+              : undefined,
+          extraServiceCount:
+            canManage && orderMode !== 'revision' ? orderExtraSum : undefined,
         }),
       });
 
-      if (created.data?.id && uploadFiles.length > 0) {
-        for (const file of uploadFiles) {
-          const body = new FormData();
-          body.append('file', file);
-          await apiUpload(`/files/upload?orderId=${created.data.id}&orderFileRole=input`, body);
-        }
-      }
-
-      if (allocationPayload.length > 0 && created.data?.id) {
+      if (orderMode !== 'revision' && allocationPayload.length > 0 && created.data?.id) {
         await apiRequest(`/orders/${created.data.id}/work-allocations`, {
           method: 'PUT',
           body: JSON.stringify({ allocations: allocationPayload }),
@@ -447,14 +495,12 @@ export function OrderCreateModal({
       }
 
       setName('');
-      setDueDate('');
       setClientNotes('');
       setSourceLink('');
       setOrderMode('new');
       setParentOrderId('');
       setOutputFormat('JPG');
       setClientPriority('medium');
-      setUploadFiles([]);
       setInternalNotes('');
       setWorkLines([emptyWorkLine()]);
       setAssignedTeamLeadUserId('');
@@ -488,7 +534,7 @@ export function OrderCreateModal({
         />
       }
     >
-      <div className="space-y-6">
+      <div className="space-y-5 pb-2 sm:space-y-6">
         {formError ? (
           <div
             role="alert"
@@ -559,9 +605,47 @@ export function OrderCreateModal({
             ) : null}
           </div>
 
+        {orderMode === 'revision' && !revisionReady ? (
+          <p className="text-sm text-[var(--muted)]">
+            Select the delivered order. The revision only needs instructions.
+          </p>
+        ) : null}
+
+        {revisionReady && selectedParent ? (
+          <FormSection
+            title="Instructions"
+            description="Tell the team what to change. Services, format, and turnaround stay with the original order."
+          >
+            <div className="rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface-muted)] px-3 py-2.5 text-sm">
+              <p className="font-medium text-[var(--foreground)]">
+                {selectedParent.code} · {selectedParent.name}
+              </p>
+              <p className="mt-1 text-[var(--muted)]">
+                Output {selectedParent.outputFormat ?? 'JPG'}
+                {selectedParent.estimatedTatHours
+                  ? ` · Turnaround ${selectedParent.estimatedTatHours} hours`
+                  : ' · Turnaround not set'}
+              </p>
+            </div>
+            <label className="block space-y-1.5">
+              <span className="text-sm font-medium text-[var(--foreground)]">
+                Instructions
+              </span>
+              <textarea
+                value={clientNotes}
+                onChange={(event) => setClientNotes(event.target.value)}
+                rows={4}
+                placeholder="What should change on this revision?"
+                className="w-full resize-y rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-base text-[var(--foreground)] placeholder:text-[var(--muted)] focus:border-[var(--primary)] focus:outline-none focus:ring-2 focus:ring-[var(--primary-soft)] sm:text-sm"
+              />
+            </label>
+          </FormSection>
+        ) : null}
+
+        {!revisionReady && orderMode === 'new' ? (
         <FormSection
           title="Order basics"
-          description="Who the job is for and when it is due."
+          description="Who the job is for, the output format, and the turnaround from the client services."
         >
           {clientLocked ? (
             <div className="rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface-muted)] px-3 py-2.5">
@@ -599,24 +683,51 @@ export function OrderCreateModal({
             autoComplete="off"
           />
 
-          <div className={isExternal ? '' : 'grid gap-3 sm:grid-cols-2'}>
+          {isExternal ? null : (
             <Input
-              label={isExternal ? 'Requested delivery date' : 'Due date'}
+              label="In date"
               type="date"
-              value={dueDate}
+              value={inDate}
               className="text-base sm:text-sm"
-              onChange={(event) => setDueDate(event.target.value)}
+              onChange={(event) => setInDate(event.target.value)}
             />
-            {isExternal ? null : (
-              <Input
-                label="In date"
-                type="date"
-                value={inDate}
-                className="text-base sm:text-sm"
-                onChange={(event) => setInDate(event.target.value)}
-              />
-            )}
-          </div>
+          )}
+          <p className="text-sm text-[var(--muted)]">
+            {turnaroundHours
+              ? `Turnaround: ${turnaroundHours} hours`
+              : 'Turnaround not set'}
+          </p>
+          {suggestedServices.length > 0 ? (
+            <div className="space-y-2">
+              <p className="text-sm font-medium text-[var(--foreground)]">
+                Suggested from past orders
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {suggestedServices.map((service) => (
+                  <button
+                    key={service.serviceId}
+                    type="button"
+                    className="rounded-full border border-[var(--border)] px-3 py-1 text-xs text-[var(--foreground)] hover:border-[var(--primary)]"
+                    onClick={() => {
+                      const line = workLines[0];
+                      if (!line || line.serviceIds.includes(service.serviceId)) return;
+                      const nextIds = [...line.serviceIds, service.serviceId];
+                      const labels = nextIds.map((id) => {
+                        const option = enabledServiceOptions.find((item) => item.id === id);
+                        return option?.code ?? service.code;
+                      });
+                      updateWorkLine(line.key, {
+                        serviceIds: nextIds,
+                        servicesText: labels.join(', '),
+                      });
+                    }}
+                  >
+                    {service.code} · {service.name}
+                  </button>
+                ))}
+              </div>
+            </div>
+          ) : null}
 
           {isExternal ? (
             <>
@@ -702,64 +813,33 @@ export function OrderCreateModal({
                   </label>
                 ))}
               </fieldset>
-              <div className="space-y-1.5">
-                <span className="block text-sm font-medium">Project files</span>
-                <label
-                  className={cn(
-                    'flex cursor-pointer flex-col items-center justify-center rounded-[var(--radius-md)] border border-dashed px-4 py-8 text-center',
-                    fileDragOver
-                      ? 'border-[var(--primary)] bg-[var(--primary-soft)]'
-                      : 'border-[var(--border)] bg-[var(--surface)]',
-                  )}
-                  onDragOver={(event) => {
-                    event.preventDefault();
-                    setFileDragOver(true);
-                  }}
-                  onDragLeave={() => setFileDragOver(false)}
-                  onDrop={(event) => {
-                    event.preventDefault();
-                    setFileDragOver(false);
-                    setUploadFiles(Array.from(event.dataTransfer.files));
-                  }}
-                >
-                  <input
-                    type="file"
-                    multiple
-                    accept=".jpg,.jpeg,.png,.tif,.tiff,.zip,.mp4,.mov,image/jpeg,image/png,image/tiff,application/zip,video/mp4"
-                    className="sr-only"
-                    onChange={(event) =>
-                      setUploadFiles(Array.from(event.target.files ?? []))
-                    }
-                  />
-                  <span className="text-sm font-medium text-[var(--foreground)]">
-                    Drag files here or click to upload
-                  </span>
-                  <span className="mt-1 text-xs text-[var(--muted)]">
-                    JPG, PNG, TIFF, ZIP, or video. 25 MB per file.
-                  </span>
-                  {uploadFiles.length > 0 ? (
-                    <span className="mt-2 text-xs text-[var(--foreground)]">
-                      {uploadFiles.map((file) => file.name).join(', ')}
-                    </span>
-                  ) : null}
-                </label>
-              </div>
-              <fieldset className="space-y-2">
-                <legend className="text-sm font-medium">Output format</legend>
-                {(['JPG', 'PNG', 'TIFF', 'Other'] as const).map((format) => (
-                  <label key={format} className="flex items-center gap-2 text-sm">
-                    <input
-                      type="radio"
-                      name="output-format"
-                      checked={outputFormat === format}
-                      onChange={() => setOutputFormat(format)}
-                    />
-                    {format}
-                  </label>
-                ))}
-              </fieldset>
             </>
           ) : null}
+
+          <fieldset className="space-y-2">
+            <legend className="text-sm font-medium">Output format</legend>
+            <div className="flex flex-wrap gap-2">
+              {OUTPUT_FORMATS.map((format) => (
+                <label
+                  key={format}
+                  className={`rounded-full border px-3 py-1 text-sm ${
+                    outputFormat === format
+                      ? 'border-[var(--primary)] bg-[var(--primary-soft)] font-medium text-[var(--foreground)]'
+                      : 'border-[var(--border)] text-[var(--muted)]'
+                  }`}
+                >
+                  <input
+                    type="radio"
+                    name="output-format"
+                    className="sr-only"
+                    checked={outputFormat === format}
+                    onChange={() => setOutputFormat(format)}
+                  />
+                  {format}
+                </label>
+              ))}
+            </div>
+          </fieldset>
 
           <Input
             label="Drive or file link"
@@ -787,8 +867,9 @@ export function OrderCreateModal({
             />
           </label>
         </FormSection>
+        ) : null}
 
-        {!isExternal ? (
+        {!isExternal && orderMode === 'new' ? (
         <FormSection
           title="Services & files"
           description="Add one or more lines with services and incoming file counts."
@@ -892,18 +973,6 @@ export function OrderCreateModal({
                       </select>
                     </label>
                     <Input
-                      label="Price to artist per image"
-                      type="number"
-                      min={0}
-                      step="0.01"
-                      value={line.artistRatePerImage}
-                      onChange={(event) =>
-                        updateWorkLine(line.key, {
-                          artistRatePerImage: event.target.value,
-                        })
-                      }
-                    />
-                    <Input
                       label="Extra Service Count"
                       type="number"
                       min={0}
@@ -914,16 +983,34 @@ export function OrderCreateModal({
                         })
                       }
                     />
-                    <Input
-                      label="Price"
-                      type="number"
-                      min={0}
-                      step="0.01"
-                      value={line.price}
-                      onChange={(event) =>
-                        updateWorkLine(line.key, { price: event.target.value })
-                      }
-                    />
+                    {canViewFinance ? (
+                      <>
+                        <Input
+                          label="Price to artist per image"
+                          type="number"
+                          min={0}
+                          step="0.01"
+                          value={line.artistRatePerImage}
+                          onChange={(event) =>
+                            updateWorkLine(line.key, {
+                              artistRatePerImage: event.target.value,
+                            })
+                          }
+                        />
+                        <Input
+                          label="Price"
+                          type="number"
+                          min={0}
+                          step="0.01"
+                          value={line.price}
+                          onChange={(event) =>
+                            updateWorkLine(line.key, {
+                              price: event.target.value,
+                            })
+                          }
+                        />
+                      </>
+                    ) : null}
                   </div>
                 ) : null}
               </div>
@@ -945,10 +1032,14 @@ export function OrderCreateModal({
         </FormSection>
         ) : null}
 
-        {canManage ? (
+        {canManage && orderMode === 'new' ? (
           <FormSection
             title="Assignment & billing"
-            description="Team lead, QA, order folder status, and internal remark. Price and Extra Service Count are per artist line above."
+            description={
+              canViewFinance
+                ? 'Team lead, QA, order folder status, and internal remark. Price and Extra Service Count are per artist line above.'
+                : 'Team lead, QA, order folder status, and internal remark. Extra Service Count is per artist line above.'
+            }
           >
             <div className="space-y-4 rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface-muted)] p-4">
               <div className="grid gap-3 sm:grid-cols-2">

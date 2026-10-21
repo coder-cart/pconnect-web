@@ -82,13 +82,16 @@ export function ThreadPanel({
   const threadScrollKey = `${parentMessage.id}:${replies.length}:${isLoading ? 'loading' : 'ready'}`;
 
   return (
-    <Card padding="none" className="flex min-h-0 flex-col overflow-hidden lg:sticky lg:top-0 lg:h-full">
-      <div className="flex shrink-0 items-center justify-between border-b border-[var(--border)] px-4 py-3">
+    <Card
+      padding="none"
+      className="fixed inset-0 z-40 flex min-h-0 flex-col overflow-hidden rounded-none lg:relative lg:inset-auto lg:z-auto lg:sticky lg:top-0 lg:h-full lg:rounded-[var(--radius-lg)]"
+    >
+      <div className="flex shrink-0 items-center justify-between border-b border-[var(--border)] px-4 py-3 safe-pt">
         <p className="text-sm font-semibold text-[var(--foreground)]">Thread</p>
         <button
           type="button"
           onClick={onClose}
-          className="rounded-[var(--radius-sm)] p-1 text-[var(--muted)] hover:bg-[var(--surface-muted)]"
+          className="inline-flex min-h-touch min-w-touch items-center justify-center rounded-[var(--radius-sm)] text-[var(--muted)] hover:bg-[var(--surface-muted)]"
           aria-label="Close thread"
         >
           <X className="h-4 w-4" />

@@ -1,15 +1,28 @@
 import { MessageAttachment } from '@/components/chat/ChatMessageBody';
 
+export interface ChatDmPeer {
+  id: string;
+  fullName: string;
+  jobTitle?: string | null;
+  avatarUpdatedAt?: string | null;
+  presenceStatus?: 'active' | 'away';
+  statusText?: string | null;
+  statusEmoji?: string | null;
+}
+
 export interface ChatChannel {
   id: string;
   name: string;
   type: string;
   displayName?: string;
   dmPeerUserId?: string | null;
+  dmPeer?: ChatDmPeer | null;
   clientOrganizationId?: string | null;
   clientOrganizationName?: string | null;
   orderId?: string | null;
   unreadCount?: number;
+  lastReadAt?: string | null;
+  viewerCanInviteClientTeammates?: boolean;
 }
 
 export function getChannelLabel(channel: Pick<ChatChannel, 'name' | 'type' | 'displayName'>) {
@@ -32,6 +45,7 @@ export interface MessageUser {
   id: string;
   fullName: string;
   email: string;
+  avatarUpdatedAt?: string | null;
 }
 
 export interface MessageReactionSummary {

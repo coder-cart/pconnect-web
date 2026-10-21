@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { Plus } from 'lucide-react';
 import { apiRequest } from '@/lib/api-client';
-import { ApiResponse } from '@/lib/auth';
+import { ApiResponse, userHasAnyPermission } from '@/lib/auth';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
@@ -68,7 +68,12 @@ function formatDate(value?: string) {
 }
 
 export function ServiceMasterManager() {
-  const { refreshKey, notifyRefresh } = useWorkspace();
+  const { user, refreshKey, notifyRefresh } = useWorkspace();
+  const canViewFinance = userHasAnyPermission(user, [
+    'finance.invoices.view_all',
+    'finance.invoices.create',
+    'payments.manage',
+  ]);
   const [services, setServices] = useState<ServiceMasterItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -136,10 +141,16 @@ export function ServiceMasterManager() {
       category: form.category.trim() || undefined,
       description: form.description.trim() || undefined,
       defaultUnit: form.defaultUnit.trim() || 'Per Image',
-      defaultPrice: form.defaultPrice ? Number(form.defaultPrice) : undefined,
-      artistRatePerImage: form.artistRatePerImage
-        ? Number(form.artistRatePerImage)
-        : undefined,
+      ...(canViewFinance
+        ? {
+            defaultPrice: form.defaultPrice
+              ? Number(form.defaultPrice)
+              : undefined,
+            artistRatePerImage: form.artistRatePerImage
+              ? Number(form.artistRatePerImage)
+              : undefined,
+          }
+        : {}),
       estimatedTatHours: form.estimatedTatHours
         ? Number(form.estimatedTatHours)
         : undefined,
@@ -200,19 +211,23 @@ export function ServiceMasterManager() {
             No services yet. Add the first service to build your catalogue.
           </p>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[860px] text-left text-sm">
+          <div className="overflow-x-auto overscroll-x-contain">
+            <table className="w-full min-w-[720px] text-left text-sm md:min-w-[860px]">
               <thead>
                 <tr className="border-b border-[var(--border)] text-xs font-medium uppercase tracking-wide text-[var(--muted)]">
                   <th className="pb-2 pr-4 font-medium">Code</th>
                   <th className="pb-2 pr-4 font-medium">Service</th>
                   <th className="pb-2 pr-4 font-medium">Category</th>
-                  <th className="pb-2 pr-4 text-right font-medium">
-                    Client price ($)
-                  </th>
-                  <th className="pb-2 pr-4 text-right font-medium">
-                    Artist rate (₹)
-                  </th>
+                  {canViewFinance ? (
+                    <>
+                      <th className="pb-2 pr-4 text-right font-medium">
+                        Client price ($)
+                      </th>
+                      <th className="pb-2 pr-4 text-right font-medium">
+                        Artist rate (₹)
+                      </th>
+                    </>
+                  ) : null}
                   <th className="pb-2 pr-4 font-medium">Unit</th>
                   <th className="pb-2 pr-4 font-medium">Default ETA</th>
                   <th className="pb-2 pr-4 font-medium">Status</th>
@@ -240,12 +255,16 @@ export function ServiceMasterManager() {
                     <td className="py-3 pr-4 text-[var(--muted-foreground)]">
                       {service.category || '—'}
                     </td>
-                    <td className="py-3 pr-4 text-right">
-                      {formatMoney(service.defaultPrice, 'USD')}
-                    </td>
-                    <td className="py-3 pr-4 text-right">
-                      {formatEditorMoney(service.artistRatePerImage)}
-                    </td>
+                    {canViewFinance ? (
+                      <>
+                        <td className="py-3 pr-4 text-right">
+                          {formatMoney(service.defaultPrice, 'USD')}
+                        </td>
+                        <td className="py-3 pr-4 text-right">
+                          {formatEditorMoney(service.artistRatePerImage)}
+                        </td>
+                      </>
+                    ) : null}
                     <td className="py-3 pr-4 text-[var(--muted-foreground)]">
                       {service.defaultUnit}
                     </td>
@@ -344,33 +363,40 @@ export function ServiceMasterManager() {
           />
 
           <div className="grid gap-3 md:grid-cols-3">
-            <Input
-              label="Default client price ($)"
-              type="number"
-              min={0}
-              step="0.01"
-              value={form.defaultPrice}
-              onChange={(event) =>
-                setForm((prev) => ({ ...prev, defaultPrice: event.target.value }))
-              }
-              placeholder="2"
-              hint="Client billing default in USD; override per client currency on the client page."
-            />
-            <Input
-              label="Default artist rate (₹)"
-              type="number"
-              min={0}
-              step="0.01"
-              value={form.artistRatePerImage}
-              onChange={(event) =>
-                setForm((prev) => ({
-                  ...prev,
-                  artistRatePerImage: event.target.value,
-                }))
-              }
-              placeholder="0.50"
-              hint="Editor pay is always INR."
-            />
+            {canViewFinance ? (
+              <>
+                <Input
+                  label="Default client price ($)"
+                  type="number"
+                  min={0}
+                  step="0.01"
+                  value={form.defaultPrice}
+                  onChange={(event) =>
+                    setForm((prev) => ({
+                      ...prev,
+                      defaultPrice: event.target.value,
+                    }))
+                  }
+                  placeholder="2"
+                  hint="Client billing default in USD; override per client currency on the client page."
+                />
+                <Input
+                  label="Default artist rate (₹)"
+                  type="number"
+                  min={0}
+                  step="0.01"
+                  value={form.artistRatePerImage}
+                  onChange={(event) =>
+                    setForm((prev) => ({
+                      ...prev,
+                      artistRatePerImage: event.target.value,
+                    }))
+                  }
+                  placeholder="0.50"
+                  hint="Editor pay is always INR."
+                />
+              </>
+            ) : null}
             <Input
               label="Default ETA (hours)"
               type="number"

@@ -3,7 +3,8 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Save } from 'lucide-react';
 import { apiRequest } from '@/lib/api-client';
-import { ApiResponse } from '@/lib/auth';
+import { ApiResponse, userHasAnyPermission } from '@/lib/auth';
+import { useWorkspace } from '@/components/providers/WorkspaceProvider';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
@@ -52,6 +53,12 @@ export function ClientServiceConfig({
   canManage,
   currency: currencyProp,
 }: ClientServiceConfigProps) {
+  const { user } = useWorkspace();
+  const canViewFinance = userHasAnyPermission(user, [
+    'finance.invoices.view_all',
+    'finance.invoices.create',
+    'payments.manage',
+  ]);
   const [rows, setRows] = useState<ClientServiceRow[]>([]);
   const [edits, setEdits] = useState<Record<string, EditableRow>>({});
   const [isLoading, setIsLoading] = useState(true);
@@ -64,9 +71,7 @@ export function ClientServiceConfig({
     currencyProp ?? rows[0]?.currency,
   );
   const priceSymbol = currencySymbol(currency);
-  const showArtistRate = rows.some(
-    (row) => row.defaultArtistRate !== undefined || row.artistRatePerImage !== undefined,
-  );
+  const showArtistRate = canViewFinance;
 
   const load = useCallback(async () => {
     setIsLoading(true);
@@ -123,12 +128,18 @@ export function ClientServiceConfig({
           services: Object.values(edits).map((edit) => ({
             serviceId: edit.serviceId,
             enabled: edit.enabled,
-            clientPrice: edit.clientPrice ? Number(edit.clientPrice) : null,
+            ...(canViewFinance
+              ? {
+                  clientPrice: edit.clientPrice
+                    ? Number(edit.clientPrice)
+                    : null,
+                  artistRatePerImage: edit.artistRatePerImage
+                    ? Number(edit.artistRatePerImage)
+                    : null,
+                }
+              : {}),
             clientEtaHours: edit.clientEtaHours
               ? Number(edit.clientEtaHours)
-              : null,
-            artistRatePerImage: edit.artistRatePerImage
-              ? Number(edit.artistRatePerImage)
               : null,
             defaultInstructions: edit.defaultInstructions.trim() || null,
           })),
@@ -169,9 +180,9 @@ export function ClientServiceConfig({
             Service Configuration
           </h2>
           <p className="mt-1 text-xs text-[var(--muted)]">
-            Enable services for this client and optionally override the default
-            price ({currency}), artist rate (INR), and ETA. Blank fields inherit
-            the Service Master defaults. Changes only affect future orders.
+            {canViewFinance
+              ? `Enable services for this client and optionally override the default price (${currency}), artist rate (INR), and ETA. Blank fields inherit the Service Master defaults. Changes only affect future orders.`
+              : 'Enable services for this client and optionally override the default ETA and instructions. Changes only affect future orders.'}
           </p>
         </div>
         {canManage ? (
@@ -191,15 +202,17 @@ export function ClientServiceConfig({
         <p className="mb-3 text-sm text-[var(--danger)]">{saveError}</p>
       ) : null}
 
-      <div className="overflow-x-auto">
-        <table className="w-full min-w-[720px] text-left text-sm">
+      <div className="overflow-x-auto overscroll-x-contain">
+        <table className="w-full min-w-[640px] text-left text-sm md:min-w-[720px]">
           <thead>
                 <tr className="border-b border-[var(--border)] text-xs font-medium uppercase tracking-wide text-[var(--muted)]">
                   <th className="pb-2 pr-4 font-medium">Enable</th>
                   <th className="pb-2 pr-4 font-medium">Service</th>
-                  <th className="pb-2 pr-4 text-right font-medium">
-                    Client price ({priceSymbol})
-                  </th>
+                  {canViewFinance ? (
+                    <th className="pb-2 pr-4 text-right font-medium">
+                      Client price ({priceSymbol})
+                    </th>
+                  ) : null}
                   {showArtistRate ? (
                     <th className="pb-2 pr-4 text-right font-medium">
                       Artist rate (₹)
@@ -246,30 +259,32 @@ export function ClientServiceConfig({
                       </div>
                     ) : null}
                   </td>
-                  <td className="py-3 pr-4 text-right">
-                    {edit.enabled ? (
-                      <input
-                        type="number"
-                        min={0}
-                        step="0.01"
-                        value={edit.clientPrice}
-                        disabled={disabled}
-                        placeholder={
-                          row.defaultClientPrice != null
-                            ? String(row.defaultClientPrice)
-                            : '—'
-                        }
-                        onChange={(event) =>
-                          updateEdit(row.serviceId, {
-                            clientPrice: event.target.value,
-                          })
-                        }
-                        className="w-24 rounded border border-[var(--border)] bg-[var(--surface)] px-2 py-1 text-right text-sm disabled:opacity-60"
-                      />
-                    ) : (
-                      <span className="text-[var(--muted)]">—</span>
-                    )}
-                  </td>
+                  {canViewFinance ? (
+                    <td className="py-3 pr-4 text-right">
+                      {edit.enabled ? (
+                        <input
+                          type="number"
+                          min={0}
+                          step="0.01"
+                          value={edit.clientPrice}
+                          disabled={disabled}
+                          placeholder={
+                            row.defaultClientPrice != null
+                              ? String(row.defaultClientPrice)
+                              : '—'
+                          }
+                          onChange={(event) =>
+                            updateEdit(row.serviceId, {
+                              clientPrice: event.target.value,
+                            })
+                          }
+                          className="w-24 rounded border border-[var(--border)] bg-[var(--surface)] px-2 py-1 text-right text-sm disabled:opacity-60"
+                        />
+                      ) : (
+                        <span className="text-[var(--muted)]">—</span>
+                      )}
+                    </td>
+                  ) : null}
                   {showArtistRate ? (
                     <td className="py-3 pr-4 text-right">
                       {edit.enabled ? (

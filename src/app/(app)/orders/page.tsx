@@ -5,14 +5,24 @@ import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { LayoutGrid, List, Plus, SlidersHorizontal } from 'lucide-react';
 import { apiDownload, apiRequest } from '@/lib/api-client';
-import { ApiResponse, userHasPermission, userIsExternal } from '@/lib/auth';
+import {
+  ApiResponse,
+  isProductionOnlyStaff,
+  userHasPermission,
+  userIsExternal,
+} from '@/lib/auth';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { ListSkeleton } from '@/components/ui/Skeleton';
 import { EmptyState, ErrorState, RestrictedState } from '@/components/ui/StatePanels';
 import { useWorkspace } from '@/components/providers/WorkspaceProvider';
-import { MANAGER_WORKFLOW_OPTIONS, OrderSummary } from '@/lib/orders';
+import {
+  MANAGER_WORKFLOW_OPTIONS,
+  ORDER_LIST_SCOPES,
+  OrderListScope,
+  OrderSummary,
+} from '@/lib/orders';
 import { isWorkspaceAdmin } from '@/lib/navigation';
 import { OrderKanbanBoard } from '@/components/orders/OrderKanbanBoard';
 import { OrderCreateModal } from '@/components/orders/OrderCreateForm';
@@ -90,6 +100,7 @@ export default function OrdersPage() {
   const canCreate =
     canManage || userHasPermission(user, 'orders.create');
   const isExternal = userIsExternal(user);
+  const hideClientIdentity = isProductionOnlyStaff(user?.roleCodes);
   const searchParams = useSearchParams();
   const lifecycleStage = searchParams.get('lifecycleStage') ?? '';
   const historyView = searchParams.get('history') === '1';
@@ -111,6 +122,7 @@ export default function OrdersPage() {
   const [busy, setBusy] = useState(false);
 
   const [layout, setLayout] = useState<OrderLayoutMode>('board');
+  const [listScope, setListScope] = useState<OrderListScope>('active');
   const [appliedFilters, setAppliedFilters] = useState<OrderFilters>(EMPTY_FILTERS);
   const [draftFilters, setDraftFilters] = useState<OrderFilters>(EMPTY_FILTERS);
   const [filtersOpen, setFiltersOpen] = useState(false);
@@ -135,13 +147,15 @@ export default function OrdersPage() {
     );
   }, [viewReady, layout, appliedFilters]);
 
-  const showBoard = canManage && layout === 'board';
+  const showBoard =
+    canManage && layout === 'board' && listScope === 'active' && !historyView;
   const activeFilterCount = countActiveFilters(appliedFilters);
 
   const filterQuery = useMemo(() => {
     const params = new URLSearchParams();
+    if (!historyView) params.set('listScope', listScope);
     const stage = appliedFilters.lifecycleStage || lifecycleStage;
-    if (stage) params.set('lifecycleStage', stage);
+    if (listScope === 'active' && stage) params.set('lifecycleStage', stage);
     if (appliedFilters.clientOrganizationId) {
       params.set('clientOrganizationId', appliedFilters.clientOrganizationId);
     }
@@ -152,7 +166,7 @@ export default function OrdersPage() {
     if (historyView) params.set('historyOnly', 'true');
     if (isAssignedView) params.set('assignedToMe', 'true');
     return params.toString();
-  }, [appliedFilters, lifecycleStage, historyView, isAssignedView]);
+  }, [appliedFilters, lifecycleStage, historyView, isAssignedView, listScope]);
 
   const queryString = useMemo(() => {
     const params = new URLSearchParams(filterQuery);
@@ -352,7 +366,7 @@ export default function OrdersPage() {
                     dueAfter: event.target.value,
                   }))
                 }
-                className="w-full rounded border border-[var(--border)] bg-[var(--surface)] px-2 py-1.5 text-sm"
+                className="h-11 w-full rounded border border-[var(--border)] bg-[var(--surface)] px-2 py-1.5 text-base sm:h-9 sm:text-sm"
               />
             </label>
             <label className="block space-y-1">
@@ -366,7 +380,7 @@ export default function OrdersPage() {
                     dueBefore: event.target.value,
                   }))
                 }
-                className="w-full rounded border border-[var(--border)] bg-[var(--surface)] px-2 py-1.5 text-sm"
+                className="h-11 w-full rounded border border-[var(--border)] bg-[var(--surface)] px-2 py-1.5 text-base sm:h-9 sm:text-sm"
               />
             </label>
             <label className="block space-y-1">
@@ -379,7 +393,7 @@ export default function OrdersPage() {
                     lifecycleStage: event.target.value,
                   }))
                 }
-                className="w-full rounded border border-[var(--border)] bg-[var(--surface)] px-2 py-1.5 text-sm"
+                className="h-11 w-full rounded border border-[var(--border)] bg-[var(--surface)] px-2 py-1.5 text-base sm:h-9 sm:text-sm"
               >
                 <option value="">All statuses</option>
                 {MANAGER_WORKFLOW_OPTIONS.map((option) => (
@@ -467,6 +481,25 @@ export default function OrdersPage() {
             </Button>
           </div>
         </Card>
+      ) : null}
+
+      {!historyView ? (
+        <div className="flex flex-wrap gap-2">
+          {ORDER_LIST_SCOPES.map((scope) => (
+            <button
+              key={scope.id}
+              type="button"
+              onClick={() => setListScope(scope.id)}
+              className={`rounded-[var(--radius-md)] border px-3 py-1.5 text-sm ${
+                listScope === scope.id
+                  ? 'border-[var(--primary)] bg-[var(--primary-soft)] font-medium text-[var(--foreground)]'
+                  : 'border-[var(--border)] text-[var(--muted)]'
+              }`}
+            >
+              {scope.label}
+            </button>
+          ))}
+        </div>
       ) : null}
 
       {showBoard ? (
@@ -557,11 +590,25 @@ export default function OrdersPage() {
       ) : null}
       {!showBoard && !isLoading && !errorMessage && orders.length === 0 ? (
         <EmptyState
-          title={historyView ? 'No history yet' : 'No orders yet'}
+          title={
+            historyView
+              ? 'No history yet'
+              : listScope === 'delivered'
+                ? 'No delivered orders'
+                : listScope === 'completed'
+                  ? 'No completed orders'
+                  : 'No active orders'
+          }
           description={
             historyView
               ? 'Delivered orders you save appear here for 90 days.'
-              : 'Create an order to track deadlines, services, and client notes.'
+              : listScope === 'delivered'
+                ? 'Orders marked delivered appear on this tab.'
+                : listScope === 'completed'
+                  ? 'Orders marked as received appear on this tab.'
+                  : hideClientIdentity
+                    ? 'Assigned orders appear here.'
+                    : 'Create an order to track services, turnaround, and client notes.'
           }
         />
       ) : null}
@@ -573,6 +620,7 @@ export default function OrdersPage() {
             selectedIds={selectedIds}
             onToggle={toggleSelect}
             canBulk={canManage}
+            showClient={!hideClientIdentity}
             onOpen={setOpenOrderId}
           />
         </Card>

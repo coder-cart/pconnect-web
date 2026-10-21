@@ -13,6 +13,8 @@ import { ApiResponse } from '@/lib/auth';
 interface ManageChannelMembersModalProps {
   open: boolean;
   channelId: string | null;
+  /** When true, only invite/revoke client teammates (no remove member). */
+  clientAdminMode?: boolean;
   onClose: () => void;
   onUpdated: () => void;
 }
@@ -55,6 +57,7 @@ interface MemberCandidatesResponse {
 export function ManageChannelMembersModal({
   open,
   channelId,
+  clientAdminMode = false,
   onClose,
   onUpdated,
 }: ManageChannelMembersModalProps) {
@@ -216,7 +219,9 @@ export function ManageChannelMembersModal({
   const showClientUsers = channel?.type === 'client_shared';
   const pendingInvites = channel?.invites ?? [];
   const addLabel =
-    selectedCandidate?.userType === 'external' ? 'Send invite' : 'Add member';
+    selectedCandidate?.userType === 'external' || clientAdminMode
+      ? 'Send invite'
+      : 'Add member';
   const hubLabel =
     channel?.clientOrganization?.name ??
     channel?.project?.clientOrganization?.name ??
@@ -227,12 +232,20 @@ export function ManageChannelMembersModal({
     <Modal
       open={open}
       onClose={onClose}
-      title={showClientUsers ? 'Manage client access' : 'Manage members'}
+      title={
+        clientAdminMode
+          ? 'Add team members'
+          : showClientUsers
+            ? 'Manage client access'
+            : 'Manage members'
+      }
       description={
         channel
-          ? showClientUsers
-            ? `Add internal teammates or invite linked client users to ${hubLabel}.`
-            : `Manage membership for #${channel.name}.`
+          ? clientAdminMode
+            ? `Invite your portal teammates to ${hubLabel}. They must accept before they can message.`
+            : showClientUsers
+              ? `Add internal teammates or invite client team members to ${hubLabel}.`
+              : `Manage membership for #${channel.name}.`
           : 'Load channel members and invite additional people.'
       }
       footer={
@@ -280,15 +293,17 @@ export function ManageChannelMembersModal({
                     >
                       {member.user.userType === 'external' ? 'Client' : 'Internal'}
                     </Badge>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      disabled={actionUserId === member.userId}
-                      onClick={() => void handleRemoveMember(member.userId)}
-                    >
-                      Remove
-                    </Button>
+                    {!clientAdminMode ? (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        disabled={actionUserId === member.userId}
+                        onClick={() => void handleRemoveMember(member.userId)}
+                      >
+                        Remove
+                      </Button>
+                    ) : null}
                   </div>
                 </div>
               ))}
@@ -337,6 +352,13 @@ export function ManageChannelMembersModal({
 
           {availableCandidates.length > 0 ? (
             <div className="space-y-3">
+              <p className="text-sm font-medium text-[var(--foreground)]">
+                {clientAdminMode
+                  ? 'Your team members'
+                  : showClientUsers
+                    ? 'People you can add'
+                    : 'Add people'}
+              </p>
               <div className="relative">
                 <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--muted)]" />
                 <Input
@@ -366,7 +388,9 @@ export function ManageChannelMembersModal({
                       <span className="text-sm font-medium">{user.fullName}</span>
                       <span className="text-xs opacity-80">
                         {user.email} ·{' '}
-                        {user.userType === 'external' ? 'client (invite)' : 'internal'}
+                        {user.userType === 'external'
+                          ? 'client team (invite)'
+                          : 'internal'}
                       </span>
                     </button>
                   ))
@@ -375,15 +399,17 @@ export function ManageChannelMembersModal({
             </div>
           ) : (
             <p className="text-sm text-[var(--muted)]">
-              All eligible users are already members or have pending invites.
-              Link client users from the Clients page first.
+              {clientAdminMode
+                ? 'All of your teammates are already members or have pending invites. Ask your studio to add more portal users if you need a larger team.'
+                : 'All eligible users are already members or have pending invites. Add client team members from the Clients → Portal users tab first.'}
             </p>
           )}
 
           {showClientUsers ? (
             <p className="text-xs text-[var(--muted)]">
-              Client users must be linked to {hubLabel} on the Clients page. They
-              receive a pending invite and must accept before messaging.
+              {clientAdminMode
+                ? 'Invited teammates must accept before they can read or send messages in this channel.'
+                : `Client team members must be linked to ${hubLabel} on the Clients page. They receive a pending invite and must accept before messaging.`}
             </p>
           ) : null}
         </div>

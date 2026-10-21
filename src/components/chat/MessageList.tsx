@@ -5,12 +5,16 @@ import { MessageItem } from '@/components/chat/MessageItem';
 import { EmptyState } from '@/components/ui/StatePanels';
 import { ListSkeleton } from '@/components/ui/Skeleton';
 import { ChatMessage } from '@/lib/chat-types';
-import { groupMessagesByDate } from '@/lib/formatMessageDate';
+import {
+  groupMessagesByDate,
+  type MessageListEntry,
+} from '@/lib/formatMessageDate';
 
 interface MessageListProps {
   messages: ChatMessage[];
   channelId: string;
   currentUserId: string;
+  unreadSince?: string | null;
   canManageChannel: boolean;
   isLoading: boolean;
   activeThreadMessageId: string | null;
@@ -29,6 +33,7 @@ export function MessageList({
   messages,
   channelId,
   currentUserId,
+  unreadSince = null,
   canManageChannel,
   isLoading,
   activeThreadMessageId,
@@ -55,33 +60,63 @@ export function MessageList({
     );
   }
 
-  const entries = groupMessagesByDate(messages);
+  const cutoff = unreadSince ? new Date(unreadSince).getTime() : Number.NaN;
+  const unreadMessages = Number.isNaN(cutoff)
+    ? []
+    : messages.filter(
+        (message) =>
+          new Date(message.createdAt).getTime() > cutoff &&
+          message.sender.id !== currentUserId,
+      );
+  const earlierMessages = Number.isNaN(cutoff)
+    ? messages
+    : messages.filter(
+        (message) => !unreadMessages.some((unread) => unread.id === message.id),
+      );
+
+  function renderEntries(
+    entries: MessageListEntry<ChatMessage>[],
+    unread: boolean,
+  ) {
+    return entries.map((entry) =>
+      entry.type === 'separator' ? (
+        <DateSeparator key={`${unread ? 'new' : 'old'}-${entry.key}`} label={entry.label} />
+      ) : (
+        <MessageItem
+          key={entry.key}
+          message={entry.message}
+          channelId={channelId}
+          currentUserId={currentUserId}
+          canManageChannel={canManageChannel}
+          unread={unread}
+          isActive={activeThreadMessageId === entry.message.id}
+          highlighted={highlightMessageId === entry.message.id}
+          onReply={onReply}
+          onReact={onReact}
+          onEdit={onEdit}
+          onDelete={onDelete}
+          onPin={onPin}
+          onCopyMessage={onCopyMessage}
+          onCopyLink={onCopyLink}
+          onMarkUnread={onMarkUnread}
+        />
+      ),
+    );
+  }
 
   return (
-    <div className="space-y-1">
-      {entries.map((entry) =>
-        entry.type === 'separator' ? (
-          <DateSeparator key={entry.key} label={entry.label} />
-        ) : (
-          <MessageItem
-            key={entry.key}
-            message={entry.message}
-            channelId={channelId}
-            currentUserId={currentUserId}
-            canManageChannel={canManageChannel}
-            isActive={activeThreadMessageId === entry.message.id}
-            highlighted={highlightMessageId === entry.message.id}
-            onReply={onReply}
-            onReact={onReact}
-            onEdit={onEdit}
-            onDelete={onDelete}
-            onPin={onPin}
-            onCopyMessage={onCopyMessage}
-            onCopyLink={onCopyLink}
-            onMarkUnread={onMarkUnread}
-          />
-        ),
-      )}
+    <div className="space-y-0.5">
+      {unreadMessages.length > 0 ? (
+        <>
+          {renderEntries(groupMessagesByDate(unreadMessages), true)}
+          <div className="my-4 flex items-center gap-3 px-3 text-xs font-medium uppercase tracking-wide text-[var(--muted)]">
+            <span className="h-px flex-1 bg-[var(--border)]" />
+            Earlier
+            <span className="h-px flex-1 bg-[var(--border)]" />
+          </div>
+        </>
+      ) : null}
+      {renderEntries(groupMessagesByDate(earlierMessages), false)}
     </div>
   );
 }

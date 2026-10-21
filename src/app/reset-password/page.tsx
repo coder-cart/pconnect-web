@@ -2,7 +2,8 @@
 
 import { FormEvent, Suspense, useState } from 'react';
 import Link from 'next/link';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useParams, useRouter } from 'next/navigation';
+import { readEmailLinkToken } from '@/lib/email-link-token';
 import { ArrowLeft, KeyRound } from 'lucide-react';
 import { apiRequest } from '@/lib/api-client';
 import { ApiResponse } from '@/lib/auth';
@@ -13,8 +14,8 @@ import { Logo } from '@/components/ui/Logo';
 
 function ResetPasswordForm() {
   const router = useRouter();
-  const searchParams = useSearchParams();
-  const token = searchParams.get('token') ?? '';
+  const params = useParams<{ token?: string }>();
+  const pathToken = typeof params.token === 'string' ? params.token : '';
 
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -23,6 +24,8 @@ function ResetPasswordForm() {
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+
+    const token = readEmailLinkToken(window.location.search, pathToken);
 
     if (!token) {
       setErrorMessage('Reset token is missing. Request a new link.');

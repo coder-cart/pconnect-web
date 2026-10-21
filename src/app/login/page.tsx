@@ -7,10 +7,15 @@ import {
   ArrowRight,
   Eye,
   EyeOff,
+  FileStack,
+  FolderKanban,
   KeyRound,
   Lock,
   Mail,
+  MessageSquare,
+  ShieldCheck,
   Sparkles,
+  Users,
 } from 'lucide-react';
 import { apiRequest } from '@/lib/api-client';
 import {
@@ -19,12 +24,19 @@ import {
   setStoredToken,
 } from '@/lib/auth';
 import { Button } from '@/components/ui/Button';
-import { Card } from '@/components/ui/Card';
 import { Input } from '@/components/ui/Input';
 import { Logo } from '@/components/ui/Logo';
-import { Badge } from '@/components/ui/Badge';
+import './login.css';
 
 type LoginMode = 'password' | 'magic';
+
+const SHOWCASE_FEATURES = [
+  { icon: MessageSquare, label: 'Team communication' },
+  { icon: FolderKanban, label: 'Projects and tasks' },
+  { icon: Users, label: 'Client portals' },
+  { icon: FileStack, label: 'File sharing and delivery' },
+  { icon: ShieldCheck, label: 'Controlled access' },
+] as const;
 
 export default function LoginPage() {
   const router = useRouter();
@@ -94,38 +106,96 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen bg-[var(--background)] lg:grid lg:grid-cols-[280px_1fr]">
-      <aside className="hidden border-r border-[var(--border)] bg-[var(--surface)] p-6 lg:flex lg:flex-col">
-        <Logo />
+    <div className="login-root" data-theme="light">
+      <aside className="login-showcase" aria-label="Product highlights">
+        <div className="login-showcase__brand">
+          <Link href="/" aria-label="Colabdeck home">
+            <Logo />
+          </Link>
+        </div>
+
+        <h1>
+          One workspace for your <em>team</em> and your <em>clients</em>
+        </h1>
+        <p className="login-showcase__lead">
+          Bring conversations, projects, files, approvals, and client delivery
+          together in one organized workspace.
+        </p>
+
+        <ul className="login-showcase__features">
+          {SHOWCASE_FEATURES.map((feature) => {
+            const Icon = feature.icon;
+            return (
+              <li key={feature.label}>
+                <span className="login-showcase__icon">
+                  <Icon className="h-4 w-4" aria-hidden />
+                </span>
+                {feature.label}
+              </li>
+            );
+          })}
+        </ul>
+
+        <div className="login-showcase__visual" aria-hidden="true">
+          <div className="login-showcase__panel">
+            <div className="login-showcase__chrome">
+              <span />
+              <span />
+              <span />
+            </div>
+            <div className="login-showcase__row login-showcase__row--accent" />
+            <div className="login-showcase__row login-showcase__row--mid" />
+            <div className="login-showcase__row" />
+            <div className="login-showcase__row login-showcase__row--short" />
+          </div>
+          <div className="login-showcase__float login-showcase__float--top">
+            <strong>Client</strong>
+            Great work! The edits look perfect.
+          </div>
+          <div className="login-showcase__float login-showcase__float--mid">
+            <strong>Approved</strong>
+            Delivery ready for handoff
+          </div>
+        </div>
+
+        <div className="login-showcase__steps">
+          <span>Organize work</span>
+          <span aria-hidden>→</span>
+          <span>Collaborate with clients</span>
+          <span aria-hidden>→</span>
+          <span>Deliver faster</span>
+        </div>
       </aside>
 
-      <main className="flex min-h-screen items-center justify-center p-4 sm:p-8">
-        <div className="w-full max-w-2xl space-y-6">
-          <div className="lg:hidden">
-            <Logo />
-          </div>
+      <section className="login-panel">
+        <div className="login-panel__top">
+          <span className="login-panel__top-label">New to Colabdeck?</span>
+          <Link href="/book-a-demo" className="login-panel__demo">
+            Book a demo
+          </Link>
+        </div>
 
-          <Card className="animate-fade-in">
-            <Badge variant="primary" className="mb-4">
-              <Lock className="mr-1 inline h-3 w-3" />
-              Secure sign in
-            </Badge>
+        <div className="login-panel__main">
+          <div className="login-card">
+            <div className="login-card__logo lg:hidden">
+              <Link href="/" aria-label="Colabdeck home">
+                <Logo />
+              </Link>
+            </div>
+            <div className="login-card__logo hidden lg:block">
+              <Logo />
+            </div>
 
-            <h1 className="text-2xl font-semibold tracking-tight text-[var(--foreground)]">
-              Welcome back
-            </h1>
-            <p className="mt-2 text-sm text-[var(--muted)]">
-              Sign in with your password or request a one-time magic link.
+            <h1>Sign in to your workspace</h1>
+            <p className="login-card__subtitle">
+              Access your projects, chats, files, and more.
             </p>
 
-            <div className="mt-5 grid grid-cols-2 gap-2 rounded-[var(--radius-md)] border border-[var(--border)] p-1">
+            <div className="login-tabs" role="tablist" aria-label="Sign-in method">
               <button
                 type="button"
-                className={`rounded-[var(--radius-sm)] px-3 py-2 text-sm font-medium transition-colors ${
-                  mode === 'password'
-                    ? 'bg-[var(--surface-muted)] text-[var(--foreground)]'
-                    : 'text-[var(--muted)] hover:text-[var(--foreground)]'
-                }`}
+                role="tab"
+                aria-selected={mode === 'password'}
                 onClick={() => {
                   setMode('password');
                   setErrorMessage(null);
@@ -136,11 +206,8 @@ export default function LoginPage() {
               </button>
               <button
                 type="button"
-                className={`rounded-[var(--radius-sm)] px-3 py-2 text-sm font-medium transition-colors ${
-                  mode === 'magic'
-                    ? 'bg-[var(--surface-muted)] text-[var(--foreground)]'
-                    : 'text-[var(--muted)] hover:text-[var(--foreground)]'
-                }`}
+                role="tab"
+                aria-selected={mode === 'magic'}
                 onClick={() => {
                   setMode('magic');
                   setErrorMessage(null);
@@ -153,18 +220,18 @@ export default function LoginPage() {
 
             {mode === 'password' ? (
               <form
-                className="mt-6 space-y-4"
+                className="login-form"
                 onSubmit={handlePasswordLogin}
                 noValidate
               >
                 <Input
-                  label="Email"
+                  label="Email address"
                   type="email"
                   name="email"
                   autoComplete="email"
                   value={email}
                   onChange={(event) => setEmail(event.target.value)}
-                  placeholder="name@company.com"
+                  placeholder="you@company.com"
                   leadingIcon={<Mail className="h-4 w-4" />}
                   required
                 />
@@ -197,17 +264,15 @@ export default function LoginPage() {
                   required
                 />
 
-                <div className="flex items-center justify-between text-sm">
-                  <Link
-                    href="/forgot-password"
-                    className="font-medium text-[var(--primary)] hover:text-[var(--primary-hover)]"
-                  >
-                    Forgot password?
-                  </Link>
+                <div className="login-form__row">
+                  <span />
+                  <Link href="/forgot-password">Forgot password?</Link>
                 </div>
 
                 {errorMessage ? (
-                  <p className="text-sm text-[var(--danger)]">{errorMessage}</p>
+                  <p className="login-error" role="alert">
+                    {errorMessage}
+                  </p>
                 ) : null}
 
                 <Button
@@ -221,33 +286,35 @@ export default function LoginPage() {
                 </Button>
               </form>
             ) : (
-              <form
-                className="mt-6 space-y-4"
-                onSubmit={handleMagicLink}
-                noValidate
-              >
+              <form className="login-form" onSubmit={handleMagicLink} noValidate>
                 <Input
-                  label="Email"
+                  label="Email address"
                   type="email"
                   name="email"
                   autoComplete="email"
                   value={email}
                   onChange={(event) => setEmail(event.target.value)}
-                  placeholder="name@company.com"
+                  placeholder="you@company.com"
                   leadingIcon={<Mail className="h-4 w-4" />}
                   required
                 />
-                <p className="text-xs text-[var(--muted)]">
+                <p className="login-hint">
                   We’ll email a one-time link that signs you in. It expires in 30
                   minutes.
                 </p>
 
                 {errorMessage ? (
-                  <p className="text-sm text-[var(--danger)]">{errorMessage}</p>
+                  <p className="login-error" role="alert">
+                    {errorMessage}
+                  </p>
                 ) : null}
                 {successMessage ? (
-                  <p className="text-sm text-[var(--success)]">{successMessage}</p>
+                  <p className="login-success" role="status">
+                    {successMessage}
+                  </p>
                 ) : null}
+
+                <div className="login-divider">or continue with</div>
 
                 <Button
                   type="submit"
@@ -260,9 +327,28 @@ export default function LoginPage() {
                 </Button>
               </form>
             )}
-          </Card>
+
+            <div className="login-secure">
+              <Lock className="h-4 w-4" aria-hidden />
+              <p>
+                Your data is secure. We use role-based access and session
+                controls to keep workspace information protected.
+              </p>
+            </div>
+          </div>
         </div>
-      </main>
+
+        <footer>
+          <nav className="login-footer" aria-label="Legal">
+            <Link href="/privacy">Privacy Policy</Link>
+            <Link href="/terms">Terms of Service</Link>
+            <Link href="/contact">Contact</Link>
+          </nav>
+          <p className="login-copy">
+            © {new Date().getFullYear()} Colabdeck. All rights reserved.
+          </p>
+        </footer>
+      </section>
     </div>
   );
 }

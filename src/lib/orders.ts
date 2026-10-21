@@ -18,6 +18,8 @@ export interface OrderSummary {
   services?: string | null;
   clientNotes?: string | null;
   sourceLink?: string | null;
+  editorLink?: string | null;
+  editorInstructions?: string | null;
   outputFormat?: string | null;
   parentOrderId?: string | null;
   deliveryLink?: string | null;
@@ -159,15 +161,39 @@ export type ClientLifecycleStage =
   | 'in_progress'
   | 'quality_check'
   | 'ready_for_delivery'
-  | 'delivered';
+  | 'delivered'
+  | 'completed';
 
 const LIFECYCLE_CODES: Record<ClientLifecycleStage, string[]> = {
   order_received: ['pending_review', 'waiting_for_files'],
   in_progress: ['assigned', 'editing', 'culling', 'retouching', 'revision_required'],
   quality_check: ['qa_review', 'client_review', 'approved'],
   ready_for_delivery: ['ready_for_delivery'],
-  delivered: ['delivered', 'completed'],
+  delivered: ['delivered'],
+  completed: ['completed'],
 };
+
+export const ORDER_LIST_SCOPES = [
+  { id: 'active', label: 'Active' },
+  { id: 'delivered', label: 'Delivered' },
+  { id: 'completed', label: 'Completed' },
+] as const;
+
+export type OrderListScope = (typeof ORDER_LIST_SCOPES)[number]['id'];
+
+export const OUTPUT_FORMATS = ['JPG', 'PNG', 'TIFF', 'PSD'] as const;
+
+export function canMarkOrderReceived(roleCodes: string[] | undefined): boolean {
+  return ['company_owner', 'internal_admin', 'internal_manager'].some((code) =>
+    roleCodes?.includes(code),
+  );
+}
+
+export function canCorrectDeliveryLink(roleCodes: string[] | undefined): boolean {
+  return ['company_owner', 'internal_admin'].some((code) =>
+    roleCodes?.includes(code),
+  );
+}
 
 export const MANAGER_WORKFLOW_OPTIONS: Array<{
   id: ClientLifecycleStage;
@@ -178,6 +204,7 @@ export const MANAGER_WORKFLOW_OPTIONS: Array<{
   { id: 'quality_check', label: 'Quality check' },
   { id: 'ready_for_delivery', label: 'Ready for Delivery' },
   { id: 'delivered', label: 'Delivered' },
+  { id: 'completed', label: 'Completed' },
 ];
 
 export const CLIENT_LIFECYCLE_LABELS: Record<ClientLifecycleStage, string> = {
@@ -186,6 +213,7 @@ export const CLIENT_LIFECYCLE_LABELS: Record<ClientLifecycleStage, string> = {
   quality_check: 'Quality Check',
   ready_for_delivery: 'Ready for Delivery',
   delivered: 'Delivered',
+  completed: 'Completed',
 };
 
 export interface OrderLifecycleSummary {

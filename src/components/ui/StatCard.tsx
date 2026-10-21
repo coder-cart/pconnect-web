@@ -52,10 +52,10 @@ export function StatCard({
         ) : null}
       </div>
 
-      <p className="mt-4 text-2xl font-semibold tracking-tight text-[var(--foreground)]">
+      <p className="mt-3 truncate text-xl font-semibold tracking-tight text-[var(--foreground)] sm:mt-4 sm:text-2xl">
         {value}
       </p>
-      <p className="mt-1 text-sm text-[var(--muted)]">{label}</p>
+      <p className="mt-1 truncate text-sm text-[var(--muted)]">{label}</p>
     </Card>
   );
 }

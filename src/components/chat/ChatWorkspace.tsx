@@ -26,6 +26,7 @@ import { ManageChannelMembersModal } from '@/components/modals/ManageChannelMemb
 import { StartDirectMessageModal } from '@/components/modals/StartDirectMessageModal';
 import { ChatComposer } from '@/components/chat/ChatComposer';
 import { ChannelSidebar } from '@/components/chat/ChannelSidebar';
+import { ChannelDetailsPanel } from '@/components/chat/ChannelDetailsPanel';
 import { ChannelHeader } from '@/components/chat/ChannelHeader';
 import { ChannelCanvasPanel } from '@/components/chat/ChannelCanvasPanel';
 import { PinnedMessagesPanel } from '@/components/chat/PinnedMessagesPanel';
@@ -33,6 +34,7 @@ import { MessageList } from '@/components/chat/MessageList';
 import { ThreadPanel } from '@/components/chat/ThreadPanel';
 import { ChatScrollArea } from '@/components/chat/ChatScrollArea';
 import { useRealtime } from '@/components/providers/RealtimeProvider';
+import { useUnreadMessages } from '@/components/providers/UnreadMessagesProvider';
 import { cn } from '@/lib/cn';
 import { ChannelMemberOption, ChannelNotificationPreference } from '@/lib/channelMembers';
 
@@ -104,8 +106,16 @@ export function ChatWorkspace({
     initialChannelId,
   );
   const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [unreadSince, setUnreadSince] = useState<string | null>(null);
+  const channelsRef = useRef<ChatChannel[]>([]);
+  channelsRef.current = channels;
   const [threadMessageId, setThreadMessageId] = useState<string | null>(null);
   const [threadReplies, setThreadReplies] = useState<ChatMessage[]>([]);
+  const [detailsOpen, setDetailsOpen] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(() => {
+    if (typeof window === 'undefined') return true;
+    return window.localStorage.getItem('pconnect.chat.sidebarOpen') !== '0';
+  });
   const [channelTab, setChannelTab] = useState<'messages' | 'canvas' | 'pins'>('messages');
   const [huddleLink, setHuddleLink] = useState<string | null>(null);
   const [highlightMessageId, setHighlightMessageId] = useState<string | null>(
@@ -124,6 +134,8 @@ export function ChatWorkspace({
   } | null>(null);
   const [startDmOpen, setStartDmOpen] = useState(false);
   const [manageMembersOpen, setManageMembersOpen] = useState(false);
+  const [viewerCanInviteClientTeammates, setViewerCanInviteClientTeammates] =
+    useState(false);
   const [pinnedMessages, setPinnedMessages] = useState<
     Array<{ id: string; pinnedAt: string; message: ChatMessage }>
   >([]);
@@ -143,6 +155,8 @@ export function ChatWorkspace({
     subscribeMessageCreated,
     subscribeChannelEvents,
   } = useRealtime();
+  const { unreadByChannel, loaded: unreadLoaded, setActiveChannel } =
+    useUnreadMessages();
   const isExternalUser = userIsExternal(user);
   const canCreateChannel =
     !isExternalUser && userHasPermission(user, 'channels.create_internal');
@@ -225,7 +239,28 @@ export function ChatWorkspace({
 
   useEffect(() => {
     selectedChannelIdRef.current = selectedChannelId;
+    setActiveChannel(selectedChannelId);
+    return () => setActiveChannel(null);
+  }, [selectedChannelId, setActiveChannel]);
+
+  useEffect(() => {
+    setDetailsOpen(false);
   }, [selectedChannelId]);
+
+  useEffect(() => {
+    if (!unreadLoaded) {
+      return;
+    }
+    setChannels((current) =>
+      current.map((channel) => ({
+        ...channel,
+        unreadCount:
+          channel.id === selectedChannelIdRef.current
+            ? 0
+            : (unreadByChannel[channel.id] ?? 0),
+      })),
+    );
+  }, [unreadByChannel, unreadLoaded]);
 
   useEffect(() => {
     threadMessageIdRef.current = threadMessageId;
@@ -236,20 +271,6 @@ export function ChatWorkspace({
       const typedMessage = message as ChatMessage;
       const activeChannelId = selectedChannelIdRef.current;
       const activeThreadId = threadMessageIdRef.current;
-
-      setChannels((current) =>
-        current.map((channel) =>
-          channel.id === channelId
-            ? {
-                ...channel,
-                unreadCount:
-                  channelId === activeChannelId
-                    ? 0
-                    : (channel.unreadCount ?? 0) + 1,
-              }
-            : channel,
-        ),
-      );
 
       if (typedMessage.isThreadReply && typedMessage.parentMessageId) {
         if (
@@ -323,31 +344,47 @@ export function ChatWorkspace({
   }, [subscribeChannelEvents, user.id]);
 
   useEffect(() => {
-    if (!selectedChannelId) return;
+    if (!selectedChannelId || isLoadingChannels) return;
 
-    joinChannel(selectedChannelId);
+    const requestChannelId = selectedChannelId;
+    joinChannel(requestChannelId);
     setChannelTab('messages');
     setIsLoadingMessages(true);
+    setMessages([]);
     setErrorMessage(null);
     setThreadMessageId(null);
     setThreadReplies([]);
+    setHuddleLink(null);
+    const openChannel = channelsRef.current.find(
+      (channel) => channel.id === requestChannelId,
+    );
+    setUnreadSince(
+      (openChannel?.unreadCount ?? 0) > 0
+        ? openChannel?.lastReadAt ?? new Date(0).toISOString()
+        : null,
+    );
+
+    let cancelled = false;
 
     Promise.all([
       apiRequest<ApiResponse<ChatMessage[]>>(
-        `/channels/${selectedChannelId}/messages`,
+        `/channels/${requestChannelId}/messages`,
       ),
-      apiRequest<ApiResponse<unknown>>(`/channels/${selectedChannelId}/read`, {
+      apiRequest<ApiResponse<unknown>>(`/channels/${requestChannelId}/read`, {
         method: 'POST',
       }),
       apiRequest<ApiResponse<{ joinPath?: string } | null>>(
-        `/channels/${selectedChannelId}/huddles/active`,
+        `/channels/${requestChannelId}/huddles/active`,
       ).catch(() => ({ success: true, data: null })),
     ])
       .then(([messagesResponse, , huddleResponse]) => {
+        if (cancelled || selectedChannelIdRef.current !== requestChannelId) {
+          return;
+        }
         setMessages(messagesResponse.data);
         setChannels((current) =>
           current.map((channel) =>
-            channel.id === selectedChannelId
+            channel.id === requestChannelId
               ? { ...channel, unreadCount: 0 }
               : channel,
           ),
@@ -355,19 +392,31 @@ export function ChatWorkspace({
         const joinPath = huddleResponse.data?.joinPath;
         setHuddleLink(joinPath ? `${window.location.origin}${joinPath}` : null);
       })
-      .catch((error: Error) => setErrorMessage(error.message))
-      .finally(() => setIsLoadingMessages(false));
+      .catch((error: Error) => {
+        if (cancelled || selectedChannelIdRef.current !== requestChannelId) {
+          return;
+        }
+        setErrorMessage(error.message);
+      })
+      .finally(() => {
+        if (cancelled || selectedChannelIdRef.current !== requestChannelId) {
+          return;
+        }
+        setIsLoadingMessages(false);
+      });
 
     return () => {
-      leaveChannel(selectedChannelId);
+      cancelled = true;
+      leaveChannel(requestChannelId);
     };
-  }, [selectedChannelId, joinChannel, leaveChannel]);
+  }, [selectedChannelId, isLoadingChannels, joinChannel, leaveChannel]);
 
   useEffect(() => {
     const channel = channels.find((item) => item.id === selectedChannelId);
 
     if (!selectedChannelId || channel?.type !== 'client_shared') {
       setChannelContext(null);
+      setViewerCanInviteClientTeammates(false);
       return;
     }
 
@@ -378,6 +427,7 @@ export function ChatWorkspace({
           name: string;
           clientOrganization?: { name: string } | null;
         } | null;
+        viewerCanInviteClientTeammates?: boolean;
       }>
     >(`/channels/${selectedChannelId}`)
       .then((response) => {
@@ -389,8 +439,14 @@ export function ChatWorkspace({
             channel.displayName ??
             undefined,
         });
+        setViewerCanInviteClientTeammates(
+          Boolean(response.data.viewerCanInviteClientTeammates),
+        );
       })
-      .catch(() => setChannelContext(null));
+      .catch(() => {
+        setChannelContext(null);
+        setViewerCanInviteClientTeammates(false);
+      });
   }, [selectedChannelId, channels]);
 
   useEffect(() => {
@@ -407,12 +463,12 @@ export function ChatWorkspace({
   }, [selectedChannelId]);
 
   useEffect(() => {
-    if (!selectedChannelId || channelTab !== 'pins') {
+    if (!selectedChannelId || (channelTab !== 'pins' && !detailsOpen)) {
       return;
     }
 
     void loadPinnedMessages(selectedChannelId);
-  }, [selectedChannelId, channelTab, loadPinnedMessages]);
+  }, [selectedChannelId, channelTab, detailsOpen, loadPinnedMessages]);
 
   useEffect(() => {
     if (!selectedChannelId) {
@@ -657,6 +713,33 @@ export function ChatWorkspace({
     setChannelTab('messages');
     setHighlightMessageId(messageId);
     setThreadMessageId(null);
+    setDetailsOpen(false);
+  }
+
+  function handleOpenThread(messageId: string) {
+    setDetailsOpen(false);
+    setThreadMessageId(messageId);
+  }
+
+  function handleToggleDetails() {
+    setDetailsOpen((current) => {
+      const next = !current;
+      if (next) {
+        setThreadMessageId(null);
+      }
+      return next;
+    });
+  }
+
+  function handleToggleSidebar() {
+    setSidebarOpen((current) => {
+      const next = !current;
+      window.localStorage.setItem(
+        'pconnect.chat.sidebarOpen',
+        next ? '1' : '0',
+      );
+      return next;
+    });
   }
 
   async function handleMarkUnread(messageId: string) {
@@ -712,9 +795,12 @@ export function ChatWorkspace({
     (channel) => channel.id === selectedChannelId,
   );
   const canManageMembers =
-    canCreateChannel &&
-    (selectedChannel?.type === 'private' ||
-      selectedChannel?.type === 'client_shared');
+    (canCreateChannel &&
+      (selectedChannel?.type === 'private' ||
+        selectedChannel?.type === 'client_shared')) ||
+    (isExternalUser &&
+      selectedChannel?.type === 'client_shared' &&
+      viewerCanInviteClientTeammates);
   const canInvite = canManageMembers || selectedChannel?.type === 'public';
   const activeThreadMessage = messages.find(
     (message) => message.id === threadMessageId,
@@ -733,21 +819,27 @@ export function ChatWorkspace({
       <>
         <div className="space-y-4">
           <EmptyState
-            title={isExternalUser ? 'Messages not ready yet' : 'No channels yet'}
+            title={isExternalUser ? 'No conversations yet' : 'No channels yet'}
             description={
               isExternalUser
-                ? 'Your team will invite you when client messaging is ready.'
+                ? 'Message your organization teammates or wait for a shared project channel invite.'
                 : 'Join or create a channel to start collaborating.'
             }
           />
-          {canCreateChannel ? (
-            <div className="flex justify-center">
+          <div className="flex justify-center gap-2">
+            {canCreateChannel ? (
               <Button onClick={openCreateChannel}>
                 <Plus className="h-4 w-4" />
                 Create channel
               </Button>
-            </div>
-          ) : null}
+            ) : null}
+            {isExternalUser ? (
+              <Button onClick={() => setStartDmOpen(true)}>
+                <Plus className="h-4 w-4" />
+                Start a message
+              </Button>
+            ) : null}
+          </div>
         </div>
         <CreateChannelModal
           open={createChannelOpen}
@@ -757,79 +849,114 @@ export function ChatWorkspace({
           presetClientOrganizationId={channelPreset?.clientOrganizationId}
           lockClientOrganization={Boolean(channelPreset?.clientOrganizationId)}
         />
+        <StartDirectMessageModal
+          open={startDmOpen}
+          onClose={() => setStartDmOpen(false)}
+          onStarted={handleDirectMessageStarted}
+          isExternalUser={isExternalUser}
+        />
       </>
     );
   }
 
   if (channels.length === 0 && pendingInvites.length > 0) {
     return (
-      <Card padding="md" className="max-w-xl space-y-4">
-        <div>
-          <h2 className="text-base font-semibold text-[var(--foreground)]">
-            Pending channel invitations
-          </h2>
-          <p className="mt-1 text-sm text-[var(--muted)]">
-            Accept an invitation to join a shared client channel.
-          </p>
-        </div>
-        <div className="space-y-3">
-          {pendingInvites.map((invite) => (
-            <div
-              key={invite.id}
-              className="flex items-center justify-between gap-3 rounded-[var(--radius-md)] border border-[var(--border)] p-3"
-            >
-              <div>
-                <p className="text-sm font-medium">#{invite.channel.name}</p>
-              </div>
-              <Button
-                size="sm"
-                disabled={acceptingInviteId === invite.id}
-                onClick={() => void handleAcceptInvite(invite)}
+      <>
+        <Card padding="md" className="max-w-xl space-y-4">
+          <div>
+            <h2 className="text-base font-semibold text-[var(--foreground)]">
+              Pending channel invitations
+            </h2>
+            <p className="mt-1 text-sm text-[var(--muted)]">
+              Accept an invitation to join a shared client channel, or message
+              your teammates anytime.
+            </p>
+          </div>
+          <div className="space-y-3">
+            {pendingInvites.map((invite) => (
+              <div
+                key={invite.id}
+                className="flex items-center justify-between gap-3 rounded-[var(--radius-md)] border border-[var(--border)] p-3"
               >
-                Accept
-              </Button>
-            </div>
-          ))}
-        </div>
-      </Card>
+                <div>
+                  <p className="text-sm font-medium">#{invite.channel.name}</p>
+                </div>
+                <Button
+                  size="sm"
+                  disabled={acceptingInviteId === invite.id}
+                  onClick={() => void handleAcceptInvite(invite)}
+                >
+                  Accept
+                </Button>
+              </div>
+            ))}
+          </div>
+          {isExternalUser ? (
+            <Button variant="secondary" onClick={() => setStartDmOpen(true)}>
+              <Plus className="h-4 w-4" />
+              Start a message
+            </Button>
+          ) : null}
+        </Card>
+        <StartDirectMessageModal
+          open={startDmOpen}
+          onClose={() => setStartDmOpen(false)}
+          onStarted={handleDirectMessageStarted}
+          isExternalUser={isExternalUser}
+        />
+      </>
     );
   }
+
+  const showMobileChat = Boolean(selectedChannelId);
+  const showDesktopSidebar = sidebarOpen;
 
   return (
     <>
       <div
         className={cn(
-          'grid h-full min-h-0 gap-4',
-          isExternalUser
-            ? threadMessageId
-              ? 'lg:grid-cols-[minmax(0,1fr)_360px]'
-              : 'lg:grid-cols-[minmax(0,1fr)]'
-            : threadMessageId
-              ? 'lg:grid-cols-[260px_minmax(0,1fr)_360px]'
-              : 'lg:grid-cols-[260px_minmax(0,1fr)]',
+          'grid h-full min-h-0 gap-0 lg:gap-3',
+          showDesktopSidebar && (detailsOpen || threadMessageId)
+            ? 'lg:grid-cols-[280px_minmax(0,1fr)_320px]'
+            : showDesktopSidebar
+              ? 'lg:grid-cols-[280px_minmax(0,1fr)]'
+              : detailsOpen || threadMessageId
+                ? 'lg:grid-cols-[minmax(0,1fr)_320px]'
+                : 'lg:grid-cols-[minmax(0,1fr)]',
         )}
       >
-        {!isExternalUser ? (
-          <ChannelSidebar
-            channels={channels}
-            selectedChannelId={selectedChannelId}
-            pendingInvites={pendingInvites}
-            acceptingInviteId={acceptingInviteId}
-            canCreateChannel={canCreateChannel}
-            onSelectChannel={setSelectedChannelId}
-            onCreateChannel={openCreateChannel}
-            onCreateClientChannel={openCreateClientChannel}
-            onStartDirectMessage={() => setStartDmOpen(true)}
-            onAcceptInvite={(invite) => void handleAcceptInvite(invite)}
-          />
-        ) : null}
+        <ChannelSidebar
+          channels={channels}
+          selectedChannelId={selectedChannelId}
+          pendingInvites={pendingInvites}
+          acceptingInviteId={acceptingInviteId}
+          canCreateChannel={canCreateChannel}
+          onSelectChannel={setSelectedChannelId}
+          onCreateChannel={openCreateChannel}
+          onCreateClientChannel={
+            isExternalUser ? undefined : openCreateClientChannel
+          }
+          onStartDirectMessage={() => setStartDmOpen(true)}
+          onAcceptInvite={(invite) => void handleAcceptInvite(invite)}
+          className={cn(
+            showMobileChat ? 'hidden' : 'flex',
+            showDesktopSidebar ? 'lg:flex' : 'lg:hidden',
+          )}
+        />
 
-        <Card padding="none" className="flex min-h-0 flex-col overflow-hidden">
+        <Card
+          padding="none"
+          className={cn(
+            'flex min-h-0 min-w-0 flex-col overflow-hidden',
+            !showMobileChat ? 'hidden lg:flex' : 'flex',
+          )}
+        >
           <ChannelHeader
             channelName={selectedChannel?.name}
             channelDisplayName={selectedChannel?.displayName}
             channelType={selectedChannel?.type}
             channelContext={channelContext}
+            members={channelMembers}
             activeTab={channelTab}
             onTabChange={setChannelTab}
             canInvite={canInvite}
@@ -840,6 +967,17 @@ export function ChatWorkspace({
             notificationPreference={notificationPreference}
             isUpdatingNotification={isUpdatingNotification}
             onNotificationChange={handleNotificationChange}
+            detailsOpen={detailsOpen}
+            onToggleDetails={
+              selectedChannelId ? handleToggleDetails : undefined
+            }
+            sidebarOpen={sidebarOpen}
+            onToggleSidebar={handleToggleSidebar}
+            onBack={() => {
+              setSelectedChannelId(null);
+              setThreadMessageId(null);
+              setDetailsOpen(false);
+            }}
           />
 
           {channelTab === 'canvas' ? (
@@ -862,17 +1000,19 @@ export function ChatWorkspace({
                 <ChatScrollArea
                   scrollKey={selectedChannelId}
                   anchorMessageId={initialMessageId}
-                  contentClassName="space-y-1"
+                  containerClassName="px-3 py-3 sm:px-5 sm:py-4"
+                  contentClassName="space-y-0.5"
                 >
                   <MessageList
                     messages={messages}
                     channelId={selectedChannelId}
                     currentUserId={user.id}
+                    unreadSince={unreadSince}
                     canManageChannel={canManageMembers}
                     isLoading={isLoadingMessages}
                     activeThreadMessageId={threadMessageId}
                     highlightMessageId={highlightMessageId}
-                    onReply={setThreadMessageId}
+                    onReply={handleOpenThread}
                     onReact={handleReact}
                     onEdit={handleEdit}
                     onDelete={handleDelete}
@@ -884,7 +1024,7 @@ export function ChatWorkspace({
                 </ChatScrollArea>
               ) : null}
 
-              <div className="shrink-0 border-t border-[var(--border)] bg-[var(--surface)] p-4 sm:p-6">
+              <div className="safe-pb shrink-0 border-t border-[var(--border)] bg-[var(--surface)] p-3 sm:p-4">
                 <ChatComposer
                   channelId={selectedChannelId}
                   channelName={
@@ -904,7 +1044,27 @@ export function ChatWorkspace({
           )}
         </Card>
 
-        {threadMessageId && activeThreadMessage && selectedChannelId ? (
+        {detailsOpen && selectedChannelId ? (
+          <ChannelDetailsPanel
+            channelName={selectedChannel?.name}
+            channelDisplayName={selectedChannel?.displayName}
+            channelType={selectedChannel?.type}
+            channelContext={channelContext}
+            members={channelMembers}
+            messages={messages}
+            pins={pinnedMessages}
+            isLoadingPins={isLoadingPins}
+            canInvite={canInvite}
+            onInvite={() => setManageMembersOpen(true)}
+            onJumpToPin={handleJumpToPinnedMessage}
+            onClose={() => setDetailsOpen(false)}
+          />
+        ) : null}
+
+        {!detailsOpen &&
+        threadMessageId &&
+        activeThreadMessage &&
+        selectedChannelId ? (
           <ThreadPanel
             channelId={selectedChannelId}
             channelName={selectedChannel?.name}
@@ -946,10 +1106,14 @@ export function ChatWorkspace({
         open={startDmOpen}
         onClose={() => setStartDmOpen(false)}
         onStarted={handleDirectMessageStarted}
+        isExternalUser={isExternalUser}
       />
       <ManageChannelMembersModal
         open={manageMembersOpen}
         channelId={selectedChannelId}
+        clientAdminMode={
+          isExternalUser && Boolean(viewerCanInviteClientTeammates)
+        }
         onClose={() => setManageMembersOpen(false)}
         onUpdated={() => void loadChannels()}
       />

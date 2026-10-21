@@ -1,6 +1,6 @@
 'use client';
 
-import { ReactNode, useEffect, useState } from 'react';
+import { ReactNode, useCallback, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { AppShell } from '@/components/layout/AppShell';
 import {
@@ -11,6 +11,7 @@ import {
   getStoredToken,
 } from '@/lib/auth';
 import { apiRequest } from '@/lib/api-client';
+import { disableDevicePush } from '@/lib/push-notifications';
 import { CardGridSkeleton } from '@/components/ui/Skeleton';
 import { Logo } from '@/components/ui/Logo';
 
@@ -46,7 +47,25 @@ export default function ProtectedLayout({ children }: ProtectedLayoutProps) {
       });
   }, [router]);
 
+  const refreshUser = useCallback(async () => {
+    const token = getStoredToken();
+    if (!token) {
+      return;
+    }
+
+    const response = await apiRequest<ApiResponse<AuthenticatedUser>>(
+      '/auth/me',
+      { token },
+    );
+    setUser(response.data);
+  }, []);
+
   async function handleLogout() {
+    try {
+      await disableDevicePush();
+    } catch {
+      // Drop the local session even if the device subscription cannot be removed.
+    }
     try {
       await apiRequest('/auth/logout', {
         method: 'POST',
@@ -82,7 +101,7 @@ export default function ProtectedLayout({ children }: ProtectedLayoutProps) {
   }
 
   return (
-    <AppShell user={user} onLogout={handleLogout}>
+    <AppShell user={user} onLogout={handleLogout} refreshUser={refreshUser}>
       {children}
     </AppShell>
   );

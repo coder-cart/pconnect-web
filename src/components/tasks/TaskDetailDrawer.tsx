@@ -249,29 +249,35 @@ export function TaskDetailDrawer({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex justify-end">
+    <div className="fixed inset-0 z-50 flex items-stretch justify-end">
       <button
         type="button"
         className="absolute inset-0 bg-black/30 backdrop-blur-sm"
         aria-label="Close task details"
         onClick={onClose}
       />
-      <aside className="relative flex h-full w-full max-w-md flex-col border-l border-[var(--border)] bg-[var(--surface)] shadow-[var(--shadow-md)]">
-        <div className="flex items-center justify-between border-b border-[var(--border)] px-5 py-4">
+      <aside className="relative flex h-[100dvh] max-h-[100dvh] w-full max-w-md flex-col border-l border-[var(--border)] bg-[var(--surface)] shadow-[var(--shadow-md)]">
+        <div
+          className="flex shrink-0 items-center justify-between border-b border-[var(--border)] px-4 py-3 sm:px-5 sm:py-4"
+          style={{ paddingTop: 'max(0.75rem, var(--safe-top))' }}
+        >
           <h2 className="text-base font-semibold text-[var(--foreground)]">
             Task Details
           </h2>
           <button
             type="button"
             onClick={onClose}
-            className="rounded-[var(--radius-md)] p-2 text-[var(--muted)] hover:bg-[var(--surface-muted)]"
+            className="inline-flex min-h-touch min-w-touch items-center justify-center rounded-[var(--radius-md)] text-[var(--muted)] hover:bg-[var(--surface-muted)]"
             aria-label="Close drawer"
           >
             <X className="h-4 w-4" />
           </button>
         </div>
 
-        <div className="flex-1 overflow-y-auto px-5 py-4">
+        <div
+          className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-4 sm:px-5"
+          style={{ paddingBottom: 'max(1rem, var(--safe-bottom))' }}
+        >
           {isLoading ? (
             <LoadingState
               title="Loading task"

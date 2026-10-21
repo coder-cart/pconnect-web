@@ -7,6 +7,7 @@ interface WorkspaceContextValue {
   user: AuthenticatedUser;
   refreshKey: number;
   notifyRefresh: () => void;
+  refreshUser: () => Promise<void>;
 }
 
 const WorkspaceContext = createContext<WorkspaceContextValue | null>(null);
@@ -15,15 +16,19 @@ export function WorkspaceProvider({
   user,
   refreshKey,
   notifyRefresh,
+  refreshUser,
   children,
 }: {
   user: AuthenticatedUser;
   refreshKey: number;
   notifyRefresh: () => void;
+  refreshUser: () => Promise<void>;
   children: ReactNode;
 }) {
   return (
-    <WorkspaceContext.Provider value={{ user, refreshKey, notifyRefresh }}>
+    <WorkspaceContext.Provider
+      value={{ user, refreshKey, notifyRefresh, refreshUser }}
+    >
       {children}
     </WorkspaceContext.Provider>
   );

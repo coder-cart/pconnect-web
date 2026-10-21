@@ -113,11 +113,16 @@ export function ChatMessageBody({
               href={downloadUrl}
               target="_blank"
               rel="noopener noreferrer"
-              className="flex items-center gap-3 rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface-muted)] p-3 hover:bg-[var(--surface)]"
+              className="mt-1 flex max-w-md items-center gap-3 rounded-[var(--radius-md)] border border-[var(--primary)]/20 bg-[var(--primary-soft)]/40 px-3 py-2.5 hover:bg-[var(--primary-soft)]/70"
             >
-              <FileText className="h-4 w-4 text-[var(--primary)]" />
-              <span className="truncate text-sm font-medium text-[var(--foreground)]">
-                {fileName}
+              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[var(--radius-sm)] bg-[var(--surface)] text-[var(--primary)] shadow-sm">
+                <FileText className="h-4 w-4" />
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-sm font-medium text-[var(--foreground)]">
+                  {fileName}
+                </span>
+                <span className="block text-xs text-[var(--muted)]">Attachment</span>
               </span>
             </a>
           );

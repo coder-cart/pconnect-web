@@ -21,9 +21,10 @@ const variantClasses: Record<ButtonVariant, string> = {
 };
 
 const sizeClasses: Record<ButtonSize, string> = {
-  sm: 'h-8 px-3 text-xs',
-  md: 'h-10 px-4 text-sm',
-  lg: 'h-11 px-5 text-sm',
+  // sm stays compact on desktop; min-h-touch improves tap targets on phones
+  sm: 'min-h-[var(--touch-min)] px-3 text-sm sm:min-h-8 sm:h-8 sm:text-xs',
+  md: 'min-h-10 h-10 px-4 text-sm',
+  lg: 'min-h-11 h-11 px-5 text-sm',
 };
 
 export const Button = forwardRef<HTMLButtonElement, ButtonProps>(

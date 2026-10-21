@@ -8,9 +8,12 @@ import { Card } from '@/components/ui/Card';
 import {
   ClientLifecycleStage,
   MANAGER_WORKFLOW_OPTIONS,
+  canCorrectDeliveryLink,
+  canMarkOrderReceived,
   clientLifecycleStage,
   toExternalHref,
 } from '@/lib/orders';
+import { useWorkspace } from '@/components/providers/WorkspaceProvider';
 import { useOrderSheetExtraSave } from '@/components/orders/OrderExcelEditor';
 
 interface UserOption {
@@ -41,6 +44,11 @@ export function OrderAssignmentPanel({
   onUpdated,
   embedded = false,
 }: OrderAssignmentPanelProps) {
+  const { user } = useWorkspace();
+  const deliveryLinkLocked =
+    Boolean(initialDeliveryLink?.trim()) &&
+    !canCorrectDeliveryLink(user.roleCodes);
+  const canReceive = canMarkOrderReceived(user.roleCodes);
   const [users, setUsers] = useState<UserOption[]>([]);
   const [stage, setStage] = useState<ClientLifecycleStage | ''>(
     clientLifecycleStage(workflowStatusCode) ?? '',
@@ -69,8 +77,10 @@ export function OrderAssignmentPanel({
   }, [assignedArtistNames]);
 
   function validate(sheetDeliveryHref: string | null) {
-    const ownHref = toExternalHref(deliveryLink);
-    if (!embedded && deliveryLink.trim() && !ownHref) {
+    const ownHref = deliveryLinkLocked
+      ? toExternalHref(initialDeliveryLink ?? '')
+      : toExternalHref(deliveryLink);
+    if (!embedded && !deliveryLinkLocked && deliveryLink.trim() && !ownHref) {
       return 'Enter a valid delivery link.';
     }
     const href = embedded ? sheetDeliveryHref : ownHref;
@@ -81,16 +91,20 @@ export function OrderAssignmentPanel({
   }
 
   async function persist() {
-    const ownHref = toExternalHref(deliveryLink);
+    const ownHref = deliveryLinkLocked
+      ? toExternalHref(initialDeliveryLink ?? '')
+      : toExternalHref(deliveryLink);
+    const sendDeliveryLink = !embedded && !deliveryLinkLocked;
     setBusy(true);
     setErrorMessage(null);
     try {
-      if (stage) {
+      const loadedStage = clientLifecycleStage(workflowStatusCode) ?? '';
+      if (stage && stage !== loadedStage) {
         await apiRequest(`/orders/${orderId}/lifecycle-stage`, {
           method: 'POST',
           body: JSON.stringify({
             stage,
-            ...(!embedded && ownHref ? { deliveryLink: ownHref } : {}),
+            ...(sendDeliveryLink && ownHref ? { deliveryLink: ownHref } : {}),
           }),
         });
       }
@@ -99,7 +113,7 @@ export function OrderAssignmentPanel({
         body: JSON.stringify({
           assignedTeamLeadUserId: teamLeadId || null,
           assignedQaUserId: qaId || null,
-          ...(embedded ? {} : { deliveryLink: ownHref }),
+          ...(sendDeliveryLink ? { deliveryLink: ownHref } : {}),
         }),
       });
     } catch (error) {
@@ -158,19 +172,22 @@ export function OrderAssignmentPanel({
         <input
           type="url"
           value={deliveryLink}
+          readOnly={deliveryLinkLocked}
           onChange={(event) => setDeliveryLink(event.target.value)}
           placeholder="https://..."
-          className="h-9 w-full rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface)] px-2.5 text-sm"
+          className="h-9 w-full rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface)] px-2.5 text-sm read-only:bg-[var(--surface-muted)]"
         />
         <span className="mt-1 block text-xs text-[var(--muted)]">
-          Required before Delivered. Saving the link does not change the status.
+          {deliveryLinkLocked
+            ? 'Locked after save. A company owner or internal admin can replace it.'
+            : 'Required before Delivered. Saving the link does not change the status.'}
         </span>
       </label>
       )}
       {errorMessage ? (
         <p className="text-sm text-[var(--danger)]">{errorMessage}</p>
       ) : null}
-      <div className="grid gap-3 sm:grid-cols-3">
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         <label className="text-sm">
           <span className="mb-1 block text-[11px] font-medium uppercase tracking-wide text-[var(--muted)]">
             Workflow
@@ -181,7 +198,10 @@ export function OrderAssignmentPanel({
             className="h-9 w-full rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface)] px-2.5 text-sm font-medium"
           >
             <option value="">Select status</option>
-            {MANAGER_WORKFLOW_OPTIONS.map((option) => (
+            {MANAGER_WORKFLOW_OPTIONS.filter(
+              (option) =>
+                option.id !== 'completed' || canReceive || stage === 'completed',
+            ).map((option) => (
               <option key={option.id} value={option.id}>
                 {option.label}
               </option>

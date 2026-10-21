@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { apiRequest } from '@/lib/api-client';
-import { ApiResponse } from '@/lib/auth';
+import { ApiResponse, userHasAnyPermission } from '@/lib/auth';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
@@ -32,7 +32,12 @@ interface EditorPaymentProfileRow {
 }
 
 export function MasterDataManager() {
-  const { refreshKey, notifyRefresh } = useWorkspace();
+  const { user, refreshKey, notifyRefresh } = useWorkspace();
+  const canViewFinance = userHasAnyPermission(user, [
+    'finance.invoices.view_all',
+    'finance.invoices.create',
+    'payments.manage',
+  ]);
   const [folderStatuses, setFolderStatuses] = useState<MasterDataItem[]>([]);
   const [orderStatuses, setOrderStatuses] = useState<MasterDataItem[]>([]);
   const [editorProfiles, setEditorProfiles] = useState<EditorPaymentProfileRow[]>([]);
@@ -64,9 +69,11 @@ export function MasterDataManager() {
       apiRequest<ApiResponse<MasterDataItem[]>>(
         '/master-data/items?category=order_status&activeOnly=false',
       ),
-      apiRequest<ApiResponse<EditorPaymentProfileRow[]>>(
-        '/orders/editor-payment-profiles',
-      ).catch(() => ({ data: [] as EditorPaymentProfileRow[] })),
+      canViewFinance
+        ? apiRequest<ApiResponse<EditorPaymentProfileRow[]>>(
+            '/orders/editor-payment-profiles',
+          ).catch(() => ({ data: [] as EditorPaymentProfileRow[] }))
+        : Promise.resolve({ data: [] as EditorPaymentProfileRow[] }),
     ])
       .then(([statusesResponse, orderStatusResponse, editorResponse]) => {
         setFolderStatuses(
@@ -87,7 +94,7 @@ export function MasterDataManager() {
       .finally(() => setIsLoading(false));
   }
 
-  useEffect(load, [refreshKey]);
+  useEffect(load, [refreshKey, canViewFinance]);
 
   async function handleSaveEditorProfile(profile: EditorPaymentProfileRow) {
     setBusy(true);
@@ -567,6 +574,7 @@ export function MasterDataManager() {
         </ul>
       </Card>
 
+      {canViewFinance ? (
       <Card>
         <h3 className="text-sm font-medium text-[var(--foreground)]">
           Editor payment models
@@ -651,6 +659,7 @@ export function MasterDataManager() {
           ))}
         </ul>
       </Card>
+      ) : null}
     </div>
   );
 }

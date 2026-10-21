@@ -87,7 +87,7 @@ export function ChatComposer({
   const [attachments, setAttachments] = useState<PendingAttachment[]>([]);
   const [emojiOpen, setEmojiOpen] = useState(false);
   const [linkOpen, setLinkOpen] = useState(false);
-  const [formatOpen, setFormatOpen] = useState(variant === 'thread');
+  const [formatOpen, setFormatOpen] = useState(true);
   const [linkUrl, setLinkUrl] = useState('');
   const [linkTitle, setLinkTitle] = useState('');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -630,7 +630,7 @@ export function ChatComposer({
                 <Smile className="h-4 w-4" />
               </button>
               {emojiOpen ? (
-                <div className="absolute bottom-full left-0 z-10 mb-1">
+                <div className="absolute bottom-full left-0 z-30 mb-1">
                   <EmojiPicker
                     onSelect={(emoji) => {
                       insertAtCursor(emoji);

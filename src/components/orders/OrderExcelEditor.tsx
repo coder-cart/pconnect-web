@@ -15,7 +15,8 @@ import { apiRequest } from '@/lib/api-client';
 import { ApiResponse } from '@/lib/auth';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
-import { OrderSummary, toExternalHref } from '@/lib/orders';
+import { OrderSummary, canCorrectDeliveryLink, toExternalHref } from '@/lib/orders';
+import { useWorkspace } from '@/components/providers/WorkspaceProvider';
 import {
   MasterDataStatus,
   computeOrderCost,
@@ -157,6 +158,10 @@ export function OrderExcelEditor({
   onUpdated,
   footer,
 }: OrderExcelEditorProps) {
+  const { user } = useWorkspace();
+  const deliveryLinkLocked =
+    Boolean(order.deliveryLink?.trim()) &&
+    !canCorrectDeliveryLink(user.roleCodes);
   const [clients, setClients] = useState<ClientOption[]>([]);
   const [folderStatuses, setFolderStatuses] = useState<MasterDataStatus[]>([]);
   const [users, setUsers] = useState<UserOption[]>([]);
@@ -182,6 +187,10 @@ export function OrderExcelEditor({
   );
   const [clientNotes, setClientNotes] = useState(order.clientNotes ?? '');
   const [sourceLink, setSourceLink] = useState(order.sourceLink ?? '');
+  const [editorLink, setEditorLink] = useState(order.editorLink ?? '');
+  const [editorInstructions, setEditorInstructions] = useState(
+    order.editorInstructions ?? '',
+  );
   const [deliveryLink, setDeliveryLink] = useState(order.deliveryLink ?? '');
   const [internalNotes, setInternalNotes] = useState(order.internalNotes ?? '');
   const [allocations, setAllocations] = useState<AllocationDraft[]>(() =>
@@ -199,6 +208,8 @@ export function OrderExcelEditor({
     setTimeSpentMinutes(String(order.timeSpentMinutes ?? 0));
     setClientNotes(order.clientNotes ?? '');
     setSourceLink(order.sourceLink ?? '');
+    setEditorLink(order.editorLink ?? '');
+    setEditorInstructions(order.editorInstructions ?? '');
     setDeliveryLink(order.deliveryLink ?? '');
     setInternalNotes(order.internalNotes ?? '');
     setAllocations(allocationsFromOrder(order));
@@ -309,7 +320,12 @@ export function OrderExcelEditor({
   async function handleSave() {
     const sourceHref = toExternalHref(sourceLink);
     if (sourceLink.trim() && !sourceHref) {
-      setErrorMessage('Enter a valid Drive or file link.');
+      setErrorMessage('Enter a valid client file link.');
+      return;
+    }
+    const editorHref = toExternalHref(editorLink);
+    if (editorLink.trim() && !editorHref) {
+      setErrorMessage('Enter a valid link for the editor.');
       return;
     }
     const deliveryHref = toExternalHref(deliveryLink);
@@ -336,13 +352,12 @@ export function OrderExcelEditor({
           outDate: outDate || undefined,
           folderStatusId: folderStatusId || null,
           priority,
-          estimatedTatHours: estimatedTatHours
-            ? Number(estimatedTatHours)
-            : undefined,
           timeSpentMinutes: Number(timeSpentMinutes) || 0,
           clientNotes: clientNotes.trim() || null,
           sourceLink: sourceHref,
-          deliveryLink: deliveryHref,
+          editorLink: editorHref,
+          editorInstructions: editorInstructions.trim() || null,
+          ...(deliveryLinkLocked ? {} : { deliveryLink: deliveryHref }),
           internalNotes: internalNotes.trim() || null,
         }),
       });
@@ -357,11 +372,15 @@ export function OrderExcelEditor({
             outFileCount: Number(row.outFileCount) || 0,
             rejectedFileCount: Number(row.rejectedFileCount) || 0,
             extraServiceCount: Number(row.extraServiceCount) || 0,
-            price: row.price ? Number(row.price) : null,
-            artistRatePerImage: row.artistRatePerImage
-              ? Number(row.artistRatePerImage)
-              : null,
-            cost: rowCosts[index] ?? null,
+            ...(canViewFinance
+              ? {
+                  price: row.price ? Number(row.price) : null,
+                  artistRatePerImage: row.artistRatePerImage
+                    ? Number(row.artistRatePerImage)
+                    : null,
+                  cost: rowCosts[index] ?? null,
+                }
+              : {}),
             sortOrder: index,
             serviceIds: row.serviceIds,
             folderStatusId: row.folderStatusId || null,
@@ -540,18 +559,14 @@ export function OrderExcelEditor({
             className="h-9 w-full rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface)] px-2 text-sm"
           />
         </label>
-        <label className="text-sm">
+        <div className="text-sm">
           <span className="mb-1 block text-[11px] font-medium uppercase tracking-wide text-[var(--muted)]">
-            ETA (h)
+            Turnaround
           </span>
-          <input
-            type="number"
-            min={0}
-            value={estimatedTatHours}
-            onChange={(event) => setEstimatedTatHours(event.target.value)}
-            className="h-9 w-full rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface)] px-2 text-sm"
-          />
-        </label>
+          <p className="flex h-9 items-center text-sm text-[var(--foreground)]">
+            {estimatedTatHours ? `${estimatedTatHours} hours` : 'Turnaround not set'}
+          </p>
+        </div>
         <label className="text-sm">
           <span className="mb-1 block text-[11px] font-medium uppercase tracking-wide text-[var(--muted)]">
             Time (min)
@@ -569,7 +584,7 @@ export function OrderExcelEditor({
       <div className="border-b border-[var(--border)] px-4 py-3">
         <label className="block text-sm">
           <span className="mb-1 block text-[11px] font-medium uppercase tracking-wide text-[var(--muted)]">
-            Drive or file link
+            Client file link
           </span>
           <input
             type="url"
@@ -579,6 +594,9 @@ export function OrderExcelEditor({
             className="h-9 w-full rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface)] px-2.5 text-sm"
           />
         </label>
+        <p className="mt-1 text-xs text-[var(--muted)]">
+          The client&apos;s original link. Editors and QA cannot see it.
+        </p>
         {toExternalHref(sourceLink) ? (
           <a
             href={toExternalHref(sourceLink) ?? undefined}
@@ -586,9 +604,47 @@ export function OrderExcelEditor({
             rel="noreferrer"
             className="mt-1 inline-block break-all text-sm text-[var(--primary)]"
           >
-            Open file link
+            Open client file link
           </a>
         ) : null}
+        <label className="mt-3 block text-sm">
+          <span className="mb-1 block text-[11px] font-medium uppercase tracking-wide text-[var(--muted)]">
+            Link for editor
+          </span>
+          <input
+            type="url"
+            value={editorLink}
+            onChange={(event) => setEditorLink(event.target.value)}
+            placeholder="https://drive.google.com/..."
+            className="h-9 w-full rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface)] px-2.5 text-sm"
+          />
+        </label>
+        <p className="mt-1 text-xs text-[var(--muted)]">
+          Working link you create for editors and QA. This is not the client&apos;s original link.
+        </p>
+        {toExternalHref(editorLink) ? (
+          <a
+            href={toExternalHref(editorLink) ?? undefined}
+            target="_blank"
+            rel="noreferrer"
+            className="mt-1 inline-block break-all text-sm text-[var(--primary)]"
+          >
+            Open editor link
+          </a>
+        ) : null}
+        <label className="mt-3 block text-sm">
+          <span className="mb-1 block text-[11px] font-medium uppercase tracking-wide text-[var(--muted)]">
+            Note for editor
+          </span>
+          <textarea
+            value={editorInstructions}
+            onChange={(event) => setEditorInstructions(event.target.value)}
+            rows={2}
+            maxLength={2000}
+            className="w-full resize-y rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface)] px-2.5 py-2 text-sm leading-snug"
+            placeholder="Optional instructions when a link is not enough"
+          />
+        </label>
         <label className="mt-3 block text-sm">
           <span className="mb-1 block text-[11px] font-medium uppercase tracking-wide text-[var(--muted)]">
             Delivery link
@@ -596,13 +652,16 @@ export function OrderExcelEditor({
           <input
             type="url"
             value={deliveryLink}
+            readOnly={deliveryLinkLocked}
             onChange={(event) => setDeliveryLink(event.target.value)}
             placeholder="https://..."
-            className="h-9 w-full rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface)] px-2.5 text-sm"
+            className="h-9 w-full rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface)] px-2.5 text-sm read-only:bg-[var(--surface-muted)]"
           />
         </label>
         <p className="mt-1 text-xs text-[var(--muted)]">
-          Save this link before marking the order Delivered. Saving the link does not change the status.
+          {deliveryLinkLocked
+            ? 'This delivery link is locked. A company owner or internal admin can replace it.'
+            : 'Save this link before marking the order Delivered. Saving the link does not change the status.'}
         </p>
       </div>
 
@@ -857,6 +916,7 @@ export function OrderExcelEditor({
 export function OrderExcelReadOnly({
   order,
   canViewFinance,
+  hideClientIdentity = false,
   showOrderFolderStatus = true,
   canEditAllocationStatus = false,
   canEditAllAllocationRows = false,
@@ -868,6 +928,7 @@ export function OrderExcelReadOnly({
 }: {
   order: OrderSummary;
   canViewFinance: boolean;
+  hideClientIdentity?: boolean;
   showOrderFolderStatus?: boolean;
   canEditAllocationStatus?: boolean;
   canEditAllAllocationRows?: boolean;
@@ -925,12 +986,14 @@ export function OrderExcelReadOnly({
         ) : null}
       </div>
       <div className="grid gap-x-4 gap-y-2 border-b border-[var(--border)] bg-[var(--surface-muted)] px-4 py-3 text-sm sm:grid-cols-2 lg:grid-cols-4">
-        <div>
-          <p className="text-[11px] font-medium uppercase tracking-wide text-[var(--muted)]">
-            Client
-          </p>
-          <p className="mt-0.5">{order.clientOrganization?.name ?? '—'}</p>
-        </div>
+        {hideClientIdentity ? null : (
+          <div>
+            <p className="text-[11px] font-medium uppercase tracking-wide text-[var(--muted)]">
+              Client
+            </p>
+            <p className="mt-0.5">{order.clientOrganization?.name ?? '—'}</p>
+          </div>
+        )}
         <div className="lg:col-span-2">
           <p className="text-[11px] font-medium uppercase tracking-wide text-[var(--muted)]">
             Order
@@ -964,7 +1027,7 @@ export function OrderExcelReadOnly({
             {formatDate(order.inDate)} → {formatDate(order.outDate)}
           </p>
         </div>
-        {toExternalHref(order.deliveryLink ?? '') ? (
+        {!hideClientIdentity && toExternalHref(order.deliveryLink ?? '') ? (
           <div className="sm:col-span-2 lg:col-span-4">
             <p className="text-[11px] font-medium uppercase tracking-wide text-[var(--muted)]">
               Delivery link
@@ -979,10 +1042,10 @@ export function OrderExcelReadOnly({
             </a>
           </div>
         ) : null}
-        {toExternalHref(order.sourceLink ?? '') ? (
+        {!hideClientIdentity && toExternalHref(order.sourceLink ?? '') ? (
           <div className="sm:col-span-2 lg:col-span-4">
             <p className="text-[11px] font-medium uppercase tracking-wide text-[var(--muted)]">
-              Drive or file link
+              Client file link
             </p>
             <a
               href={toExternalHref(order.sourceLink ?? '') ?? undefined}
@@ -994,7 +1057,41 @@ export function OrderExcelReadOnly({
             </a>
           </div>
         ) : null}
-        {order.clientNotes?.trim() ? (
+        {toExternalHref(order.editorLink ?? '') ? (
+          <div className="sm:col-span-2 lg:col-span-4">
+            <p className="text-[11px] font-medium uppercase tracking-wide text-[var(--muted)]">
+              Link for editor
+            </p>
+            <a
+              href={toExternalHref(order.editorLink ?? '') ?? undefined}
+              target="_blank"
+              rel="noreferrer"
+              className="mt-0.5 inline-block break-all text-[var(--primary)]"
+            >
+              {order.editorLink}
+            </a>
+          </div>
+        ) : null}
+        {order.editorInstructions?.trim() ? (
+          <div className="sm:col-span-2 lg:col-span-4">
+            <p className="text-[11px] font-medium uppercase tracking-wide text-[var(--muted)]">
+              Note for editor
+            </p>
+            <p className="mt-0.5 whitespace-pre-wrap text-[var(--muted)]">
+              {order.editorInstructions}
+            </p>
+          </div>
+        ) : null}
+        {hideClientIdentity &&
+        !toExternalHref(order.editorLink ?? '') &&
+        !order.editorInstructions?.trim() ? (
+          <div className="sm:col-span-2 lg:col-span-4">
+            <p className="text-sm text-[var(--muted)]">
+              No working link yet. Your manager has not added one.
+            </p>
+          </div>
+        ) : null}
+        {!hideClientIdentity && order.clientNotes?.trim() ? (
           <div className="sm:col-span-2 lg:col-span-4">
             <p className="text-[11px] font-medium uppercase tracking-wide text-[var(--muted)]">
               Notes from client

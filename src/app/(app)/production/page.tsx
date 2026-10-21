@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { Plus } from 'lucide-react';
 import { apiRequest } from '@/lib/api-client';
-import { ApiResponse, userHasPermission } from '@/lib/auth';
+import { ApiResponse, isProductionOnlyStaff, userHasPermission } from '@/lib/auth';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
@@ -23,6 +23,7 @@ import {
 export default function ProductionPage() {
   const { user, refreshKey, notifyRefresh } = useWorkspace();
   const canManage = userHasPermission(user, 'batches.manage');
+  const hideClientLinks = isProductionOnlyStaff(user?.roleCodes);
   const [batches, setBatches] = useState<BatchSummary[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -112,8 +113,10 @@ export default function ProductionPage() {
                       {batch.name}
                     </p>
                     <p className="text-xs text-[var(--muted)]">
-                      {batch.code} · {batch._count?.assets ?? 0} assets ·{' '}
-                      {batch.clientOrganization?.name ?? 'Internal'}
+                      {batch.code} · {batch._count?.assets ?? 0} assets
+                      {hideClientLinks
+                        ? ''
+                        : ` · ${batch.clientOrganization?.name ?? 'Internal'}`}
                       {batch.order
                         ? ` · Order ${batch.order.code}`
                         : ''}
