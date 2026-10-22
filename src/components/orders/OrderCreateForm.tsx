@@ -57,6 +57,8 @@ interface OrderCreateModalProps {
   isExternal: boolean;
   /** Locked client (client detail page). External users also auto-lock. */
   defaultClientId?: string;
+  /** Prefill New Order vs Revision when opening from the dashboard menu. */
+  initialMode?: 'new' | 'revision';
   onClose: () => void;
   onCreated: () => void;
 }
@@ -110,6 +112,7 @@ export function OrderCreateModal({
   canManage,
   isExternal,
   defaultClientId,
+  initialMode = 'new',
   onClose,
   onCreated,
 }: OrderCreateModalProps) {
@@ -169,7 +172,7 @@ export function OrderCreateModal({
     setWorkLines([emptyWorkLine()]);
     setAssignedTeamLeadUserId('');
     setAssignedQaUserId('');
-    setOrderMode('new');
+    setOrderMode(initialMode);
     setParentOrderId('');
 
     const requests: Promise<void>[] = [
@@ -211,7 +214,7 @@ export function OrderCreateModal({
     }
 
     void Promise.all(requests);
-  }, [open, canManage, defaultClientId, isExternal]);
+  }, [open, canManage, defaultClientId, isExternal, initialMode]);
 
   useEffect(() => {
     if (!open || orderMode !== 'revision') return;

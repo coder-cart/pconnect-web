@@ -1035,10 +1035,11 @@ function ClientDeliveryActions({
   onSaveHistory: () => void;
 }) {
   const stage = clientLifecycleStage(order.workflowStatus?.code);
-  const canReceive = stage === 'ready_for_delivery' || stage === 'delivered';
+  const canReceive = stage === 'delivered';
+  const isCompleted = stage === 'completed' || Boolean(order.clientAcknowledgedAt);
   const deliveryHref = toExternalHref(order.deliveryLink ?? '');
 
-  if (!canReceive && !order.historySavedAt) {
+  if (!canReceive && !isCompleted && !order.historySavedAt) {
     return null;
   }
 
@@ -1065,17 +1066,15 @@ function ClientDeliveryActions({
           ? `Turnaround ${order.estimatedTatHours} hours`
           : 'Turnaround not set'}
       </p>
-      {order.historySavedAt ? (
-        <p className="text-sm text-[var(--muted)]">Saved to your order history.</p>
+      {isCompleted ? (
+        <p className="text-sm text-[var(--muted)]">
+          Receipt confirmed — this order is completed.
+        </p>
       ) : (
         <div className="flex flex-wrap gap-2">
-          {order.clientAcknowledgedAt ? (
-            <p className="text-sm text-[var(--muted)]">Delivery acknowledged.</p>
-          ) : (
-            <Button size="sm" onClick={onAcknowledge} disabled={busy || !canReceive}>
-              Acknowledge delivery
-            </Button>
-          )}
+          <Button size="sm" onClick={onAcknowledge} disabled={busy || !canReceive}>
+            Mark as Received
+          </Button>
           <Button
             size="sm"
             variant="secondary"

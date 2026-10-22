@@ -10,6 +10,7 @@ import { MessageContextMenuWrapper } from '@/components/chat/MessageContextMenu'
 import { ReactionBar } from '@/components/chat/ReactionBar';
 import { ChatMessage } from '@/lib/chat-types';
 import { formatMessageTime } from '@/lib/formatMessageDate';
+import { useViewerTimeZone } from '@/hooks/useViewerTimeZone';
 import { cn } from '@/lib/cn';
 
 interface MessageItemProps {
@@ -49,6 +50,7 @@ export function MessageItem({
 }: MessageItemProps) {
   const [hovered, setHovered] = useState(false);
   const [toolbarLocked, setToolbarLocked] = useState(false);
+  const timeZone = useViewerTimeZone();
 
   if (message.deletedAt) {
     return (
@@ -114,7 +116,7 @@ export function MessageItem({
               {message.sender.fullName}
             </p>
             <span className="text-xs text-[var(--muted)]">
-              {formatMessageTime(message.createdAt)}
+              {formatMessageTime(message.createdAt, timeZone)}
             </span>
             {message.isEdited ? (
               <span className="text-xs text-[var(--muted)]">(edited)</span>

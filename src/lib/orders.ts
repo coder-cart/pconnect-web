@@ -160,19 +160,55 @@ export type ClientLifecycleStage =
   | 'order_received'
   | 'in_progress'
   | 'quality_check'
-  | 'ready_for_delivery'
   | 'delivered'
   | 'completed';
 
+/** @deprecated Legacy alias — maps into quality_check. */
+export type LegacyReadyForDeliveryStage = 'ready_for_delivery';
+
 const LIFECYCLE_CODES: Record<ClientLifecycleStage, string[]> = {
-  order_received: ['pending_review', 'waiting_for_files'],
-  in_progress: ['assigned', 'editing', 'culling', 'retouching', 'revision_required'],
-  quality_check: ['qa_review', 'client_review', 'approved'],
-  ready_for_delivery: ['ready_for_delivery'],
+  order_received: [
+    'new_order',
+    'pending_review',
+    'waiting_for_files',
+    'on_hold',
+  ],
+  in_progress: [
+    'assigned',
+    'editing',
+    'culling',
+    'retouching',
+    'revision_required',
+  ],
+  quality_check: [
+    'qa_review',
+    'client_review',
+    'approved',
+    'ready_for_delivery',
+  ],
   delivered: ['delivered'],
   completed: ['completed'],
 };
 
+export const MANAGER_DASHBOARD_TABS = [
+  { id: 'order_received', label: 'Order Received' },
+  { id: 'in_progress', label: 'In Progress' },
+  { id: 'quality_check', label: 'Quality Check' },
+  { id: 'delivered', label: 'Delivered' },
+] as const;
+
+export type ManagerDashboardTab = (typeof MANAGER_DASHBOARD_TABS)[number]['id'];
+
+export const CLIENT_DASHBOARD_TABS = [
+  { id: 'orders', label: 'Orders' },
+  { id: 'in_progress', label: 'In Progress' },
+  { id: 'delivered', label: 'Delivered' },
+  { id: 'completed', label: 'Completed' },
+] as const;
+
+export type ClientDashboardTab = (typeof CLIENT_DASHBOARD_TABS)[number]['id'];
+
+/** @deprecated Prefer MANAGER_DASHBOARD_TABS / CLIENT_DASHBOARD_TABS */
 export const ORDER_LIST_SCOPES = [
   { id: 'active', label: 'Active' },
   { id: 'delivered', label: 'Delivered' },
@@ -199,10 +235,9 @@ export const MANAGER_WORKFLOW_OPTIONS: Array<{
   id: ClientLifecycleStage;
   label: string;
 }> = [
-  { id: 'order_received', label: 'Order received' },
-  { id: 'in_progress', label: 'In-progress' },
-  { id: 'quality_check', label: 'Quality check' },
-  { id: 'ready_for_delivery', label: 'Ready for Delivery' },
+  { id: 'order_received', label: 'Order Received' },
+  { id: 'in_progress', label: 'In Progress' },
+  { id: 'quality_check', label: 'Quality Check' },
   { id: 'delivered', label: 'Delivered' },
   { id: 'completed', label: 'Completed' },
 ];
@@ -211,10 +246,37 @@ export const CLIENT_LIFECYCLE_LABELS: Record<ClientLifecycleStage, string> = {
   order_received: 'Order Received',
   in_progress: 'In Progress',
   quality_check: 'Quality Check',
-  ready_for_delivery: 'Ready for Delivery',
   delivered: 'Delivered',
   completed: 'Completed',
 };
+
+export function workflowCodesForClientTab(tab: ClientDashboardTab): string[] {
+  if (tab === 'orders') return LIFECYCLE_CODES.order_received;
+  if (tab === 'in_progress') {
+    return [...LIFECYCLE_CODES.in_progress, ...LIFECYCLE_CODES.quality_check];
+  }
+  if (tab === 'delivered') return LIFECYCLE_CODES.delivered;
+  return LIFECYCLE_CODES.completed;
+}
+
+export function managerDashboardTab(
+  workflowCode: string | null | undefined,
+): ManagerDashboardTab | null {
+  const stage = clientLifecycleStage(workflowCode);
+  if (!stage || stage === 'completed') return null;
+  return stage;
+}
+
+export function clientDashboardTab(
+  workflowCode: string | null | undefined,
+): ClientDashboardTab | null {
+  const stage = clientLifecycleStage(workflowCode);
+  if (!stage) return null;
+  if (stage === 'order_received') return 'orders';
+  if (stage === 'in_progress' || stage === 'quality_check') return 'in_progress';
+  if (stage === 'delivered') return 'delivered';
+  return 'completed';
+}
 
 export interface OrderLifecycleSummary {
   total: number;
@@ -233,6 +295,7 @@ export function clientLifecycleStage(
   workflowCode: string | null | undefined,
 ): ClientLifecycleStage | null {
   if (!workflowCode) return null;
+  if (workflowCode === 'ready_for_delivery') return 'quality_check';
   const match = (
     Object.entries(LIFECYCLE_CODES) as Array<[ClientLifecycleStage, string[]]>
   ).find(([, codes]) => codes.includes(workflowCode));

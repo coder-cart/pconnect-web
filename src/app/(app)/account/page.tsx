@@ -1,10 +1,11 @@
 'use client';
 
-import { FormEvent, useEffect, useState } from 'react';
+import { FormEvent, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { Card } from '@/components/ui/Card';
 import { Input } from '@/components/ui/Input';
+import { Select } from '@/components/ui/Select';
 import { Button } from '@/components/ui/Button';
 import { ListSkeleton } from '@/components/ui/Skeleton';
 import { ErrorState } from '@/components/ui/StatePanels';
@@ -12,7 +13,9 @@ import { UserAvatar } from '@/components/ui/UserAvatar';
 import { apiRequest, apiUpload } from '@/lib/api-client';
 import { ApiResponse } from '@/lib/auth';
 import { useWorkspace } from '@/components/providers/WorkspaceProvider';
+import { getBrowserTimeZone } from '@/lib/formatMessageDate';
 import { getRoleLabel } from '@/lib/navigation';
+import { formatTimeZoneLabel, listTimeZoneOptions } from '@/lib/timezones';
 
 interface ProfileDetails {
   fullName: string;
@@ -21,6 +24,7 @@ interface ProfileDetails {
   jobTitle: string | null;
   bio: string | null;
   avatarUpdatedAt: string | null;
+  timeZone: string | null;
 }
 
 export default function AccountProfilePage() {
@@ -30,6 +34,7 @@ export default function AccountProfilePage() {
   const [phone, setPhone] = useState('');
   const [jobTitle, setJobTitle] = useState('');
   const [bio, setBio] = useState('');
+  const [timeZone, setTimeZone] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
@@ -37,6 +42,20 @@ export default function AccountProfilePage() {
   const [savedMessage, setSavedMessage] = useState<string | null>(null);
 
   const roleLabel = getRoleLabel(user.userType, user.roleCodes);
+  const deviceTimeZone = useMemo(() => getBrowserTimeZone(), []);
+  const timeZoneOptions = useMemo(() => {
+    const zones = listTimeZoneOptions();
+    return [
+      {
+        value: '',
+        label: `Use device timezone (${formatTimeZoneLabel(deviceTimeZone)})`,
+      },
+      ...zones.map((zone) => ({
+        value: zone,
+        label: formatTimeZoneLabel(zone),
+      })),
+    ];
+  }, [deviceTimeZone]);
 
   useEffect(() => {
     apiRequest<ApiResponse<ProfileDetails>>('/users/me')
@@ -46,6 +65,7 @@ export default function AccountProfilePage() {
         setPhone(response.data.phone ?? '');
         setJobTitle(response.data.jobTitle ?? '');
         setBio(response.data.bio ?? '');
+        setTimeZone(response.data.timeZone ?? '');
       })
       .catch((error: Error) => {
         setErrorMessage(error.message);
@@ -78,6 +98,7 @@ export default function AccountProfilePage() {
           phone,
           jobTitle,
           bio,
+          timeZone: timeZone.trim() ? timeZone.trim() : null,
         }),
       });
       setProfile(response.data);
@@ -85,6 +106,7 @@ export default function AccountProfilePage() {
       setPhone(response.data.phone ?? '');
       setJobTitle(response.data.jobTitle ?? '');
       setBio(response.data.bio ?? '');
+      setTimeZone(response.data.timeZone ?? '');
       await refreshUser();
       setSavedMessage('Profile saved.');
     } catch (error) {
@@ -253,6 +275,20 @@ export default function AccountProfilePage() {
               onChange={(event) => setJobTitle(event.target.value)}
               maxLength={80}
             />
+            <Select
+              label="Time zone"
+              name="timeZone"
+              value={timeZone}
+              onChange={(event) => setTimeZone(event.target.value)}
+              options={timeZoneOptions}
+            />
+            <p className="text-xs text-[var(--muted)]">
+              Chat timestamps use this zone. Leave on device timezone to follow
+              your computer
+              {user.userType === 'external'
+                ? ', or your client organization timezone when set.'
+                : '.'}
+            </p>
             <label className="block space-y-1.5">
               <span className="text-sm font-medium text-[var(--foreground)]">
                 About

@@ -177,7 +177,8 @@ export function buildWeekSeries(
     if (row.stage === 'order_received') bucket.pending += 1;
     else if (row.stage === 'in_progress') bucket.progress += 1;
     else if (row.stage === 'quality_check') bucket.qc += 1;
-    else if (row.stage === 'ready_for_delivery') bucket.ready += 1;
+    else if (row.stage === 'delivered' || row.stage === 'ready_for_delivery')
+      bucket.ready += 1;
   }
 
   return base;

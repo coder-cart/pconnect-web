@@ -41,16 +41,17 @@ import { RecentOrdersTable } from '@/components/dashboard/RecentOrdersTable';
 import { StatCard } from '@/components/ui/StatCard';
 
 function boardStage(code: string | null | undefined) {
-  if (!code || code === 'cancelled' || code === 'delivered' || code === 'completed') {
+  if (!code || code === 'cancelled' || code === 'completed') {
     return null;
   }
+  if (code === 'delivered') return 'delivered' as const;
   if (code === 'new_order' || code === 'on_hold') return 'order_received' as const;
   const stage = clientLifecycleStage(code);
   if (
     stage === 'order_received' ||
     stage === 'in_progress' ||
     stage === 'quality_check' ||
-    stage === 'ready_for_delivery'
+    stage === 'delivered'
   ) {
     return stage;
   }
@@ -98,7 +99,7 @@ export default function DashboardPage() {
     if (!isExternal && canViewOrders) {
       tasks.push(
         apiRequest<ApiResponse<{ items: OrderSummary[] }>>(
-          '/orders?pageSize=100&listScope=active',
+          '/orders?pageSize=100&listScope=board',
         )
           .then((response) => setOrders(response.data.items))
           .catch((error: Error) => {
@@ -126,7 +127,7 @@ export default function DashboardPage() {
       order_received: 0,
       in_progress: 0,
       quality_check: 0,
-      ready_for_delivery: 0,
+      delivered: 0,
     };
     for (const order of activeOrders) {
       const stage = boardStage(order.workflowStatus?.code);
@@ -139,7 +140,7 @@ export default function DashboardPage() {
     stageCounts.order_received +
     stageCounts.in_progress +
     stageCounts.quality_check +
-    stageCounts.ready_for_delivery;
+    stageCounts.delivered;
 
   const weekSeries = useMemo(
     () =>
@@ -172,9 +173,9 @@ export default function DashboardPage() {
       color: '#8b5cf6',
     },
     {
-      id: 'ready',
-      label: 'Ready',
-      count: stageCounts.ready_for_delivery,
+      id: 'delivered',
+      label: 'Delivered',
+      count: stageCounts.delivered,
       color: '#10b981',
     },
   ];
@@ -279,8 +280,8 @@ export default function DashboardPage() {
                 tone="pink"
               />
               <DashboardMetricCard
-                label="Ready for delivery"
-                value={stageCounts.ready_for_delivery}
+                label="Delivered"
+                value={stageCounts.delivered}
                 icon={CheckCircle2}
                 tone="green"
               />

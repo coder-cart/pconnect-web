@@ -8,6 +8,7 @@ import { EmptyState } from '@/components/ui/StatePanels';
 import { ListSkeleton } from '@/components/ui/Skeleton';
 import { ChatMessage } from '@/lib/chat-types';
 import { formatMessageTime } from '@/lib/formatMessageDate';
+import { useViewerTimeZone } from '@/hooks/useViewerTimeZone';
 
 interface PinnedMessageRecord {
   id: string;
@@ -30,6 +31,8 @@ export function PinnedMessagesPanel({
   onJumpToMessage,
   onUnpin,
 }: PinnedMessagesPanelProps) {
+  const timeZone = useViewerTimeZone();
+
   if (isLoading) {
     return (
       <div className="p-4">
@@ -74,7 +77,7 @@ export function PinnedMessagesPanel({
                       {pin.message.sender.fullName}
                     </span>
                     <span className="text-xs text-[var(--muted)]">
-                      {formatMessageTime(pin.message.createdAt)}
+                      {formatMessageTime(pin.message.createdAt, timeZone)}
                     </span>
                     <Pin className="h-3.5 w-3.5 text-[var(--primary)]" />
                   </div>

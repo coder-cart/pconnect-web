@@ -7,7 +7,6 @@ import {
   CheckCircle2,
   Clock,
   ExternalLink,
-  LayoutGrid,
   ShieldCheck,
   SlidersHorizontal,
 } from 'lucide-react';
@@ -27,7 +26,7 @@ type BoardColumnId =
   | 'order_received'
   | 'in_progress'
   | 'quality_check'
-  | 'ready_for_delivery';
+  | 'delivered';
 
 const COLUMNS: Array<{
   id: BoardColumnId;
@@ -40,9 +39,9 @@ const COLUMNS: Array<{
 }> = [
   {
     id: 'order_received',
-    label: 'Pending Orders',
+    label: 'Order Received',
     hint: 'Awaiting assignment',
-    footer: 'View all pending orders',
+    footer: 'View all received orders',
     icon: Clock,
     tint: 'color-mix(in srgb, #f97316 14%, var(--surface))',
     iconClass: 'bg-orange-500 text-white',
@@ -58,18 +57,18 @@ const COLUMNS: Array<{
   },
   {
     id: 'quality_check',
-    label: 'For Quality Check',
+    label: 'Quality Check',
     hint: 'Ready for review',
-    footer: 'View all QC orders',
+    footer: 'View all QA orders',
     icon: ShieldCheck,
     tint: 'color-mix(in srgb, #8b5cf6 14%, var(--surface))',
     iconClass: 'bg-violet-500 text-white',
   },
   {
-    id: 'ready_for_delivery',
-    label: 'Ready for Delivery',
-    hint: 'Waiting to send',
-    footer: 'View orders ready for delivery',
+    id: 'delivered',
+    label: 'Delivered',
+    hint: 'Awaiting client receipt',
+    footer: 'View all delivered orders',
     icon: CheckCircle2,
     tint: 'color-mix(in srgb, #22c55e 14%, var(--surface))',
     iconClass: 'bg-emerald-500 text-white',
@@ -80,20 +79,17 @@ const COLUMN_ENTRY_CODE: Record<BoardColumnId, string> = {
   order_received: 'pending_review',
   in_progress: 'editing',
   quality_check: 'qa_review',
-  ready_for_delivery: 'ready_for_delivery',
+  delivered: 'delivered',
 };
 
 function boardColumn(code: string | null | undefined): BoardColumnId | null {
-  if (!code || code === 'cancelled' || code === 'delivered' || code === 'completed') {
-    return null;
-  }
-  if (code === 'new_order' || code === 'on_hold') return 'order_received';
+  if (!code || code === 'cancelled' || code === 'completed') return null;
+  if (code === 'delivered') return 'delivered';
   const stage = clientLifecycleStage(code);
   if (
     stage === 'order_received' ||
     stage === 'in_progress' ||
-    stage === 'quality_check' ||
-    stage === 'ready_for_delivery'
+    stage === 'quality_check'
   ) {
     return stage;
   }
@@ -161,7 +157,10 @@ export function OrderKanbanBoard({
     setErrorMessage(null);
     const params = new URLSearchParams(queryString);
     params.set('pageSize', '100');
-    if (!params.get('listScope')) params.set('listScope', 'active');
+    params.delete('listScope');
+    params.delete('clientTab');
+    params.delete('managerTab');
+    params.set('listScope', 'board');
     apiRequest<ApiResponse<{ items: OrderSummary[] }>>(`/orders?${params.toString()}`)
       .then((response) => {
         if (!cancelled) setOrders(response.data.items);
@@ -185,17 +184,14 @@ export function OrderKanbanBoard({
       order_received: [],
       in_progress: [],
       quality_check: [],
-      ready_for_delivery: [],
+      delivered: [],
     };
     for (const order of orders) {
-      if (order.historySavedAt) continue;
       const column = boardColumn(order.workflowStatus?.code);
       if (column) buckets[column].push(order);
     }
     return buckets;
   }, [orders]);
-
-  const total = Object.values(grouped).reduce((sum, rows) => sum + rows.length, 0);
 
   async function moveOrder(
     order: OrderSummary,
@@ -205,15 +201,19 @@ export function OrderKanbanBoard({
     const current = boardColumn(order.workflowStatus?.code);
     if (current === stage && !deliveryLink) return;
     const previous = orders;
-    setOrders((current) =>
-      current.map((item) =>
+    setOrders((currentOrders) =>
+      currentOrders.map((item) =>
         item.id === order.id
           ? {
               ...item,
               workflowStatus: {
                 id: item.workflowStatus?.id ?? '',
-                name: COLUMNS.find((column) => column.id === stage)?.label ?? stage,
-                code: COLUMN_ENTRY_CODE[stage as BoardColumnId] ?? item.workflowStatus?.code ?? '',
+                name:
+                  COLUMNS.find((column) => column.id === stage)?.label ?? stage,
+                code:
+                  COLUMN_ENTRY_CODE[stage as BoardColumnId] ??
+                  item.workflowStatus?.code ??
+                  '',
                 metadata: item.workflowStatus?.metadata,
               },
               ...(deliveryLink ? { deliveryLink } : {}),
@@ -235,7 +235,9 @@ export function OrderKanbanBoard({
       setBoardRefresh((value) => value + 1);
     } catch (error) {
       setOrders(previous);
-      setMoveError(error instanceof Error ? error.message : 'Could not move the order');
+      setMoveError(
+        error instanceof Error ? error.message : 'Could not move the order',
+      );
     } finally {
       setBusy(false);
     }
@@ -246,48 +248,54 @@ export function OrderKanbanBoard({
     setOverColumn(null);
     setDraggingId(null);
     if (!order || boardColumn(order.workflowStatus?.code) === stage) return;
+
+    if (stage === 'delivered') {
+      const existing = order.deliveryLink?.trim() ?? '';
+      const link = window.prompt(
+        'Delivery link is required before marking Delivered:',
+        existing,
+      );
+      if (link == null) return;
+      if (!link.trim()) {
+        setMoveError('Add a delivery link before marking the order Delivered.');
+        return;
+      }
+      void moveOrder(order, stage, link.trim());
+      return;
+    }
+
     void moveOrder(order, stage);
   }
 
   if (isLoading) return <ListSkeleton rows={4} />;
   if (errorMessage) {
-    return <ErrorState title="Unable to load the order board" description={errorMessage} />;
+    return (
+      <ErrorState
+        title="Unable to load the order board"
+        description={errorMessage}
+      />
+    );
   }
 
   return (
     <div className="space-y-4">
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
-        <StatTile
-          label="Total Orders"
-          value={total}
-          hint="On this board"
-          icon={LayoutGrid}
-          iconClass="bg-blue-500 text-white"
-        />
-        {COLUMNS.map((column) => (
-          <StatTile
-            key={column.id}
-            label={column.label}
-            value={grouped[column.id].length}
-            hint={column.hint}
-            icon={column.icon}
-            iconClass={column.iconClass}
-          />
-        ))}
-      </div>
-
       {moveError ? (
         <ErrorState title="Order stayed in its column" description={moveError} />
+      ) : null}
+      {busy ? (
+        <p className="text-xs text-[var(--muted)]">Updating board…</p>
       ) : null}
 
       <div className="-mx-1 flex gap-3 overflow-x-auto overscroll-x-contain px-1 pb-2 snap-x snap-mandatory">
         {COLUMNS.map((column) => {
           const rows = grouped[column.id];
-          const draggingOrder = orders.find((item) => item.id === draggingId) ?? null;
+          const draggingOrder =
+            orders.find((item) => item.id === draggingId) ?? null;
           const sourceColumn = draggingOrder
             ? boardColumn(draggingOrder.workflowStatus?.code)
             : null;
-          const isDropTarget = overColumn === column.id && sourceColumn !== column.id;
+          const isDropTarget =
+            overColumn === column.id && sourceColumn !== column.id;
           return (
             <section
               key={column.id}
@@ -309,21 +317,28 @@ export function OrderKanbanBoard({
               }}
               onDrop={(event) => {
                 event.preventDefault();
-                const orderId =
+                const droppedId =
                   event.dataTransfer.getData('text/plain') || draggingId || '';
-                if (orderId) onDrop(column.id, orderId);
+                if (droppedId) onDrop(column.id, droppedId);
               }}
             >
               <header className="flex items-center gap-2 px-3 py-3">
-                <span className={cn('flex h-7 w-7 items-center justify-center rounded-full', column.iconClass)}>
+                <span
+                  className={cn(
+                    'flex h-7 w-7 items-center justify-center rounded-full',
+                    column.iconClass,
+                  )}
+                >
                   <column.icon className="h-3.5 w-3.5" aria-hidden />
                 </span>
-                <h2 className="text-sm font-semibold text-[var(--foreground)]">{column.label}</h2>
+                <h2 className="text-sm font-semibold text-[var(--foreground)]">
+                  {column.label}
+                </h2>
                 <span className="rounded-full bg-[var(--surface)] px-2 py-0.5 text-xs font-medium text-[var(--muted)]">
                   {rows.length}
                 </span>
                 <Link
-                  href={`/orders?lifecycleStage=${column.id}`}
+                  href={`/orders?managerTab=${column.id}&layout=list`}
                   className="ml-auto text-xs font-medium text-[var(--primary)]"
                 >
                   View all
@@ -332,7 +347,8 @@ export function OrderKanbanBoard({
               <div className="flex min-h-48 flex-1 flex-col gap-2 px-2 pb-2">
                 {isDropTarget ? (
                   <div className="rounded-[var(--radius-md)] border-2 border-dashed border-[var(--primary)] bg-[var(--surface)] px-3 py-4 text-center text-sm font-medium text-[var(--primary)]">
-                    Drop {draggingOrder?.name || draggingOrder?.code || 'order'} here
+                    Drop{' '}
+                    {draggingOrder?.name || draggingOrder?.code || 'order'} here
                   </div>
                 ) : null}
                 {rows.length === 0 && !isDropTarget ? (
@@ -340,23 +356,23 @@ export function OrderKanbanBoard({
                     Drag an order here
                   </p>
                 ) : null}
-                {rows.length === 0 ? null : (
-                  rows.map((order) => (
-                    <OrderCard
-                      key={order.id}
-                      order={order}
-                      dragging={draggingId === order.id}
-                      onOpen={onOpenOrder}
-                      onDragStart={() => setDraggingId(order.id)}
-                      onDragEnd={() => {
-                        setDraggingId(null);
-                        setOverColumn(null);
-                      }}
-                    />
-                  ))
-                )}
+                {rows.length === 0
+                  ? null
+                  : rows.map((order) => (
+                      <OrderCard
+                        key={order.id}
+                        order={order}
+                        dragging={draggingId === order.id}
+                        onOpen={onOpenOrder}
+                        onDragStart={() => setDraggingId(order.id)}
+                        onDragEnd={() => {
+                          setDraggingId(null);
+                          setOverColumn(null);
+                        }}
+                      />
+                    ))}
                 <Link
-                  href={`/orders?lifecycleStage=${column.id}`}
+                  href={`/orders?managerTab=${column.id}&layout=list`}
                   className="mt-auto rounded-[var(--radius-md)] border border-dashed border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-center text-xs font-medium text-[var(--muted)] hover:text-[var(--foreground)]"
                 >
                   {column.footer}
@@ -365,35 +381,6 @@ export function OrderKanbanBoard({
             </section>
           );
         })}
-      </div>
-    </div>
-  );
-}
-
-function StatTile({
-  label,
-  value,
-  hint,
-  icon: Icon,
-  iconClass,
-}: {
-  label: string;
-  value: number;
-  hint: string;
-  icon: typeof Clock;
-  iconClass: string;
-}) {
-  return (
-    <div className="rounded-[var(--radius-lg)] bg-[#0f172a] px-4 py-3 text-white">
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <p className="text-xs text-slate-300">{label}</p>
-          <p className="mt-1 text-2xl font-semibold">{value}</p>
-          <p className="text-xs text-slate-400">{hint}</p>
-        </div>
-        <span className={cn('flex h-9 w-9 items-center justify-center rounded-xl', iconClass)}>
-          <Icon className="h-4 w-4" aria-hidden />
-        </span>
       </div>
     </div>
   );
@@ -417,7 +404,8 @@ function OrderCard({
   const artist = artistName(order);
   const count = order.inFileCount || order.imageCount || 0;
   const deliveryHref = toExternalHref(order.deliveryLink ?? '');
-  const ready = order.workflowStatus?.code === 'ready_for_delivery';
+  const isRevision = Boolean(order.parentOrderId);
+  const awaitingReceipt = order.workflowStatus?.code === 'delivered';
   const priority = order.priority;
 
   function openOrder() {
@@ -499,6 +487,7 @@ function OrderCard({
           </p>
           <p className="truncate text-xs text-[var(--muted)]">
             {order.clientOrganization?.name ?? 'No client'}
+            {isRevision ? ' · Revision' : ' · New Order'}
           </p>
         </div>
       </div>
@@ -508,9 +497,9 @@ function OrderCard({
           <p>{count.toLocaleString()} images</p>
         </div>
         <div className="flex items-center gap-1.5">
-          {ready ? (
+          {awaitingReceipt ? (
             <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-medium text-emerald-800">
-              Ready
+              Awaiting receipt
             </span>
           ) : null}
           <span

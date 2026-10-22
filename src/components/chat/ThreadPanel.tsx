@@ -12,6 +12,7 @@ import { ListSkeleton } from '@/components/ui/Skeleton';
 import { ChannelMemberOption } from '@/lib/channelMembers';
 import { ChatMessage } from '@/lib/chat-types';
 import { formatMessageTime } from '@/lib/formatMessageDate';
+import { useViewerTimeZone } from '@/hooks/useViewerTimeZone';
 
 interface ThreadPanelProps {
   channelId: string;
@@ -68,6 +69,8 @@ export function ThreadPanel({
   onCopyLink,
   onMarkUnread,
 }: ThreadPanelProps) {
+  const timeZone = useViewerTimeZone();
+
   useEffect(() => {
     function handleKeyDown(event: KeyboardEvent) {
       if (event.key === 'Escape') {
@@ -105,7 +108,7 @@ export function ThreadPanel({
             <div className="flex flex-wrap items-center gap-2">
               <p className="text-sm font-medium">{parentMessage.sender.fullName}</p>
               <span className="text-xs text-[var(--muted)]">
-                {formatMessageTime(parentMessage.createdAt)}
+                {formatMessageTime(parentMessage.createdAt, timeZone)}
               </span>
             </div>
             <ChatMessageBody

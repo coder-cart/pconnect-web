@@ -10,6 +10,10 @@ export interface AuthenticatedUser {
   permissionCodes: string[];
   mustChangePassword?: boolean;
   avatarUpdatedAt?: string | null;
+  /** Explicit IANA preference; null/undefined means org or device default. */
+  timeZone?: string | null;
+  /** Server-resolved display timezone (user → client org). Null = use browser. */
+  effectiveTimeZone?: string | null;
 }
 
 export interface ApiResponse<T> {
