@@ -133,11 +133,14 @@ function artistName(order: OrderSummary): string | null {
 export function OrderKanbanBoard({
   refreshKey = 0,
   queryString = '',
+  readOnly = false,
   onMoved,
   onOpenOrder,
 }: {
   refreshKey?: number;
   queryString?: string;
+  /** When true, cards cannot be dragged between columns (viewer / assigned staff). */
+  readOnly?: boolean;
   onMoved?: () => void;
   onOpenOrder?: (orderId: string) => void;
 }) {
@@ -244,6 +247,7 @@ export function OrderKanbanBoard({
   }
 
   function onDrop(stage: BoardColumnId, orderId: string) {
+    if (readOnly) return;
     const order = orders.find((item) => item.id === orderId);
     setOverColumn(null);
     setDraggingId(null);
@@ -282,8 +286,13 @@ export function OrderKanbanBoard({
       {moveError ? (
         <ErrorState title="Order stayed in its column" description={moveError} />
       ) : null}
-      {busy ? (
+      {busy && !readOnly ? (
         <p className="text-xs text-[var(--muted)]">Updating board…</p>
+      ) : null}
+      {readOnly ? (
+        <p className="text-xs text-[var(--muted)]">
+          View-only board — stage changes are made by a manager.
+        </p>
       ) : null}
 
       <div className="-mx-1 flex gap-3 overflow-x-auto overscroll-x-contain px-1 pb-2 snap-x snap-mandatory">
@@ -295,7 +304,9 @@ export function OrderKanbanBoard({
             ? boardColumn(draggingOrder.workflowStatus?.code)
             : null;
           const isDropTarget =
-            overColumn === column.id && sourceColumn !== column.id;
+            !readOnly &&
+            overColumn === column.id &&
+            sourceColumn !== column.id;
           return (
             <section
               key={column.id}
@@ -306,21 +317,35 @@ export function OrderKanbanBoard({
                   : 'border-transparent',
               )}
               style={isDropTarget ? undefined : { background: column.tint }}
-              onDragEnter={(event) => {
-                event.preventDefault();
-                setOverColumn(column.id);
-              }}
-              onDragOver={(event) => {
-                event.preventDefault();
-                event.dataTransfer.dropEffect = 'move';
-                if (overColumn !== column.id) setOverColumn(column.id);
-              }}
-              onDrop={(event) => {
-                event.preventDefault();
-                const droppedId =
-                  event.dataTransfer.getData('text/plain') || draggingId || '';
-                if (droppedId) onDrop(column.id, droppedId);
-              }}
+              onDragEnter={
+                readOnly
+                  ? undefined
+                  : (event) => {
+                      event.preventDefault();
+                      setOverColumn(column.id);
+                    }
+              }
+              onDragOver={
+                readOnly
+                  ? undefined
+                  : (event) => {
+                      event.preventDefault();
+                      event.dataTransfer.dropEffect = 'move';
+                      if (overColumn !== column.id) setOverColumn(column.id);
+                    }
+              }
+              onDrop={
+                readOnly
+                  ? undefined
+                  : (event) => {
+                      event.preventDefault();
+                      const droppedId =
+                        event.dataTransfer.getData('text/plain') ||
+                        draggingId ||
+                        '';
+                      if (droppedId) onDrop(column.id, droppedId);
+                    }
+              }
             >
               <header className="flex items-center gap-2 px-3 py-3">
                 <span
@@ -353,7 +378,7 @@ export function OrderKanbanBoard({
                 ) : null}
                 {rows.length === 0 && !isDropTarget ? (
                   <p className="px-2 py-6 text-center text-xs text-[var(--muted)]">
-                    Drag an order here
+                    {readOnly ? 'No orders in this stage' : 'Drag an order here'}
                   </p>
                 ) : null}
                 {rows.length === 0
@@ -363,6 +388,7 @@ export function OrderKanbanBoard({
                         key={order.id}
                         order={order}
                         dragging={draggingId === order.id}
+                        readOnly={readOnly}
                         onOpen={onOpenOrder}
                         onDragStart={() => setDraggingId(order.id)}
                         onDragEnd={() => {
@@ -389,12 +415,14 @@ export function OrderKanbanBoard({
 function OrderCard({
   order,
   dragging,
+  readOnly = false,
   onOpen,
   onDragStart,
   onDragEnd,
 }: {
   order: OrderSummary;
   dragging: boolean;
+  readOnly?: boolean;
   onOpen?: (orderId: string) => void;
   onDragStart: () => void;
   onDragEnd: () => void;
@@ -415,7 +443,7 @@ function OrderCard({
 
   return (
     <article
-      draggable
+      draggable={!readOnly}
       role="link"
       tabIndex={0}
       onClick={(event) => {
@@ -430,32 +458,43 @@ function OrderCard({
       onKeyDown={(event) => {
         if (event.key === 'Enter') openOrder();
       }}
-      onDragStart={(event) => {
-        dragged.current = true;
-        event.dataTransfer.setData('text/plain', order.id);
-        event.dataTransfer.effectAllowed = 'move';
-        const ghost = event.currentTarget.cloneNode(true) as HTMLElement;
-        ghost.style.position = 'fixed';
-        ghost.style.top = '-1000px';
-        ghost.style.left = '0';
-        ghost.style.width = '280px';
-        ghost.style.opacity = '1';
-        ghost.style.transform = 'rotate(2deg)';
-        ghost.style.boxShadow = '0 16px 40px rgba(15, 23, 42, 0.28)';
-        ghost.style.pointerEvents = 'none';
-        document.body.appendChild(ghost);
-        event.dataTransfer.setDragImage(ghost, 24, 24);
-        window.setTimeout(() => ghost.remove(), 0);
-        onDragStart();
-      }}
-      onDragEnd={() => {
-        onDragEnd();
-        window.setTimeout(() => {
-          dragged.current = false;
-        }, 0);
-      }}
+      onDragStart={
+        readOnly
+          ? undefined
+          : (event) => {
+              dragged.current = true;
+              event.dataTransfer.setData('text/plain', order.id);
+              event.dataTransfer.effectAllowed = 'move';
+              const ghost = event.currentTarget.cloneNode(true) as HTMLElement;
+              ghost.style.position = 'fixed';
+              ghost.style.top = '-1000px';
+              ghost.style.left = '0';
+              ghost.style.width = '280px';
+              ghost.style.opacity = '1';
+              ghost.style.transform = 'rotate(2deg)';
+              ghost.style.boxShadow = '0 16px 40px rgba(15, 23, 42, 0.28)';
+              ghost.style.pointerEvents = 'none';
+              document.body.appendChild(ghost);
+              event.dataTransfer.setDragImage(ghost, 24, 24);
+              window.setTimeout(() => ghost.remove(), 0);
+              onDragStart();
+            }
+      }
+      onDragEnd={
+        readOnly
+          ? undefined
+          : () => {
+              onDragEnd();
+              window.setTimeout(() => {
+                dragged.current = false;
+              }, 0);
+            }
+      }
       className={cn(
-        'cursor-grab rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface)] p-3 shadow-sm transition-transform duration-150 hover:border-[var(--primary)] active:cursor-grabbing',
+        'rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface)] p-3 shadow-sm transition-transform duration-150 hover:border-[var(--primary)]',
+        readOnly
+          ? 'cursor-pointer'
+          : 'cursor-grab active:cursor-grabbing',
         dragging &&
           'scale-[0.98] border-dashed border-[var(--primary)] opacity-50 ring-2 ring-[var(--primary)]',
       )}

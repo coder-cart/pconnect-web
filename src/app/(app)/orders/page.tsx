@@ -129,6 +129,8 @@ export default function OrdersPage() {
     !isExternal &&
     !canManage &&
     canView;
+  /** Same board/list chrome as managers for all internal roles with orders.view. */
+  const useInternalDashboard = !isExternal && canView;
 
   const [orders, setOrders] = useState<OrderSummary[]>([]);
   const [tabCounts, setTabCounts] = useState<Record<string, number>>({});
@@ -187,7 +189,7 @@ export default function OrdersPage() {
   }, [viewReady, layout, appliedFilters]);
 
   const showBoard =
-    canManage && layout === 'board' && !historyView && !isExternal;
+    useInternalDashboard && layout === 'board' && !historyView;
   const activeFilterCount = countActiveFilters(appliedFilters);
 
   const filterQuery = useMemo(() => {
@@ -196,17 +198,12 @@ export default function OrdersPage() {
       params.set('historyOnly', 'true');
     } else if (isExternal) {
       params.set('clientTab', clientTab);
-    } else if (canManage && layout === 'list') {
+    } else if (useInternalDashboard && layout === 'list') {
       params.set('managerTab', managerTab);
-    } else if (!canManage) {
-      params.set('listScope', 'board');
     } else {
       params.set('listScope', 'board');
     }
 
-    if (appliedFilters.lifecycleStage && canManage && layout === 'list') {
-      // Prefer tab filter; optional extra stage filter from advanced filters unused when tab set.
-    }
     if (appliedFilters.clientOrganizationId) {
       params.set('clientOrganizationId', appliedFilters.clientOrganizationId);
     }
@@ -221,7 +218,7 @@ export default function OrdersPage() {
     historyView,
     isAssignedView,
     isExternal,
-    canManage,
+    useInternalDashboard,
     layout,
     managerTab,
     clientTab,
@@ -481,7 +478,7 @@ export default function OrdersPage() {
         ]}
         action={
           <div className="flex flex-wrap items-center gap-2">
-            {canManage ? (
+            {useInternalDashboard ? (
               <div className="flex rounded-[var(--radius-md)] border border-[var(--border)] p-0.5">
                 <button
                   type="button"
@@ -573,14 +570,15 @@ export default function OrdersPage() {
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           {dashboardTabs.map((tab) => {
             const count = tabCounts[tab.id];
-            const active = activeTabId === tab.id && (isExternal || layout === 'list');
+            const active =
+              activeTabId === tab.id && (isExternal || layout === 'list');
             return (
               <button
                 key={tab.id}
                 type="button"
                 onClick={() => {
                   selectTab(tab.id);
-                  if (canManage) setLayout('list');
+                  if (useInternalDashboard) setLayout('list');
                 }}
                 className={cn(
                   'rounded-[var(--radius-lg)] border px-4 py-3 text-left transition-colors',
@@ -606,7 +604,7 @@ export default function OrdersPage() {
           {dashboardTabs.map((tab) => {
             const active =
               activeTabId === tab.id &&
-              (isExternal || layout === 'list' || !canManage);
+              (isExternal || layout === 'list');
             const count = tabCounts[tab.id];
             return (
               <button
@@ -614,7 +612,7 @@ export default function OrdersPage() {
                 type="button"
                 onClick={() => {
                   selectTab(tab.id);
-                  if (canManage) setLayout('list');
+                  if (useInternalDashboard) setLayout('list');
                 }}
                 className={cn(
                   'rounded-[var(--radius-md)] px-3 py-1.5 text-sm',
@@ -630,7 +628,7 @@ export default function OrdersPage() {
               </button>
             );
           })}
-          {canManage ? (
+          {useInternalDashboard ? (
             <button
               type="button"
               onClick={() => setLayout('board')}
@@ -762,6 +760,7 @@ export default function OrdersPage() {
         <OrderKanbanBoard
           refreshKey={refreshKey}
           queryString={filterQuery}
+          readOnly={!canManage}
           onMoved={() => {
             notifyRefresh();
             loadTabCounts();
