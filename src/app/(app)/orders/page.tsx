@@ -5,11 +5,16 @@ import { useSearchParams } from 'next/navigation';
 import {
   CheckCircle2,
   ChevronDown,
+  ClipboardList,
+  Clock,
   LayoutGrid,
   List,
+  Package,
   Plus,
+  ShieldCheck,
   SlidersHorizontal,
 } from 'lucide-react';
+import { DashboardMetricCard } from '@/components/dashboard/DashboardMetricCard';
 import { apiDownload, apiRequest } from '@/lib/api-client';
 import {
   ApiResponse,
@@ -131,6 +136,9 @@ export default function OrdersPage() {
     canView;
   /** Same board/list chrome as managers for all internal roles with orders.view. */
   const useInternalDashboard = !isExternal && canView;
+  /** Clients get the same board + list design with their four stages. */
+  const useClientDashboard = isExternal && canView;
+  const useBoardChrome = useInternalDashboard || useClientDashboard;
 
   const [orders, setOrders] = useState<OrderSummary[]>([]);
   const [tabCounts, setTabCounts] = useState<Record<string, number>>({});
@@ -189,15 +197,17 @@ export default function OrdersPage() {
   }, [viewReady, layout, appliedFilters]);
 
   const showBoard =
-    useInternalDashboard && layout === 'board' && !historyView;
+    useBoardChrome && layout === 'board' && !historyView;
   const activeFilterCount = countActiveFilters(appliedFilters);
 
   const filterQuery = useMemo(() => {
     const params = new URLSearchParams();
     if (historyView) {
       params.set('historyOnly', 'true');
-    } else if (isExternal) {
+    } else if (useClientDashboard && layout === 'list') {
       params.set('clientTab', clientTab);
+    } else if (useClientDashboard && layout === 'board') {
+      // Board loads each client stage itself.
     } else if (useInternalDashboard && layout === 'list') {
       params.set('managerTab', managerTab);
     } else {
@@ -217,7 +227,7 @@ export default function OrdersPage() {
     appliedFilters,
     historyView,
     isAssignedView,
-    isExternal,
+    useClientDashboard,
     useInternalDashboard,
     layout,
     managerTab,
@@ -431,17 +441,21 @@ export default function OrdersPage() {
 
   const activeTabId = isExternal ? clientTab : managerTab;
 
+  const totalOrders = useMemo(
+    () =>
+      dashboardTabs.reduce((sum, tab) => sum + (tabCounts[tab.id] ?? 0), 0),
+    [dashboardTabs, tabCounts],
+  );
+
   function selectTab(tabId: string) {
-    if (isExternal && isClientTab(tabId)) {
+    if (useClientDashboard && isClientTab(tabId)) {
       setClientTab(tabId);
       setLayout('list');
       return;
     }
     if (isManagerTab(tabId)) {
       setManagerTab(tabId);
-      if (layout === 'board') {
-        // Keep board as overview of all four columns.
-      }
+      setLayout('list');
     }
   }
 
@@ -478,7 +492,7 @@ export default function OrdersPage() {
         ]}
         action={
           <div className="flex flex-wrap items-center gap-2">
-            {useInternalDashboard ? (
+            {useBoardChrome ? (
               <div className="flex rounded-[var(--radius-md)] border border-[var(--border)] p-0.5">
                 <button
                   type="button"
@@ -566,54 +580,71 @@ export default function OrdersPage() {
         }
       />
 
-      {!historyView ? (
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      {!historyView && useBoardChrome ? (
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+          <button
+            type="button"
+            className="text-left"
+            onClick={() => setLayout('board')}
+          >
+            <DashboardMetricCard
+              label="Total orders"
+              value={totalOrders}
+              icon={ClipboardList}
+              tone="blue"
+            />
+          </button>
           {dashboardTabs.map((tab) => {
-            const count = tabCounts[tab.id];
-            const active =
-              activeTabId === tab.id && (isExternal || layout === 'list');
+            const count = tabCounts[tab.id] ?? 0;
+            const tone =
+              tab.id === 'orders' || tab.id === 'order_received'
+                ? 'orange'
+                : tab.id === 'in_progress'
+                  ? 'purple'
+                  : tab.id === 'quality_check'
+                    ? 'pink'
+                    : tab.id === 'delivered'
+                      ? 'green'
+                      : 'blue';
+            const icon =
+              tab.id === 'orders' || tab.id === 'order_received'
+                ? Clock
+                : tab.id === 'in_progress'
+                  ? SlidersHorizontal
+                  : tab.id === 'quality_check'
+                    ? ShieldCheck
+                    : tab.id === 'delivered'
+                      ? CheckCircle2
+                      : Package;
             return (
               <button
                 key={tab.id}
                 type="button"
-                onClick={() => {
-                  selectTab(tab.id);
-                  if (useInternalDashboard) setLayout('list');
-                }}
-                className={cn(
-                  'rounded-[var(--radius-lg)] border px-4 py-3 text-left transition-colors',
-                  active
-                    ? 'border-[var(--primary)] bg-[var(--primary-soft)]'
-                    : 'border-[var(--border)] bg-[var(--surface)] hover:border-[var(--primary)]',
-                )}
+                className="text-left"
+                onClick={() => selectTab(tab.id)}
               >
-                <p className="text-xs font-medium uppercase tracking-wide text-[var(--muted)]">
-                  {tab.label}
-                </p>
-                <p className="mt-1 text-2xl font-semibold text-[var(--foreground)]">
-                  {typeof count === 'number' ? count : '—'}
-                </p>
+                <DashboardMetricCard
+                  label={tab.label}
+                  value={count}
+                  icon={icon}
+                  tone={tone}
+                />
               </button>
             );
           })}
         </div>
       ) : null}
 
-      {!historyView ? (
+      {!historyView && useBoardChrome ? (
         <div className="flex flex-wrap gap-2 border-b border-[var(--border)] pb-2">
           {dashboardTabs.map((tab) => {
-            const active =
-              activeTabId === tab.id &&
-              (isExternal || layout === 'list');
+            const active = activeTabId === tab.id && layout === 'list';
             const count = tabCounts[tab.id];
             return (
               <button
                 key={tab.id}
                 type="button"
-                onClick={() => {
-                  selectTab(tab.id);
-                  if (useInternalDashboard) setLayout('list');
-                }}
+                onClick={() => selectTab(tab.id)}
                 className={cn(
                   'rounded-[var(--radius-md)] px-3 py-1.5 text-sm',
                   active
@@ -628,20 +659,18 @@ export default function OrdersPage() {
               </button>
             );
           })}
-          {useInternalDashboard ? (
-            <button
-              type="button"
-              onClick={() => setLayout('board')}
-              className={cn(
-                'ml-auto rounded-[var(--radius-md)] px-3 py-1.5 text-sm',
-                layout === 'board'
-                  ? 'bg-[var(--surface-muted)] font-medium text-[var(--foreground)]'
-                  : 'text-[var(--muted)] hover:bg-[var(--surface-muted)]',
-              )}
-            >
-              All stages board
-            </button>
-          ) : null}
+          <button
+            type="button"
+            onClick={() => setLayout('board')}
+            className={cn(
+              'ml-auto rounded-[var(--radius-md)] px-3 py-1.5 text-sm',
+              layout === 'board'
+                ? 'bg-[var(--surface-muted)] font-medium text-[var(--foreground)]'
+                : 'text-[var(--muted)] hover:bg-[var(--surface-muted)]',
+            )}
+          >
+            All stages board
+          </button>
         </div>
       ) : null}
 
@@ -760,7 +789,16 @@ export default function OrdersPage() {
         <OrderKanbanBoard
           refreshKey={refreshKey}
           queryString={filterQuery}
+          variant={useClientDashboard ? 'client' : 'manager'}
           readOnly={!canManage}
+          receivingId={receivingId}
+          onMarkReceived={
+            useClientDashboard
+              ? (orderId) => {
+                  void markReceived(orderId);
+                }
+              : undefined
+          }
           onMoved={() => {
             notifyRefresh();
             loadTabCounts();
