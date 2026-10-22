@@ -57,7 +57,7 @@ const COLUMNS: Array<{
   },
   {
     id: 'quality_check',
-    label: 'Quality Check',
+    label: 'QA',
     hint: 'Ready for review',
     footer: 'View all QA orders',
     icon: ShieldCheck,

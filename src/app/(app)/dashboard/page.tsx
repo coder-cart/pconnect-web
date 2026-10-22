@@ -274,7 +274,7 @@ export default function DashboardPage() {
                 tone="purple"
               />
               <DashboardMetricCard
-                label="For quality check"
+                label="QA"
                 value={stageCounts.quality_check}
                 icon={ShieldCheck}
                 tone="pink"

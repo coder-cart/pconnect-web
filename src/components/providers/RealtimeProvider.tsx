@@ -23,6 +23,13 @@ type ChannelEventHandler = (payload: {
   data: unknown;
 }) => void;
 
+export interface OrderUpdatedPayload {
+  orderId: string;
+  code?: string;
+  workflowCode?: string | null;
+  reason: string;
+}
+
 interface RealtimeContextValue {
   socket: Socket | null;
   isConnected: boolean;
@@ -33,6 +40,9 @@ interface RealtimeContextValue {
   ) => () => void;
   subscribeChannelEvents: (handler: ChannelEventHandler) => () => void;
   subscribeNotificationCreated: (handler: (notification: unknown) => void) => () => void;
+  subscribeOrderUpdated: (
+    handler: (payload: OrderUpdatedPayload) => void,
+  ) => () => void;
   subscribeMessageActivity: (
     handler: (payload: MessageActivityPayload) => void,
   ) => () => void;
@@ -76,6 +86,9 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
   const channelHandlersRef = useRef<Set<ChannelEventHandler>>(new Set());
   const notificationHandlersRef = useRef<
     Set<(notification: unknown) => void>
+  >(new Set());
+  const orderUpdatedHandlersRef = useRef<
+    Set<(payload: OrderUpdatedPayload) => void>
   >(new Set());
   const activityHandlersRef = useRef<
     Set<(payload: MessageActivityPayload) => void>
@@ -141,6 +154,11 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
       notificationHandlersRef.current.forEach((handler) => handler(notification));
     });
 
+    socket.on('order.updated', (payload: OrderUpdatedPayload) => {
+      if (!payload?.orderId) return;
+      orderUpdatedHandlersRef.current.forEach((handler) => handler(payload));
+    });
+
     socket.on('message.activity', (payload: MessageActivityPayload) => {
       activityHandlersRef.current.forEach((handler) => handler(payload));
     });
@@ -191,6 +209,16 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
     [],
   );
 
+  const subscribeOrderUpdated = useCallback(
+    (handler: (payload: OrderUpdatedPayload) => void) => {
+      orderUpdatedHandlersRef.current.add(handler);
+      return () => {
+        orderUpdatedHandlersRef.current.delete(handler);
+      };
+    },
+    [],
+  );
+
   const subscribeMessageActivity = useCallback(
     (handler: (payload: MessageActivityPayload) => void) => {
       activityHandlersRef.current.add(handler);
@@ -218,6 +246,7 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
         subscribeMessageCreated,
         subscribeChannelEvents,
         subscribeNotificationCreated,
+        subscribeOrderUpdated,
         subscribeMessageActivity,
         subscribeConnected,
       }}

@@ -193,7 +193,7 @@ const LIFECYCLE_CODES: Record<ClientLifecycleStage, string[]> = {
 export const MANAGER_DASHBOARD_TABS = [
   { id: 'order_received', label: 'Order Received' },
   { id: 'in_progress', label: 'In Progress' },
-  { id: 'quality_check', label: 'Quality Check' },
+  { id: 'quality_check', label: 'QA' },
   { id: 'delivered', label: 'Delivered' },
 ] as const;
 
@@ -237,7 +237,7 @@ export const MANAGER_WORKFLOW_OPTIONS: Array<{
 }> = [
   { id: 'order_received', label: 'Order Received' },
   { id: 'in_progress', label: 'In Progress' },
-  { id: 'quality_check', label: 'Quality Check' },
+  { id: 'quality_check', label: 'QA' },
   { id: 'delivered', label: 'Delivered' },
   { id: 'completed', label: 'Completed' },
 ];
@@ -245,7 +245,7 @@ export const MANAGER_WORKFLOW_OPTIONS: Array<{
 export const CLIENT_LIFECYCLE_LABELS: Record<ClientLifecycleStage, string> = {
   order_received: 'Order Received',
   in_progress: 'In Progress',
-  quality_check: 'Quality Check',
+  quality_check: 'QA',
   delivered: 'Delivered',
   completed: 'Completed',
 };

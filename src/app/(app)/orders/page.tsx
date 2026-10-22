@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import {
   CheckCircle2,
@@ -23,6 +23,7 @@ import { Card } from '@/components/ui/Card';
 import { ListSkeleton } from '@/components/ui/Skeleton';
 import { EmptyState, ErrorState, RestrictedState } from '@/components/ui/StatePanels';
 import { useWorkspace } from '@/components/providers/WorkspaceProvider';
+import { useRealtime } from '@/components/providers/RealtimeProvider';
 import {
   CLIENT_DASHBOARD_TABS,
   ClientDashboardTab,
@@ -113,6 +114,8 @@ function isClientTab(value: string | null): value is ClientDashboardTab {
 
 export default function OrdersPage() {
   const { user, refreshKey, notifyRefresh } = useWorkspace();
+  const { subscribeOrderUpdated, subscribeNotificationCreated } = useRealtime();
+  const syncTimerRef = useRef<number | null>(null);
   const canView = userHasPermission(user, 'orders.view');
   const canManage = userHasPermission(user, 'orders.manage');
   const canCreate =
@@ -284,6 +287,49 @@ export default function OrdersPage() {
   }, [viewReady, refreshKey, queryString]);
 
   useEffect(() => {
+    function scheduleSync() {
+      if (syncTimerRef.current != null) {
+        window.clearTimeout(syncTimerRef.current);
+      }
+      syncTimerRef.current = window.setTimeout(() => {
+        notifyRefresh();
+      }, 250);
+    }
+
+    const unsubOrder = subscribeOrderUpdated(() => {
+      scheduleSync();
+    });
+    const unsubNotice = subscribeNotificationCreated((notification) => {
+      const type =
+        notification &&
+        typeof notification === 'object' &&
+        'type' in notification &&
+        typeof (notification as { type: unknown }).type === 'string'
+          ? (notification as { type: string }).type
+          : '';
+      if (type.startsWith('order.')) scheduleSync();
+    });
+
+    function onVisible() {
+      if (document.visibilityState === 'visible') scheduleSync();
+    }
+    document.addEventListener('visibilitychange', onVisible);
+
+    return () => {
+      unsubOrder();
+      unsubNotice();
+      document.removeEventListener('visibilitychange', onVisible);
+      if (syncTimerRef.current != null) {
+        window.clearTimeout(syncTimerRef.current);
+      }
+    };
+  }, [
+    notifyRefresh,
+    subscribeOrderUpdated,
+    subscribeNotificationCreated,
+  ]);
+
+  useEffect(() => {
     if (!canView) return;
     if (canManage) {
       apiRequest<ApiResponse<ClientOption[]>>('/clients')
@@ -416,7 +462,7 @@ export default function OrdersPage() {
         ? 'Nothing in progress'
         : managerTab === 'quality_check'
           ? 'No orders in QA'
-          : 'No delivered orders';
+          : 'No delivered orders awaiting receipt';
 
   return (
     <div className="space-y-4">
