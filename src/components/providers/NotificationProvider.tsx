@@ -24,6 +24,7 @@ import {
   DevicePushStatus,
   disableDevicePush,
   enableDevicePush,
+  healDevicePushSubscription,
   readDevicePushStatus,
   registerPushWorker,
 } from '@/lib/push-notifications';
@@ -140,9 +141,15 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     void registerPushWorker()
-      .then(() => readDevicePushStatus())
+      .then(() => healDevicePushSubscription())
       .then((status) => setPushStatus(status))
-      .catch(() => setPushStatus('unsupported'));
+      .catch(async () => {
+        try {
+          setPushStatus(await readDevicePushStatus());
+        } catch {
+          setPushStatus('unsupported');
+        }
+      });
   }, []);
 
   const enablePush = useCallback(async () => {

@@ -19,19 +19,33 @@ self.addEventListener('push', (event) => {
         type: 'window',
         includeUncontrolled: true,
       });
+      // Only treat as "already reading" when the same conversation is visible.
       const alreadyLooking = windows.some(
-        (client) => client.focused && sameTarget(client.url, linkUrl),
+        (client) =>
+          client.visibilityState === 'visible' &&
+          client.focused &&
+          sameConversation(client.url, linkUrl),
       );
-      if (alreadyLooking) return;
 
+      // Chrome requires a visible notification for userVisibleOnly push.
+      // Skipping showNotification causes the browser to drop the subscription
+      // after repeated silent pushes — that broke laptop alerts while mobile still worked.
       await self.registration.showNotification(title, {
         body,
         icon: '/icons/icon-192.png',
         badge: '/icons/icon-192.png',
         tag,
-        renotify: true,
+        renotify: !alreadyLooking,
+        silent: alreadyLooking,
         data: { url: linkUrl, tag },
       });
+
+      if (alreadyLooking) {
+        const open = await self.registration.getNotifications({ tag });
+        for (const note of open) {
+          note.close();
+        }
+      }
     })(),
   );
 });
@@ -71,16 +85,25 @@ self.addEventListener('notificationclick', (event) => {
   );
 });
 
-function sameTarget(clientUrl, linkUrl) {
+/** True only when the open window is the same chat channel as the push link. */
+function sameConversation(clientUrl, linkUrl) {
   try {
     const current = new URL(clientUrl);
     const link = new URL(linkUrl, self.location.origin);
-    if (current.origin !== link.origin || current.pathname !== link.pathname) {
-      return false;
+    if (current.origin !== link.origin) return false;
+
+    const linkChannel = link.searchParams.get('channel');
+    if (linkChannel) {
+      return (
+        current.pathname === '/chat' &&
+        current.searchParams.get('channel') === linkChannel
+      );
     }
-    const channel = link.searchParams.get('channel');
-    if (channel) return channel === current.searchParams.get('channel');
-    return true;
+
+    return (
+      current.pathname === link.pathname &&
+      current.search === link.search
+    );
   } catch {
     return false;
   }

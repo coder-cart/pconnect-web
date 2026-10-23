@@ -31,7 +31,9 @@ export function devicePushSupported() {
 
 export async function registerPushWorker() {
   if (!devicePushSupported()) return null;
-  return navigator.serviceWorker.register('/sw.js', { scope: '/' });
+  return navigator.serviceWorker.register('/sw.js?v=push-visible-1', {
+    scope: '/',
+  });
 }
 
 export async function readDevicePushStatus(): Promise<DevicePushStatus> {
@@ -54,6 +56,28 @@ function urlBase64ToUint8Array(value: string) {
   return output;
 }
 
+async function persistPushSubscription(
+  registration: ServiceWorkerRegistration,
+  publicKey: string,
+) {
+  const subscription = await registration.pushManager.subscribe({
+    userVisibleOnly: true,
+    applicationServerKey: urlBase64ToUint8Array(publicKey),
+  });
+  const json = subscription.toJSON();
+  if (!json.endpoint || !json.keys?.p256dh || !json.keys.auth) {
+    throw new Error('The browser did not return a push subscription.');
+  }
+  await apiRequest('/notifications/push/subscribe', {
+    method: 'POST',
+    body: JSON.stringify({
+      endpoint: json.endpoint,
+      p256dh: json.keys.p256dh,
+      auth: json.keys.auth,
+    }),
+  });
+}
+
 export async function enableDevicePush() {
   const registration = await registerPushWorker();
   if (!registration) {
@@ -72,22 +96,53 @@ export async function enableDevicePush() {
   if (!keyResponse.data.configured || !keyResponse.data.publicKey) {
     throw new Error('Device alerts are not configured on the server.');
   }
-  const subscription = await registration.pushManager.subscribe({
-    userVisibleOnly: true,
-    applicationServerKey: urlBase64ToUint8Array(keyResponse.data.publicKey),
-  });
-  const json = subscription.toJSON();
-  if (!json.endpoint || !json.keys?.p256dh || !json.keys.auth) {
-    throw new Error('The browser did not return a push subscription.');
+  await persistPushSubscription(registration, keyResponse.data.publicKey);
+}
+
+/**
+ * If the browser already granted permission but the push subscription was
+ * dropped (common after PWA reinstall or silent-push violations), restore it
+ * without prompting again.
+ */
+export async function healDevicePushSubscription() {
+  if (!devicePushSupported()) return 'unsupported' as DevicePushStatus;
+  if (Notification.permission !== 'granted') {
+    return readDevicePushStatus();
   }
-  await apiRequest('/notifications/push/subscribe', {
-    method: 'POST',
-    body: JSON.stringify({
-      endpoint: json.endpoint,
-      p256dh: json.keys.p256dh,
-      auth: json.keys.auth,
-    }),
-  });
+  if (isIos() && !isStandalone()) return 'needs-install';
+
+  const registration = await registerPushWorker();
+  if (!registration) return 'unsupported';
+
+  const existing = await registration.pushManager.getSubscription();
+  if (existing) {
+    // Re-sync endpoint to the API in case the server lost it after a deploy.
+    const json = existing.toJSON();
+    if (json.endpoint && json.keys?.p256dh && json.keys.auth) {
+      await apiRequest('/notifications/push/subscribe', {
+        method: 'POST',
+        body: JSON.stringify({
+          endpoint: json.endpoint,
+          p256dh: json.keys.p256dh,
+          auth: json.keys.auth,
+        }),
+      }).catch(() => undefined);
+    }
+    return 'on';
+  }
+
+  try {
+    const keyResponse = await apiRequest<
+      ApiResponse<{ configured: boolean; publicKey: string | null }>
+    >('/notifications/push/public-key');
+    if (!keyResponse.data.configured || !keyResponse.data.publicKey) {
+      return 'off';
+    }
+    await persistPushSubscription(registration, keyResponse.data.publicKey);
+    return 'on';
+  } catch {
+    return 'off';
+  }
 }
 
 export async function disableDevicePush() {
