@@ -1,5 +1,5 @@
 /* Colabdeck service worker — installable PWA + web push */
-const SW_VERSION = 'push-v3';
+const SW_VERSION = 'push-v4';
 
 self.addEventListener('install', (event) => {
   self.skipWaiting();
@@ -50,7 +50,9 @@ self.addEventListener('push', (event) => {
       badge: '/icons/icon-192.png',
       tag,
       renotify: true,
-      requireInteraction: false,
+      // Keep the Windows toast visible until the user interacts — otherwise
+      // banners vanish quickly and it looks like push "isn't working".
+      requireInteraction: true,
       data: { url: linkUrl, tag, sw: SW_VERSION },
     }),
   );

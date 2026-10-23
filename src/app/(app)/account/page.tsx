@@ -346,8 +346,11 @@ export default function AccountProfilePage() {
             Notifications
           </h2>
           <p className="text-sm text-[var(--muted)]">
-            Device alerts use your browser permission. Multiple messages in the
-            same conversation are grouped into one notification when possible.
+            Device alerts use your browser permission on each device separately
+            (phone and laptop each need Enable once). On Windows, alerts appear
+            as a bottom-right Chrome/Edge toast or in the notification center —
+            not as an Android lock-screen card. Keep Colabdeck minimized when
+            testing so the banner is not suppressed.
           </p>
           <div className="flex flex-wrap items-center gap-2">
             {pushStatus === 'unsupported' ? (
