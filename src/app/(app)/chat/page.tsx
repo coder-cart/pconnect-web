@@ -12,7 +12,7 @@ function ChatPageContent() {
   const initialMessageId = searchParams.get('message');
 
   return (
-    <div className="flex h-[calc(100dvh-5.5rem)] min-h-0 flex-col sm:h-[calc(100dvh-6rem)]">
+    <div className="chat-fill flex h-[calc(100dvh-4.75rem)] min-h-0 flex-col sm:h-[calc(100dvh-5.5rem)]">
       <div className="min-h-0 flex-1">
         <ChatWorkspace
           user={user}

@@ -7,7 +7,11 @@ self.addEventListener('push', (event) => {
   const title = typeof payload.title === 'string' ? payload.title : 'Colabdeck';
   const body = typeof payload.body === 'string' ? payload.body : '';
   const linkUrl = typeof payload.linkUrl === 'string' ? payload.linkUrl : '/';
-  const tag = typeof payload.tag === 'string' ? payload.tag : 'colabdeck';
+  // Stable per conversation+recipient so rapid messages replace one tray entry.
+  const tag =
+    typeof payload.tag === 'string' && payload.tag
+      ? payload.tag
+      : 'colabdeck';
 
   event.waitUntil(
     (async () => {
@@ -19,12 +23,14 @@ self.addEventListener('push', (event) => {
         (client) => client.focused && sameTarget(client.url, linkUrl),
       );
       if (alreadyLooking) return;
+
       await self.registration.showNotification(title, {
         body,
         icon: '/icons/icon-192.png',
         badge: '/icons/icon-192.png',
         tag,
-        data: { url: linkUrl },
+        renotify: true,
+        data: { url: linkUrl, tag },
       });
     })(),
   );
@@ -32,20 +38,33 @@ self.addEventListener('push', (event) => {
 
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
-  const target = new URL(event.notification.data?.url || '/', self.location.origin).href;
+  const target = new URL(
+    event.notification.data?.url || '/',
+    self.location.origin,
+  ).href;
   event.waitUntil(
     (async () => {
       const windows = await self.clients.matchAll({
         type: 'window',
         includeUncontrolled: true,
       });
-      const existing = windows.find((client) => 'focus' in client);
-      if (existing) {
-        await existing.focus();
-        if ('navigate' in existing) {
-          await existing.navigate(target);
+      // Prefer an existing Colabdeck window so Windows does not open a second
+      // taskbar identity for the same installed PWA.
+      for (const client of windows) {
+        if (!('focus' in client)) continue;
+        try {
+          const focused = await client.focus();
+          if (focused && 'navigate' in focused) {
+            await focused.navigate(target);
+            return;
+          }
+          if ('navigate' in client) {
+            await client.navigate(target);
+          }
+          return;
+        } catch {
+          // try next client
         }
-        return;
       }
       await self.clients.openWindow(target);
     })(),

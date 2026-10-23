@@ -1,5 +1,8 @@
 import { cn } from '@/lib/cn';
 import { getInitials } from '@/lib/navigation';
+import { avatarToneForName } from '@/lib/avatar-tone';
+
+export { avatarToneForName } from '@/lib/avatar-tone';
 
 interface AvatarProps {
   name: string;
@@ -35,14 +38,18 @@ export function Avatar({
     );
   }
 
+  const tone = avatarToneForName(name);
+
   return (
     <div
       aria-label={name}
+      title={name}
       className={cn(
-        'inline-flex items-center justify-center rounded-full bg-[var(--primary-soft)] font-semibold text-[var(--primary)] ring-2 ring-[var(--surface)]',
+        'inline-flex items-center justify-center rounded-full font-semibold ring-2 ring-[var(--surface)]',
         sizeClasses[size],
         className,
       )}
+      style={{ backgroundColor: tone.bg, color: tone.fg }}
     >
       {getInitials(name)}
     </div>

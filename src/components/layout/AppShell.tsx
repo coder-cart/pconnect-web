@@ -15,6 +15,7 @@ import { WorkspaceProvider } from '@/components/providers/WorkspaceProvider';
 import { RealtimeProvider } from '@/components/providers/RealtimeProvider';
 import { NotificationProvider, useNotifications } from '@/components/providers/NotificationProvider';
 import { UnreadMessagesProvider, useUnreadMessages } from '@/components/providers/UnreadMessagesProvider';
+import { NotificationOptInPrompt } from '@/components/pwa/NotificationOptInPrompt';
 
 const SIDEBAR_COLLAPSED_KEY = 'pconnect.sidebar.collapsed';
 
@@ -148,6 +149,8 @@ function AppShellContent({
           </div>
         </div>
       ) : null}
+
+      <NotificationOptInPrompt />
 
       <OrderCreateModal
         open={createAction === 'order'}

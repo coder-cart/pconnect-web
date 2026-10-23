@@ -12,8 +12,7 @@ import {
 } from '@/lib/auth';
 import { apiRequest } from '@/lib/api-client';
 import { disableDevicePush } from '@/lib/push-notifications';
-import { CardGridSkeleton } from '@/components/ui/Skeleton';
-import { Logo } from '@/components/ui/Logo';
+import { AppBootSplash } from '@/components/ui/AppBootSplash';
 
 interface ProtectedLayoutProps {
   children: ReactNode;
@@ -80,14 +79,7 @@ export default function ProtectedLayout({ children }: ProtectedLayoutProps) {
   }
 
   if (isLoading) {
-    return (
-      <div className="min-h-screen bg-[var(--background)] p-4 sm:p-6">
-        <div className="mx-auto max-w-6xl space-y-6">
-          <Logo />
-          <CardGridSkeleton count={3} />
-        </div>
-      </div>
-    );
+    return <AppBootSplash />;
   }
 
   if (!user) {

@@ -1,4 +1,5 @@
 import { cn } from '@/lib/cn';
+import { BRAND } from '@/lib/branding';
 
 interface LogoProps {
   compact?: boolean;
@@ -9,30 +10,34 @@ export function Logo({ compact = false, className }: LogoProps) {
   if (compact) {
     return (
       <img
-        src="/brand/colabdeck-mark.png"
-        alt="Colabdeck"
-        width={36}
-        height={36}
-        className={cn('h-9 w-9', className)}
+        src={BRAND.mark}
+        alt={BRAND.name}
+        width={32}
+        height={32}
+        className={cn('h-8 w-8 object-contain', className)}
       />
     );
   }
 
   return (
-    <div className={cn('flex items-center', className)} role="img" aria-label="Colabdeck">
+    <div
+      className={cn('flex items-center', className)}
+      role="img"
+      aria-label={BRAND.name}
+    >
       <img
-        src="/brand/colabdeck-lockup.png"
+        src={BRAND.lockup}
         alt=""
-        width={168}
-        height={42}
-        className="brand-lockup h-9 w-auto"
+        width={140}
+        height={36}
+        className="brand-lockup h-8 w-auto max-w-[9.5rem] object-contain object-left"
       />
       <img
-        src="/brand/colabdeck-lockup-dark.png"
+        src={BRAND.lockupDark}
         alt=""
-        width={168}
-        height={42}
-        className="brand-lockup-dark h-9 w-auto"
+        width={140}
+        height={36}
+        className="brand-lockup-dark h-8 w-auto max-w-[9.5rem] object-contain object-left"
       />
     </div>
   );

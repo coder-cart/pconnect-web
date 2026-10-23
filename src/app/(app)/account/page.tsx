@@ -13,9 +13,14 @@ import { UserAvatar } from '@/components/ui/UserAvatar';
 import { apiRequest, apiUpload } from '@/lib/api-client';
 import { ApiResponse } from '@/lib/auth';
 import { useWorkspace } from '@/components/providers/WorkspaceProvider';
+import { useNotifications } from '@/components/providers/NotificationProvider';
 import { getBrowserTimeZone } from '@/lib/formatMessageDate';
 import { getRoleLabel } from '@/lib/navigation';
 import { formatTimeZoneLabel, listTimeZoneOptions } from '@/lib/timezones';
+import {
+  isNotificationSoundMuted,
+  setNotificationSoundMuted,
+} from '@/lib/notification-sound';
 
 interface ProfileDetails {
   fullName: string;
@@ -29,6 +34,14 @@ interface ProfileDetails {
 
 export default function AccountProfilePage() {
   const { user, refreshUser } = useWorkspace();
+  const {
+    pushStatus,
+    pushBusy,
+    enablePush,
+    disablePush,
+    pushMessage,
+  } = useNotifications();
+  const [soundMuted, setSoundMuted] = useState(false);
   const [profile, setProfile] = useState<ProfileDetails | null>(null);
   const [fullName, setFullName] = useState('');
   const [phone, setPhone] = useState('');
@@ -58,6 +71,7 @@ export default function AccountProfilePage() {
   }, [deviceTimeZone]);
 
   useEffect(() => {
+    setSoundMuted(isNotificationSoundMuted());
     apiRequest<ApiResponse<ProfileDetails>>('/users/me')
       .then((response) => {
         setProfile(response.data);
@@ -323,6 +337,59 @@ export default function AccountProfilePage() {
               </Link>
             </div>
           </form>
+        </Card>
+      ) : null}
+
+      {!isLoading && profile ? (
+        <Card className="mt-4 space-y-3">
+          <h2 className="text-sm font-semibold text-[var(--foreground)]">
+            Notifications
+          </h2>
+          <p className="text-sm text-[var(--muted)]">
+            Device alerts use your browser permission. Multiple messages in the
+            same conversation are grouped into one notification when possible.
+          </p>
+          <div className="flex flex-wrap items-center gap-2">
+            {pushStatus === 'unsupported' ? (
+              <p className="text-sm text-[var(--muted)]">
+                This browser does not support device alerts.
+              </p>
+            ) : pushStatus === 'denied' ? (
+              <p className="text-sm text-[var(--muted)]">
+                Notifications are blocked in browser settings. Allow them for
+                this site, then refresh and try again.
+              </p>
+            ) : (
+              <Button
+                size="sm"
+                variant={pushStatus === 'on' ? 'secondary' : 'primary'}
+                disabled={pushBusy}
+                onClick={() =>
+                  void (pushStatus === 'on' ? disablePush() : enablePush())
+                }
+              >
+                {pushBusy
+                  ? 'Working…'
+                  : pushStatus === 'on'
+                    ? 'Turn device alerts off'
+                    : 'Enable device alerts'}
+              </Button>
+            )}
+            <Button
+              size="sm"
+              variant="secondary"
+              onClick={() => {
+                const next = !soundMuted;
+                setNotificationSoundMuted(next);
+                setSoundMuted(next);
+              }}
+            >
+              {soundMuted ? 'Unmute notification sound' : 'Mute notification sound'}
+            </Button>
+          </div>
+          {pushMessage ? (
+            <p className="text-xs text-[var(--muted)]">{pushMessage}</p>
+          ) : null}
         </Card>
       ) : null}
     </div>
