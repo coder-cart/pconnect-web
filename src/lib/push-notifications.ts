@@ -16,7 +16,9 @@ function isStandalone() {
   return (
     window.matchMedia('(display-mode: standalone)').matches ||
     ('standalone' in window.navigator &&
-      Boolean((window.navigator as Navigator & { standalone?: boolean }).standalone))
+      Boolean(
+        (window.navigator as Navigator & { standalone?: boolean }).standalone,
+      ))
   );
 }
 
@@ -31,16 +33,26 @@ export function devicePushSupported() {
 
 export async function registerPushWorker() {
   if (!devicePushSupported()) return null;
-  return navigator.serviceWorker.register('/sw.js?v=push-visible-1', {
+  const registration = await navigator.serviceWorker.register('/sw.js', {
     scope: '/',
+    updateViaCache: 'none',
   });
+  // Ensure an active worker before pushManager.subscribe.
+  await navigator.serviceWorker.ready;
+  try {
+    await registration.update();
+  } catch {
+    // Ignore update race; ready worker is enough to subscribe.
+  }
+  return registration;
 }
 
 export async function readDevicePushStatus(): Promise<DevicePushStatus> {
   if (!devicePushSupported()) return 'unsupported';
   if (Notification.permission === 'denied') return 'denied';
   if (isIos() && !isStandalone()) return 'needs-install';
-  const registration = await navigator.serviceWorker.getRegistration();
+  await navigator.serviceWorker.ready.catch(() => undefined);
+  const registration = await navigator.serviceWorker.getRegistration('/');
   const subscription = await registration?.pushManager.getSubscription();
   return subscription ? 'on' : 'off';
 }
@@ -60,6 +72,17 @@ async function persistPushSubscription(
   registration: ServiceWorkerRegistration,
   publicKey: string,
 ) {
+  await navigator.serviceWorker.ready;
+  // Replace a stale subscription bound to an old VAPID key / worker.
+  const existing = await registration.pushManager.getSubscription();
+  if (existing) {
+    try {
+      await existing.unsubscribe();
+    } catch {
+      // continue and create a fresh subscription
+    }
+  }
+
   const subscription = await registration.pushManager.subscribe({
     userVisibleOnly: true,
     applicationServerKey: urlBase64ToUint8Array(publicKey),
@@ -84,7 +107,9 @@ export async function enableDevicePush() {
     throw new Error('This browser cannot receive device alerts.');
   }
   if (isIos() && !isStandalone()) {
-    throw new Error('Install Colabdeck to the home screen, then turn device alerts on.');
+    throw new Error(
+      'Install Colabdeck to the home screen, then turn device alerts on.',
+    );
   }
   const permission = await Notification.requestPermission();
   if (permission !== 'granted') {
@@ -116,7 +141,6 @@ export async function healDevicePushSubscription() {
 
   const existing = await registration.pushManager.getSubscription();
   if (existing) {
-    // Re-sync endpoint to the API in case the server lost it after a deploy.
     const json = existing.toJSON();
     if (json.endpoint && json.keys?.p256dh && json.keys.auth) {
       await apiRequest('/notifications/push/subscribe', {
@@ -147,7 +171,7 @@ export async function healDevicePushSubscription() {
 
 export async function disableDevicePush() {
   if (!devicePushSupported()) return;
-  const registration = await navigator.serviceWorker.getRegistration();
+  const registration = await navigator.serviceWorker.getRegistration('/');
   const subscription = await registration?.pushManager.getSubscription();
   if (!subscription) return;
   const endpoint = subscription.endpoint;
