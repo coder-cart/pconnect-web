@@ -21,24 +21,23 @@ export function Logo({ compact = false, className }: LogoProps) {
 
   return (
     <div
-      className={cn('flex items-center', className)}
+      className={cn('flex items-center gap-2.5', className)}
       role="img"
       aria-label={BRAND.name}
     >
       <img
-        src={BRAND.lockup}
+        src={BRAND.mark}
         alt=""
-        width={140}
+        width={36}
         height={36}
-        className="brand-lockup h-8 w-auto max-w-[9.5rem] object-contain object-left"
+        className="h-9 w-9 shrink-0 object-contain"
       />
-      <img
-        src={BRAND.lockupDark}
-        alt=""
-        width={140}
-        height={36}
-        className="brand-lockup-dark h-8 w-auto max-w-[9.5rem] object-contain object-left"
-      />
+      <span className="brand-lockup text-[1.05rem] font-semibold tracking-[-0.02em] text-[var(--foreground)]">
+        Colab<span className="text-[var(--primary)]">deck</span>
+      </span>
+      <span className="brand-lockup-dark text-[1.05rem] font-semibold tracking-[-0.02em] text-white">
+        Colab<span className="text-[#a5b4fc]">deck</span>
+      </span>
     </div>
   );
 }

@@ -6,6 +6,8 @@
   --login-muted: #64748b;
   --login-line: #e2e8f0;
   --login-paper: #f4f6fb;
+  --primary: var(--login-primary);
+  --foreground: var(--login-ink);
   /* Keep login visual tokens local; do not mutate global app theme. */
   --font-marketing-display: var(--font-inter);
   --font-marketing-body: var(--font-inter);
@@ -67,8 +69,6 @@
 
 .login-showcase__brand .brand-lockup-dark {
   display: block;
-  height: 2.35rem;
-  width: auto;
 }
 
 .login-showcase h1 {
