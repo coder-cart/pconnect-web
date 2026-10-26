@@ -17,7 +17,7 @@ import {
   Users,
   Workflow,
 } from 'lucide-react';
-import { apiRequest, apiDownload } from '@/lib/api-client';
+import { apiRequest, apiDownload, apiUpload } from '@/lib/api-client';
 import { ApiResponse, userHasPermission } from '@/lib/auth';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { Badge } from '@/components/ui/Badge';
@@ -27,6 +27,8 @@ import { Input } from '@/components/ui/Input';
 import { Tabs } from '@/components/ui/Tabs';
 import { StatCard } from '@/components/ui/StatCard';
 import { LoadingState, ErrorState, EmptyState } from '@/components/ui/StatePanels';
+import { ClientOrgLogo } from '@/components/ui/ClientOrgLogo';
+import { ImageCropModal } from '@/components/ui/ImageCropModal';
 import { CreateOnboardingModal } from '@/components/modals/CreateOnboardingModal';
 import { LinkClientUserModal } from '@/components/modals/LinkClientUserModal';
 import { ClientServiceConfig } from '@/components/clients/ClientServiceConfig';
@@ -61,6 +63,8 @@ interface ClientDetail {
   specialNotes?: string | null;
   allowClientTeamInvite?: boolean;
   maxPortalUsers?: number;
+  logoUpdatedAt?: string | null;
+  hasLogo?: boolean;
   defaultManager?: { id: string; fullName: string; email?: string } | null;
   contacts?: ClientContact[];
 }
@@ -170,11 +174,15 @@ export default function ClientDetailPage() {
   const router = useRouter();
   const { user } = useWorkspace();
   const canManage = userHasPermission(user, 'clients.manage');
+  const canManageLogo = canManage || user.userType === 'external';
 
   const [activeTab, setActiveTab] = useState(() =>
     searchParams.get('tab') === 'portal' ? 'portal' : 'overview',
   );
   const [client, setClient] = useState<ClientDetail | null>(null);
+  const [logoCropSrc, setLogoCropSrc] = useState<string | null>(null);
+  const [logoBusy, setLogoBusy] = useState(false);
+  const [logoMessage, setLogoMessage] = useState<string | null>(null);
   const [overview, setOverview] = useState<ClientOverview | null>(null);
   const [orders, setOrders] = useState<OrderSummary[]>([]);
   const [contacts, setContacts] = useState<ClientContact[]>([]);
@@ -367,6 +375,76 @@ export default function ClientDetailPage() {
     }
   }
 
+  function handleLogoPick(file: File | undefined) {
+    if (!file) return;
+    setLogoMessage(null);
+    setErrorMessage(null);
+    if (file.size > 8 * 1024 * 1024) {
+      setErrorMessage('Choose an image under 8 MB to crop.');
+      return;
+    }
+    if (!file.type.startsWith('image/')) {
+      setErrorMessage('Use a JPEG, PNG, WebP, or GIF image.');
+      return;
+    }
+    if (logoCropSrc) URL.revokeObjectURL(logoCropSrc);
+    setLogoCropSrc(URL.createObjectURL(file));
+  }
+
+  function closeLogoCrop() {
+    if (logoCropSrc) URL.revokeObjectURL(logoCropSrc);
+    setLogoCropSrc(null);
+  }
+
+  async function handleLogoSave(file: File) {
+    if (file.size > 2 * 1024 * 1024) {
+      throw new Error(
+        'Cropped logo must be 2 MB or smaller. Zoom out or try another image.',
+      );
+    }
+    const formData = new FormData();
+    formData.append('file', file);
+    setLogoBusy(true);
+    setErrorMessage(null);
+    setLogoMessage(null);
+    try {
+      const response = await apiUpload<ApiResponse<ClientDetail>>(
+        `/clients/${clientId}/logo`,
+        formData,
+      );
+      setClient(response.data);
+      setLogoMessage('Company logo updated.');
+      closeLogoCrop();
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : 'Unable to upload logo';
+      setErrorMessage(message);
+      throw error instanceof Error ? error : new Error(message);
+    } finally {
+      setLogoBusy(false);
+    }
+  }
+
+  async function handleLogoRemove() {
+    setLogoBusy(true);
+    setErrorMessage(null);
+    setLogoMessage(null);
+    try {
+      const response = await apiRequest<ApiResponse<ClientDetail>>(
+        `/clients/${clientId}/logo`,
+        { method: 'DELETE' },
+      );
+      setClient(response.data);
+      setLogoMessage('Company logo removed.');
+    } catch (error) {
+      setErrorMessage(
+        error instanceof Error ? error.message : 'Unable to remove logo',
+      );
+    } finally {
+      setLogoBusy(false);
+    }
+  }
+
   async function saveSettings() {
     setSettingsBusy(true);
     try {
@@ -519,6 +597,67 @@ export default function ClientDetailPage() {
             </Button>
           </>
         }
+      />
+
+      <Card className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex items-center gap-3">
+          <ClientOrgLogo
+            clientId={client.id}
+            name={client.name}
+            logoUpdatedAt={client.logoUpdatedAt}
+            className="h-14 w-14"
+          />
+          <div className="min-w-0">
+            <p className="text-sm font-medium text-[var(--foreground)]">
+              Company logo
+            </p>
+            <p className="mt-0.5 text-xs text-[var(--muted)]">
+              Shown in this workspace. JPEG, PNG, WebP, or GIF · crop before
+              save · 2 MB max.
+            </p>
+            {logoMessage ? (
+              <p className="mt-1 text-xs text-[var(--success)]">{logoMessage}</p>
+            ) : null}
+          </div>
+        </div>
+        {canManageLogo ? (
+          <div className="flex flex-wrap gap-2">
+            <label className="inline-flex min-h-touch cursor-pointer items-center rounded-[var(--radius-md)] bg-[var(--primary)] px-4 text-sm text-[var(--primary-foreground)] sm:h-10 sm:min-h-10">
+              {logoBusy ? 'Working…' : client.logoUpdatedAt || client.hasLogo ? 'Replace logo' : 'Upload logo'}
+              <input
+                type="file"
+                accept="image/jpeg,image/png,image/webp,image/gif"
+                className="sr-only"
+                disabled={logoBusy}
+                onChange={(event) => {
+                  const file = event.target.files?.[0];
+                  event.target.value = '';
+                  handleLogoPick(file);
+                }}
+              />
+            </label>
+            {client.logoUpdatedAt || client.hasLogo ? (
+              <Button
+                type="button"
+                variant="secondary"
+                disabled={logoBusy}
+                onClick={() => void handleLogoRemove()}
+              >
+                Remove
+              </Button>
+            ) : null}
+          </div>
+        ) : null}
+      </Card>
+
+      <ImageCropModal
+        open={Boolean(logoCropSrc)}
+        imageSrc={logoCropSrc}
+        title="Adjust company logo"
+        description="Crop, zoom, and reposition. Cancel to discard changes."
+        isSaving={logoBusy}
+        onClose={closeLogoCrop}
+        onSave={handleLogoSave}
       />
 
       <div className="flex flex-wrap items-center gap-2">

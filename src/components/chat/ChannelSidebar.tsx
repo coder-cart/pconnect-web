@@ -460,7 +460,7 @@ export function ChannelSidebar({
 
         {showChannels && !showUnreadOnly ? (
           <SidebarSection
-            title="Team channels"
+            title="Internal Connections"
             collapsed={teamCollapsed}
             onToggle={() => setTeamCollapsed((current) => !current)}
             action={
@@ -478,7 +478,7 @@ export function ChannelSidebar({
           >
             {teamChannels.length === 0 ? (
               <p className="px-3 py-2 text-xs text-[var(--muted)]">
-                No team channels yet.
+                No internal connections yet.
               </p>
             ) : (
               teamChannels.map((channel) => (
@@ -495,13 +495,13 @@ export function ChannelSidebar({
 
         {showChannels && !showUnreadOnly ? (
           <SidebarSection
-            title="Clients"
+            title="External Connections"
             collapsed={clientsCollapsed}
             onToggle={() => setClientsCollapsed((current) => !current)}
           >
             {clientGroups.length === 0 ? (
               <p className="px-3 py-2 text-xs text-[var(--muted)]">
-                Client message hubs appear here.
+                Client connections appear here.
               </p>
             ) : (
               clientGroups.map((group) => (

@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Loader2, MessageSquare, Search, Users } from 'lucide-react';
 import { Modal } from '@/components/ui/Modal';
 import { Input } from '@/components/ui/Input';
-import { Avatar } from '@/components/ui/Avatar';
+import { UserAvatar } from '@/components/ui/UserAvatar';
 import { apiRequest } from '@/lib/api-client';
 import { ApiResponse } from '@/lib/auth';
 import { ChatChannel } from '@/lib/chat-types';
@@ -15,6 +15,7 @@ interface DmCandidate {
   fullName: string;
   email: string;
   userType: string;
+  avatarUpdatedAt?: string | null;
 }
 
 interface StartDirectMessageModalProps {
@@ -54,7 +55,14 @@ function CandidateRow({
         isStarting && 'bg-[var(--primary-soft)]',
       )}
     >
-      <Avatar name={candidate.fullName} size="sm" />
+      <UserAvatar
+        user={{
+          id: candidate.id,
+          fullName: candidate.fullName,
+          avatarUpdatedAt: candidate.avatarUpdatedAt,
+        }}
+        size="sm"
+      />
       <span className="min-w-0 flex-1">
         <span className="block truncate text-sm font-medium text-[var(--foreground)]">
           {candidate.fullName}

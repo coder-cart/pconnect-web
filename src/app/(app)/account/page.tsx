@@ -10,6 +10,8 @@ import { Button } from '@/components/ui/Button';
 import { ListSkeleton } from '@/components/ui/Skeleton';
 import { ErrorState } from '@/components/ui/StatePanels';
 import { UserAvatar } from '@/components/ui/UserAvatar';
+import { ClientOrgLogo } from '@/components/ui/ClientOrgLogo';
+import { ImageCropModal } from '@/components/ui/ImageCropModal';
 import { apiRequest, apiUpload } from '@/lib/api-client';
 import { ApiResponse } from '@/lib/auth';
 import { useWorkspace } from '@/components/providers/WorkspaceProvider';
@@ -30,6 +32,13 @@ interface ProfileDetails {
   bio: string | null;
   avatarUpdatedAt: string | null;
   timeZone: string | null;
+}
+
+interface ClientOrgSummary {
+  id: string;
+  name: string;
+  logoUpdatedAt?: string | null;
+  hasLogo?: boolean;
 }
 
 export default function AccountProfilePage() {
@@ -53,8 +62,13 @@ export default function AccountProfilePage() {
   const [isUploading, setIsUploading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [savedMessage, setSavedMessage] = useState<string | null>(null);
+  const [cropSrc, setCropSrc] = useState<string | null>(null);
+  const [clientOrg, setClientOrg] = useState<ClientOrgSummary | null>(null);
+  const [logoCropSrc, setLogoCropSrc] = useState<string | null>(null);
+  const [logoBusy, setLogoBusy] = useState(false);
 
   const roleLabel = getRoleLabel(user.userType, user.roleCodes);
+  const isExternal = user.userType === 'external';
   const deviceTimeZone = useMemo(() => getBrowserTimeZone(), []);
   const timeZoneOptions = useMemo(() => {
     const zones = listTimeZoneOptions();
@@ -85,7 +99,27 @@ export default function AccountProfilePage() {
         setErrorMessage(error.message);
       })
       .finally(() => setIsLoading(false));
-  }, []);
+
+    if (user.userType === 'external') {
+      apiRequest<ApiResponse<ClientOrgSummary[]>>('/clients')
+        .then(async (response) => {
+          const summary = response.data[0] ?? null;
+          if (!summary) {
+            setClientOrg(null);
+            return;
+          }
+          try {
+            const detail = await apiRequest<ApiResponse<ClientOrgSummary>>(
+              `/clients/${summary.id}`,
+            );
+            setClientOrg(detail.data);
+          } catch {
+            setClientOrg(summary);
+          }
+        })
+        .catch(() => setClientOrg(null));
+    }
+  }, [user.userType]);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -132,7 +166,7 @@ export default function AccountProfilePage() {
     }
   }
 
-  async function handlePhoto(file: File | undefined) {
+  function handlePhotoPick(file: File | undefined) {
     if (!file) {
       return;
     }
@@ -140,14 +174,39 @@ export default function AccountProfilePage() {
     setErrorMessage(null);
     setSavedMessage(null);
 
-    if (file.size > 2 * 1024 * 1024) {
-      setErrorMessage('Profile photo must be 2 MB or smaller.');
+    if (file.size > 8 * 1024 * 1024) {
+      setErrorMessage('Choose an image under 8 MB to crop.');
       return;
+    }
+
+    if (!file.type.startsWith('image/')) {
+      setErrorMessage('Use a JPEG, PNG, WebP, or GIF image.');
+      return;
+    }
+
+    if (cropSrc) {
+      URL.revokeObjectURL(cropSrc);
+    }
+    setCropSrc(URL.createObjectURL(file));
+  }
+
+  function closeCropModal() {
+    if (cropSrc) {
+      URL.revokeObjectURL(cropSrc);
+    }
+    setCropSrc(null);
+  }
+
+  async function handleCroppedSave(file: File) {
+    if (file.size > 2 * 1024 * 1024) {
+      throw new Error('Cropped photo must be 2 MB or smaller. Zoom out or try another image.');
     }
 
     const formData = new FormData();
     formData.append('file', file);
     setIsUploading(true);
+    setErrorMessage(null);
+    setSavedMessage(null);
 
     try {
       const response = await apiUpload<ApiResponse<ProfileDetails>>(
@@ -157,12 +216,86 @@ export default function AccountProfilePage() {
       setProfile(response.data);
       await refreshUser();
       setSavedMessage('Profile photo updated.');
+      closeCropModal();
     } catch (error) {
-      setErrorMessage(
-        error instanceof Error ? error.message : 'Unable to upload photo',
-      );
+      const message =
+        error instanceof Error ? error.message : 'Unable to upload photo';
+      setErrorMessage(message);
+      throw error instanceof Error ? error : new Error(message);
     } finally {
       setIsUploading(false);
+    }
+  }
+
+  function handleLogoPick(file: File | undefined) {
+    if (!file || !clientOrg) return;
+    setErrorMessage(null);
+    setSavedMessage(null);
+    if (file.size > 8 * 1024 * 1024) {
+      setErrorMessage('Choose an image under 8 MB to crop.');
+      return;
+    }
+    if (!file.type.startsWith('image/')) {
+      setErrorMessage('Use a JPEG, PNG, WebP, or GIF image.');
+      return;
+    }
+    if (logoCropSrc) URL.revokeObjectURL(logoCropSrc);
+    setLogoCropSrc(URL.createObjectURL(file));
+  }
+
+  function closeLogoCrop() {
+    if (logoCropSrc) URL.revokeObjectURL(logoCropSrc);
+    setLogoCropSrc(null);
+  }
+
+  async function handleLogoSave(file: File) {
+    if (!clientOrg) return;
+    if (file.size > 2 * 1024 * 1024) {
+      throw new Error(
+        'Cropped logo must be 2 MB or smaller. Zoom out or try another image.',
+      );
+    }
+    const formData = new FormData();
+    formData.append('file', file);
+    setLogoBusy(true);
+    setErrorMessage(null);
+    setSavedMessage(null);
+    try {
+      const response = await apiUpload<ApiResponse<ClientOrgSummary>>(
+        `/clients/${clientOrg.id}/logo`,
+        formData,
+      );
+      setClientOrg(response.data);
+      setSavedMessage('Company logo updated.');
+      closeLogoCrop();
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : 'Unable to upload logo';
+      setErrorMessage(message);
+      throw error instanceof Error ? error : new Error(message);
+    } finally {
+      setLogoBusy(false);
+    }
+  }
+
+  async function handleLogoRemove() {
+    if (!clientOrg) return;
+    setLogoBusy(true);
+    setErrorMessage(null);
+    setSavedMessage(null);
+    try {
+      const response = await apiRequest<ApiResponse<ClientOrgSummary>>(
+        `/clients/${clientOrg.id}/logo`,
+        { method: 'DELETE' },
+      );
+      setClientOrg(response.data);
+      setSavedMessage('Company logo removed.');
+    } catch (error) {
+      setErrorMessage(
+        error instanceof Error ? error.message : 'Unable to remove logo',
+      );
+    } finally {
+      setLogoBusy(false);
     }
   }
 
@@ -219,7 +352,8 @@ export default function AccountProfilePage() {
                   Profile photo
                 </p>
                 <p className="mt-1 text-sm text-[var(--muted)]">
-                  JPEG, PNG, WebP, or GIF. 2 MB maximum.
+                  JPEG, PNG, WebP, or GIF. Crop and zoom before saving. Final
+                  photo must be 2 MB or smaller.
                 </p>
               </div>
               <div className="flex flex-wrap gap-2">
@@ -233,7 +367,7 @@ export default function AccountProfilePage() {
                     onChange={(event) => {
                       const file = event.target.files?.[0];
                       event.target.value = '';
-                      void handlePhoto(file);
+                      handlePhotoPick(file);
                     }}
                   />
                 </label>
@@ -339,6 +473,80 @@ export default function AccountProfilePage() {
           </form>
         </Card>
       ) : null}
+
+      <ImageCropModal
+        open={Boolean(cropSrc)}
+        imageSrc={cropSrc}
+        title="Adjust profile photo"
+        description="Crop, zoom, and reposition. Cancel to discard changes."
+        isSaving={isUploading}
+        onClose={closeCropModal}
+        onSave={handleCroppedSave}
+      />
+
+      {!isLoading && profile && isExternal && clientOrg ? (
+        <Card className="space-y-4">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-start">
+            <ClientOrgLogo
+              clientId={clientOrg.id}
+              name={clientOrg.name}
+              logoUpdatedAt={clientOrg.logoUpdatedAt}
+              className="h-16 w-16"
+            />
+            <div className="space-y-3">
+              <div>
+                <p className="text-sm font-medium text-[var(--foreground)]">
+                  Company logo
+                </p>
+                <p className="mt-1 text-sm text-[var(--muted)]">
+                  Brand logo for {clientOrg.name}. Crop and zoom before saving.
+                  Final image must be 2 MB or smaller.
+                </p>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <label className="inline-flex min-h-touch cursor-pointer items-center rounded-[var(--radius-md)] bg-[var(--primary)] px-4 text-sm text-[var(--primary-foreground)] sm:h-10 sm:min-h-10">
+                  {logoBusy
+                    ? 'Working...'
+                    : clientOrg.logoUpdatedAt || clientOrg.hasLogo
+                      ? 'Replace logo'
+                      : 'Upload logo'}
+                  <input
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp,image/gif"
+                    className="sr-only"
+                    disabled={logoBusy}
+                    onChange={(event) => {
+                      const file = event.target.files?.[0];
+                      event.target.value = '';
+                      handleLogoPick(file);
+                    }}
+                  />
+                </label>
+                {clientOrg.logoUpdatedAt || clientOrg.hasLogo ? (
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    disabled={logoBusy}
+                    onClick={() => void handleLogoRemove()}
+                  >
+                    Remove logo
+                  </Button>
+                ) : null}
+              </div>
+            </div>
+          </div>
+        </Card>
+      ) : null}
+
+      <ImageCropModal
+        open={Boolean(logoCropSrc)}
+        imageSrc={logoCropSrc}
+        title="Adjust company logo"
+        description="Crop, zoom, and reposition. Cancel to discard changes."
+        isSaving={logoBusy}
+        onClose={closeLogoCrop}
+        onSave={handleLogoSave}
+      />
 
       {!isLoading && profile ? (
         <Card className="mt-4 space-y-3">

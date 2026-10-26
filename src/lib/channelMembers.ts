@@ -3,6 +3,7 @@ export interface ChannelMemberOption {
   fullName: string;
   email: string;
   userType: 'internal' | 'external';
+  avatarUpdatedAt?: string | null;
   inChannel?: boolean;
 }
 

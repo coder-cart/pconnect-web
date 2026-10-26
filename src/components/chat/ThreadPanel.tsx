@@ -2,7 +2,7 @@
 
 import { useEffect } from 'react';
 import { X } from 'lucide-react';
-import { Avatar } from '@/components/ui/Avatar';
+import { UserAvatar } from '@/components/ui/UserAvatar';
 import { ChatComposer } from '@/components/chat/ChatComposer';
 import { ChatMessageBody } from '@/components/chat/ChatMessageBody';
 import { ChatScrollArea } from '@/components/chat/ChatScrollArea';
@@ -103,7 +103,14 @@ export function ThreadPanel({
 
       <div className="shrink-0 border-b border-[var(--border)] px-4 py-3">
         <div className="flex gap-3">
-          <Avatar name={parentMessage.sender.fullName} size="sm" />
+          <UserAvatar
+            user={{
+              id: parentMessage.sender.id,
+              fullName: parentMessage.sender.fullName,
+              avatarUpdatedAt: parentMessage.sender.avatarUpdatedAt,
+            }}
+            size="sm"
+          />
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-2">
               <p className="text-sm font-medium">{parentMessage.sender.fullName}</p>

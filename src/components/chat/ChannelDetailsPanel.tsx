@@ -11,7 +11,7 @@ import {
   Users,
   X,
 } from 'lucide-react';
-import { Avatar } from '@/components/ui/Avatar';
+import { UserAvatar } from '@/components/ui/UserAvatar';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { MessageAttachment } from '@/components/chat/ChatMessageBody';
@@ -305,7 +305,14 @@ export function ChannelDetailsPanel({
                   >
                     <div className="flex items-center gap-2 text-xs text-[var(--muted)]">
                       <Pin className="h-3.5 w-3.5 text-[var(--danger)]" />
-                      <Avatar name={pin.message.sender.fullName} size="xs" />
+                      <UserAvatar
+                        user={{
+                          id: pin.message.sender.id,
+                          fullName: pin.message.sender.fullName,
+                          avatarUpdatedAt: pin.message.sender.avatarUpdatedAt,
+                        }}
+                        size="xs"
+                      />
                       <span className="truncate">
                         {pin.message.sender.fullName}
                       </span>
@@ -362,7 +369,14 @@ function MemberList({ members }: { members: ChannelMemberOption[] }) {
           key={member.id}
           className="flex items-center gap-2.5 rounded-[var(--radius-md)] px-1 py-1.5"
         >
-          <Avatar name={member.fullName} size="sm" />
+          <UserAvatar
+            user={{
+              id: member.id,
+              fullName: member.fullName,
+              avatarUpdatedAt: member.avatarUpdatedAt,
+            }}
+            size="sm"
+          />
           <div className="min-w-0">
             <p className="truncate text-sm font-medium text-[var(--foreground)]">
               {member.fullName}

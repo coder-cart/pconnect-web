@@ -38,12 +38,7 @@ export const NAV_ITEMS: NavItem[] = [
     externalLabel: 'Messages',
     icon: MessageSquare,
   },
-  {
-    href: '/account',
-    label: 'My Profile',
-    externalLabel: 'My Profile',
-    icon: UserRound,
-  },
+ 
   {
     href: '/orders',
     label: 'Order Report',
@@ -182,7 +177,12 @@ const EDITOR_ELEVATED_ROLES = [
   'qa',
 ];
 
-/** Editor without QA or a higher staff role. Their workspace is messaging and profile. */
+/**
+ * Editor without QA or a higher staff role. Their workspace is messaging and profile.
+ * Managers (and other elevated roles) are a superset of Editor — they keep Orders,
+ * Clients, Settings, etc. There are no separate "editor nav links" to hide from Manager;
+ * editor-only lockdown applies only when `isEditorOnly` is true.
+ */
 export function isEditorOnly(roleCodes: string[]): boolean {
   return (
     roleCodes.includes('editor') &&

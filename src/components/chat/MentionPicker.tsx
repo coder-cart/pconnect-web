@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef } from 'react';
-import { Avatar } from '@/components/ui/Avatar';
+import { UserAvatar } from '@/components/ui/UserAvatar';
 import { ChannelMemberOption, getMemberSourceLabel } from '@/lib/channelMembers';
 import { cn } from '@/lib/cn';
 
@@ -59,7 +59,14 @@ export function MentionPicker({
             onMouseEnter={() => onActiveIndexChange(index)}
             onClick={() => onSelect(member)}
           >
-            <Avatar name={member.fullName} size="sm" />
+            <UserAvatar
+              user={{
+                id: member.id,
+                fullName: member.fullName,
+                avatarUpdatedAt: member.avatarUpdatedAt,
+              }}
+              size="sm"
+            />
             <span className="min-w-0 flex-1">
               <span className="block truncate font-medium">
                 {member.fullName}

@@ -19,7 +19,7 @@ import {
   DropdownMenu,
   DropdownMenuItem,
 } from '@/components/ui/DropdownMenu';
-import { Avatar } from '@/components/ui/Avatar';
+import { UserAvatar } from '@/components/ui/UserAvatar';
 import { ChannelNotificationMenu } from '@/components/chat/ChannelNotificationMenu';
 import { DETAILS_PANEL_ID } from '@/components/chat/ChannelDetailsPanel';
 import { Tabs } from '@/components/ui/Tabs';
@@ -171,7 +171,14 @@ export function ChannelHeader({
                   )}
                   title={member.fullName}
                 >
-                  <Avatar name={member.fullName} size="xs" />
+                  <UserAvatar
+                    user={{
+                      id: member.id,
+                      fullName: member.fullName,
+                      avatarUpdatedAt: member.avatarUpdatedAt,
+                    }}
+                    size="xs"
+                  />
                 </span>
               ))}
               {extraMembers > 0 ? (

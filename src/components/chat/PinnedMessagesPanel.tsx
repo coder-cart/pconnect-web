@@ -1,7 +1,7 @@
 'use client';
 
 import { Pin, PinOff } from 'lucide-react';
-import { Avatar } from '@/components/ui/Avatar';
+import { UserAvatar } from '@/components/ui/UserAvatar';
 import { Button } from '@/components/ui/Button';
 import { ChatMessageBody } from '@/components/chat/ChatMessageBody';
 import { EmptyState } from '@/components/ui/StatePanels';
@@ -66,8 +66,12 @@ export function PinnedMessagesPanel({
                 onClick={() => onJumpToMessage(pin.message.id)}
                 className="flex min-w-0 flex-1 items-start gap-3 text-left"
               >
-                <Avatar
-                  name={pin.message.sender.fullName}
+                <UserAvatar
+                  user={{
+                    id: pin.message.sender.id,
+                    fullName: pin.message.sender.fullName,
+                    avatarUpdatedAt: pin.message.sender.avatarUpdatedAt,
+                  }}
                   size="sm"
                   className="mt-0.5 shrink-0"
                 />
