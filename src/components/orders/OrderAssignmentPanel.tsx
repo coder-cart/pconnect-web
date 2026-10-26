@@ -8,7 +8,7 @@ import { Card } from '@/components/ui/Card';
 import {
   ClientLifecycleStage,
   MANAGER_WORKFLOW_OPTIONS,
-  canCorrectDeliveryLink,
+  canEditDeliveryLink,
   canMarkOrderReceived,
   clientLifecycleStage,
   toExternalHref,
@@ -47,7 +47,7 @@ export function OrderAssignmentPanel({
   const { user } = useWorkspace();
   const deliveryLinkLocked =
     Boolean(initialDeliveryLink?.trim()) &&
-    !canCorrectDeliveryLink(user.roleCodes);
+    !canEditDeliveryLink(user.roleCodes, workflowStatusCode);
   const canReceive = canMarkOrderReceived(user.roleCodes);
   const [users, setUsers] = useState<UserOption[]>([]);
   const [stage, setStage] = useState<ClientLifecycleStage | ''>(
@@ -179,8 +179,8 @@ export function OrderAssignmentPanel({
         />
         <span className="mt-1 block text-xs text-[var(--muted)]">
           {deliveryLinkLocked
-            ? 'Locked after save. A company owner or internal admin can replace it.'
-            : 'Required before Delivered. Saving the link does not change the status.'}
+            ? 'Locked outside In Progress / QA. An admin can replace it anytime; managers can edit while In Progress or in QA.'
+            : 'Save this link before marking the order Delivered. Saving the link does not change the status.'}
         </span>
       </label>
       )}

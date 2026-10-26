@@ -225,10 +225,31 @@ export function canMarkOrderReceived(roleCodes: string[] | undefined): boolean {
   );
 }
 
+/**
+ * Owner/admin can always correct a delivery link.
+ * Managers can set or change it while the order is In Progress or in QA.
+ */
+export function canEditDeliveryLink(
+  roleCodes: string[] | undefined,
+  workflowCode?: string | null,
+): boolean {
+  if (
+    ['company_owner', 'internal_admin'].some((code) =>
+      roleCodes?.includes(code),
+    )
+  ) {
+    return true;
+  }
+  if (!roleCodes?.includes('internal_manager')) {
+    return false;
+  }
+  const stage = clientLifecycleStage(workflowCode);
+  return stage === 'in_progress' || stage === 'quality_check';
+}
+
+/** @deprecated Prefer canEditDeliveryLink with workflow context. */
 export function canCorrectDeliveryLink(roleCodes: string[] | undefined): boolean {
-  return ['company_owner', 'internal_admin'].some((code) =>
-    roleCodes?.includes(code),
-  );
+  return canEditDeliveryLink(roleCodes, 'qa_review');
 }
 
 export const MANAGER_WORKFLOW_OPTIONS: Array<{

@@ -28,7 +28,6 @@ import {
   OrderLifecycleSummary,
   OrderSummary,
 } from '@/lib/orders';
-import { OrderKanbanBoard } from '@/components/orders/OrderKanbanBoard';
 import { DashboardMetricCard } from '@/components/dashboard/DashboardMetricCard';
 import {
   buildWeekSeries,
@@ -71,7 +70,6 @@ export default function DashboardPage() {
   const hideClientIdentity = isProductionOnlyStaff(user?.roleCodes);
   const roleLabel = getRoleLabel(user.userType, user.roleCodes);
   const canViewOrders = userHasPermission(user, 'orders.view');
-  const canManageOrders = userHasPermission(user, 'orders.manage');
   const firstName = user.fullName.split(' ')[0] || user.fullName;
 
   useEffect(() => {
@@ -301,8 +299,6 @@ export default function DashboardPage() {
               </Link>
             </Card>
           )}
-
-          {canManageOrders ? <OrderKanbanBoard refreshKey={refreshKey} /> : null}
 
           {canViewOrders ? (
             <div className="grid gap-4 xl:grid-cols-3">

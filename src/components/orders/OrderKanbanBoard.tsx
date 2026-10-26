@@ -22,12 +22,14 @@ import { ListSkeleton } from '@/components/ui/Skeleton';
 import { Button } from '@/components/ui/Button';
 import { DeliveryLinkModal } from '@/components/orders/DeliveryLinkModal';
 import {
+  canEditDeliveryLink,
   clientDashboardTab,
   clientLifecycleStage,
   OrderSummary,
   toExternalHref,
   type ClientLifecycleStage,
 } from '@/lib/orders';
+import { useWorkspace } from '@/components/providers/WorkspaceProvider';
 import { cn } from '@/lib/cn';
 
 type ManagerColumnId =
@@ -209,6 +211,7 @@ export function OrderKanbanBoard({
   onMarkReceived?: (orderId: string) => void;
   receivingId?: string | null;
 }) {
+  const { user } = useWorkspace();
   const columns = variant === 'client' ? CLIENT_COLUMNS : MANAGER_COLUMNS;
   const isClient = variant === 'client';
   const effectiveReadOnly = readOnly || isClient;
@@ -223,6 +226,9 @@ export function OrderKanbanBoard({
   const [boardRefresh, setBoardRefresh] = useState(0);
   const [deliveryTarget, setDeliveryTarget] = useState<OrderSummary | null>(
     null,
+  );
+  const [deliveryModalMode, setDeliveryModalMode] = useState<'deliver' | 'save'>(
+    'deliver',
   );
   const hasLoaded = useRef(false);
 
@@ -371,6 +377,7 @@ export function OrderKanbanBoard({
 
     if (stage === 'delivered') {
       setMoveError(null);
+      setDeliveryModalMode('deliver');
       setDeliveryTarget(order);
       return;
     }
@@ -378,10 +385,44 @@ export function OrderKanbanBoard({
     void moveOrder(order, stage as ClientLifecycleStage);
   }
 
-  async function confirmDeliver(deliveryLink: string) {
+  function openDeliveryLinkEditor(order: OrderSummary) {
+    setMoveError(null);
+    setDeliveryModalMode('save');
+    setDeliveryTarget(order);
+  }
+
+  async function confirmDeliveryLink(deliveryLink: string) {
     if (!deliveryTarget) return;
-    const ok = await moveOrder(deliveryTarget, 'delivered', deliveryLink);
-    if (ok) setDeliveryTarget(null);
+    if (deliveryModalMode === 'deliver') {
+      const ok = await moveOrder(deliveryTarget, 'delivered', deliveryLink);
+      if (ok) setDeliveryTarget(null);
+      return;
+    }
+
+    setBusy(true);
+    setMoveError(null);
+    try {
+      await apiRequest(`/orders/${deliveryTarget.id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ deliveryLink }),
+      });
+      setOrders((currentOrders) =>
+        currentOrders.map((item) =>
+          item.id === deliveryTarget.id ? { ...item, deliveryLink } : item,
+        ),
+      );
+      setDeliveryTarget(null);
+      onMoved?.();
+      setBoardRefresh((value) => value + 1);
+    } catch (error) {
+      setMoveError(
+        error instanceof Error
+          ? error.message
+          : 'Could not save the delivery link',
+      );
+    } finally {
+      setBusy(false);
+    }
   }
 
   if (isLoading) return <ListSkeleton rows={4} />;
@@ -398,6 +439,7 @@ export function OrderKanbanBoard({
     <div className="space-y-4">
       <DeliveryLinkModal
         open={Boolean(deliveryTarget)}
+        mode={deliveryModalMode}
         orderCode={deliveryTarget?.code}
         orderName={deliveryTarget?.name}
         initialLink={deliveryTarget?.deliveryLink}
@@ -405,7 +447,7 @@ export function OrderKanbanBoard({
         onClose={() => {
           if (!busy) setDeliveryTarget(null);
         }}
-        onConfirm={confirmDeliver}
+        onConfirm={confirmDeliveryLink}
       />
       {moveError ? (
         <ErrorState title="Order stayed in its column" description={moveError} />
@@ -521,6 +563,18 @@ export function OrderKanbanBoard({
                     readOnly={effectiveReadOnly}
                     variant={variant}
                     receivingId={receivingId}
+                    canEditDeliveryLink={
+                      variant === 'manager' &&
+                      canEditDeliveryLink(
+                        user.roleCodes,
+                        order.workflowStatus?.code,
+                      )
+                    }
+                    onEditDeliveryLink={
+                      variant === 'manager'
+                        ? () => openDeliveryLinkEditor(order)
+                        : undefined
+                    }
                     onMarkReceived={onMarkReceived}
                     onOpen={onOpenOrder}
                     onDragStart={() => setDraggingId(order.id)}
@@ -551,6 +605,8 @@ function OrderCard({
   readOnly = false,
   variant = 'manager',
   receivingId,
+  canEditDeliveryLink: canEditLink = false,
+  onEditDeliveryLink,
   onMarkReceived,
   onOpen,
   onDragStart,
@@ -561,6 +617,8 @@ function OrderCard({
   readOnly?: boolean;
   variant?: BoardVariant;
   receivingId?: string | null;
+  canEditDeliveryLink?: boolean;
+  onEditDeliveryLink?: () => void;
   onMarkReceived?: (orderId: string) => void;
   onOpen?: (orderId: string) => void;
   onDragStart: () => void;
@@ -737,6 +795,19 @@ function OrderCard({
               }}
             >
               Mark as Received
+            </Button>
+          ) : null}
+          {variant === 'manager' && canEditLink && onEditDeliveryLink ? (
+            <Button
+              size="sm"
+              variant="secondary"
+              data-stop-card-nav
+              onClick={(event) => {
+                event.stopPropagation();
+                onEditDeliveryLink();
+              }}
+            >
+              {deliveryHref ? 'Edit delivery link' : 'Add delivery link'}
             </Button>
           ) : null}
           {variant === 'manager' && deliveryHref && !isDelivered ? (

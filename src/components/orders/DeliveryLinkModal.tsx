@@ -8,6 +8,7 @@ import { toExternalHref } from '@/lib/orders';
 
 interface DeliveryLinkModalProps {
   open: boolean;
+  mode?: 'deliver' | 'save';
   orderCode?: string | null;
   orderName?: string | null;
   initialLink?: string | null;
@@ -18,6 +19,7 @@ interface DeliveryLinkModalProps {
 
 export function DeliveryLinkModal({
   open,
+  mode = 'deliver',
   orderCode,
   orderName,
   initialLink,
@@ -32,10 +34,11 @@ export function DeliveryLinkModal({
     if (!open) return;
     setLink(initialLink?.trim() ?? '');
     setErrorMessage(null);
-  }, [open, initialLink]);
+  }, [open, initialLink, mode]);
 
   const normalized = toExternalHref(link);
   const orderLabel = [orderCode, orderName].filter(Boolean).join(' · ');
+  const isDeliverMode = mode === 'deliver';
 
   async function handleSubmit(event?: FormEvent) {
     event?.preventDefault();
@@ -52,11 +55,15 @@ export function DeliveryLinkModal({
   return (
     <Modal
       open={open}
-      title="Mark as Delivered"
+      title={isDeliverMode ? 'Mark as Delivered' : 'Delivery link'}
       description={
         orderLabel
-          ? `Add the delivery link for ${orderLabel}, then confirm.`
-          : 'Add the client delivery link, then confirm.'
+          ? isDeliverMode
+            ? `Add the delivery link for ${orderLabel}, then confirm.`
+            : `Update the delivery link for ${orderLabel}. Saving does not change the status.`
+          : isDeliverMode
+            ? 'Add the client delivery link, then confirm.'
+            : 'Save the delivery link without changing the order status.'
       }
       onClose={() => {
         if (!isSubmitting) onClose();
@@ -66,7 +73,7 @@ export function DeliveryLinkModal({
         <ModalActions
           onCancel={onClose}
           onSubmit={() => void handleSubmit()}
-          submitLabel="Mark Delivered"
+          submitLabel={isDeliverMode ? 'Mark Delivered' : 'Save link'}
           isSubmitting={isSubmitting}
           disabled={!normalized}
         />
@@ -78,8 +85,9 @@ export function DeliveryLinkModal({
             <Link2 className="h-4 w-4" aria-hidden="true" />
           </span>
           <div className="min-w-0 text-sm text-[var(--muted)]">
-            Paste the shared folder or file URL the client should use. The order
-            moves to Delivered only after a valid link is saved.
+            {isDeliverMode
+              ? 'Paste the shared folder or file URL the client should use. The order moves to Delivered after a valid link is saved.'
+              : 'Save this link before marking the order Delivered. Saving the link does not change the status.'}
           </div>
         </div>
 

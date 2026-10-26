@@ -464,7 +464,10 @@ export function OrderCreateModal({
           outputFormat: orderMode === 'revision' ? undefined : outputFormat,
           parentOrderId: orderMode === 'revision' ? parentOrderId : undefined,
           clientNotes: clientNotes || undefined,
-          sourceLink: orderMode === 'revision' ? undefined : sourceHref ?? undefined,
+          sourceLink:
+            isExternal && orderMode !== 'revision'
+              ? sourceHref ?? undefined
+              : undefined,
           internalNotes:
             canManage && orderMode !== 'revision' ? internalNotes || undefined : undefined,
           folderStatusId:
@@ -844,14 +847,17 @@ export function OrderCreateModal({
             </div>
           </fieldset>
 
-          <Input
-            label="Drive or file link"
-            value={sourceLink}
-            onChange={(event) => setSourceLink(event.target.value)}
-            placeholder="https://drive.google.com/..."
-            className="text-base sm:text-sm"
-            autoComplete="off"
-          />
+          {isExternal ? (
+            <Input
+              label="Drive or file link"
+              value={sourceLink}
+              onChange={(event) => setSourceLink(event.target.value)}
+              placeholder="https://drive.google.com/..."
+              className="text-base sm:text-sm"
+              autoComplete="off"
+              hint="Only your client team can add or change this link later."
+            />
+          ) : null}
 
           <label className="block space-y-1.5">
             <span className="text-sm font-medium text-[var(--foreground)]">
