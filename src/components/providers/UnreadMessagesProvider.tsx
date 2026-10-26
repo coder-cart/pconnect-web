@@ -172,6 +172,9 @@ export function UnreadMessagesProvider({ children }: { children: ReactNode }) {
         const existing = current.find(
           (item) => item.channelId === payload.channelId,
         );
+        const priorSender = existing?.latestMessage?.sender;
+        const priorPeer =
+          existing?.dmPeer?.id === payload.sender.id ? existing.dmPeer : null;
         const latestMessage = {
           id: payload.messageId,
           body: payload.preview,
@@ -180,10 +183,15 @@ export function UnreadMessagesProvider({ children }: { children: ReactNode }) {
             id: payload.sender.id,
             fullName: payload.sender.fullName,
             avatarUpdatedAt: payload.sender.avatarUpdatedAt,
-            jobTitle: null,
-            presenceStatus: 'active' as const,
-            statusText: null,
-            statusEmoji: null,
+            jobTitle: priorSender?.jobTitle ?? priorPeer?.jobTitle ?? null,
+            presenceStatus:
+              priorSender?.presenceStatus ??
+              priorPeer?.presenceStatus ??
+              ('active' as const),
+            statusText:
+              priorSender?.statusText ?? priorPeer?.statusText ?? null,
+            statusEmoji:
+              priorSender?.statusEmoji ?? priorPeer?.statusEmoji ?? null,
           },
         };
         const next = existing

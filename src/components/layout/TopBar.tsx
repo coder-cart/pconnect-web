@@ -169,7 +169,7 @@ export function TopBar({
 
         <div className="ml-auto flex shrink-0 items-center gap-0.5 sm:gap-1">
           {createItems.length > 0 ? (
-            <div className="relative">
+            <div className="relative" data-tour="topbar-create">
               <Button
                 variant="primary"
                 size="sm"

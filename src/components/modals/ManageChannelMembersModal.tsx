@@ -117,9 +117,21 @@ export function ManageChannelMembersModal({
   }, [open, channelId, loadChannelData]);
 
   const availableCandidates = useMemo(
-    () => [...internalUsers, ...clientUsers],
+    () => [...clientUsers, ...internalUsers],
     [internalUsers, clientUsers],
   );
+
+  const orderedMembers = useMemo(() => {
+    const members = channel?.members ?? [];
+    return [...members].sort((left, right) => {
+      const leftExternal = left.user.userType === 'external' ? 0 : 1;
+      const rightExternal = right.user.userType === 'external' ? 0 : 1;
+      if (leftExternal !== rightExternal) {
+        return leftExternal - rightExternal;
+      }
+      return left.user.fullName.localeCompare(right.user.fullName);
+    });
+  }, [channel?.members]);
 
   const filteredCandidates = useMemo(() => {
     const term = searchQuery.trim().toLowerCase();
@@ -272,7 +284,7 @@ export function ManageChannelMembersModal({
               {channel.members.length === 0 ? (
                 <p className="text-sm text-[var(--muted)]">No members yet.</p>
               ) : null}
-              {channel.members.map((member) => (
+              {orderedMembers.map((member) => (
                 <div
                   key={member.userId}
                   className="flex items-start justify-between gap-3"

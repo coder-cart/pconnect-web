@@ -364,11 +364,25 @@ function SidebarLink({
   const Icon = item.icon;
   const label = getNavItemLabel(item, userType);
 
+  const tourId =
+    item.href === '/dashboard'
+      ? 'nav-home'
+      : item.href === '/chat'
+        ? 'nav-chat'
+        : item.href === '/orders'
+          ? 'nav-orders'
+          : item.href === '/clients'
+            ? 'nav-clients'
+            : item.href === '/team'
+              ? 'nav-team'
+              : undefined;
+
   return (
     <Link
       href={item.href}
       onClick={onNavigate}
       title={collapsed ? label : undefined}
+      data-tour={tourId}
       className={cn(
         'group relative flex items-center gap-3 rounded-[var(--radius-md)] px-3 py-2.5 text-sm font-medium transition-all duration-200',
         collapsed && 'justify-center px-2',
