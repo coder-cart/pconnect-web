@@ -5,6 +5,7 @@ import { ChevronDown, Hash, Plus, Search, Users } from 'lucide-react';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
+import { ClientOrgLogo } from '@/components/ui/ClientOrgLogo';
 import { UserAvatar } from '@/components/ui/UserAvatar';
 import {
   ChatChannel,
@@ -152,6 +153,13 @@ function ChannelButton({
             }}
             size="xs"
             className="mt-0.5 shrink-0"
+          />
+        ) : channel.type === 'client_shared' && channel.clientOrganizationId ? (
+          <ClientOrgLogo
+            clientId={channel.clientOrganizationId}
+            name={channel.clientOrganizationName ?? label}
+            logoUpdatedAt={channel.clientOrganizationLogoUpdatedAt}
+            className="mt-0.5 h-8 w-8"
           />
         ) : (
           <span

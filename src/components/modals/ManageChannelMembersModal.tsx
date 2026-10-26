@@ -13,7 +13,7 @@ import { ApiResponse } from '@/lib/auth';
 interface ManageChannelMembersModalProps {
   open: boolean;
   channelId: string | null;
-  /** When true, only invite/revoke client teammates (no remove member). */
+  /** When true, only invite/remove/revoke client teammates (not studio staff). */
   clientAdminMode?: boolean;
   onClose: () => void;
   onUpdated: () => void;
@@ -293,7 +293,8 @@ export function ManageChannelMembersModal({
                     >
                       {member.user.userType === 'external' ? 'Client' : 'Internal'}
                     </Badge>
-                    {!clientAdminMode ? (
+                    {!clientAdminMode ||
+                    member.user.userType === 'external' ? (
                       <Button
                         type="button"
                         variant="ghost"

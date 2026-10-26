@@ -801,7 +801,7 @@ export function ChatWorkspace({
     (isExternalUser &&
       selectedChannel?.type === 'client_shared' &&
       viewerCanInviteClientTeammates);
-  const canInvite = canManageMembers || selectedChannel?.type === 'public';
+  const canInvite = canManageMembers;
   const activeThreadMessage = messages.find(
     (message) => message.id === threadMessageId,
   );
@@ -955,6 +955,10 @@ export function ChatWorkspace({
             channelName={selectedChannel?.name}
             channelDisplayName={selectedChannel?.displayName}
             channelType={selectedChannel?.type}
+            clientOrganizationId={selectedChannel?.clientOrganizationId}
+            clientOrganizationLogoUpdatedAt={
+              selectedChannel?.clientOrganizationLogoUpdatedAt
+            }
             channelContext={channelContext}
             members={channelMembers}
             activeTab={channelTab}

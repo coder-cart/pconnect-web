@@ -19,6 +19,7 @@ import {
   DropdownMenu,
   DropdownMenuItem,
 } from '@/components/ui/DropdownMenu';
+import { ClientOrgLogo } from '@/components/ui/ClientOrgLogo';
 import { UserAvatar } from '@/components/ui/UserAvatar';
 import { ChannelNotificationMenu } from '@/components/chat/ChannelNotificationMenu';
 import { DETAILS_PANEL_ID } from '@/components/chat/ChannelDetailsPanel';
@@ -36,6 +37,8 @@ interface ChannelHeaderProps {
   channelName?: string;
   channelDisplayName?: string;
   channelType?: string;
+  clientOrganizationId?: string | null;
+  clientOrganizationLogoUpdatedAt?: string | null;
   channelContext: ChannelContext | null;
   members?: ChannelMemberOption[];
   activeTab: ChannelTab;
@@ -62,6 +65,8 @@ export function ChannelHeader({
   channelName,
   channelDisplayName,
   channelType,
+  clientOrganizationId,
+  clientOrganizationLogoUpdatedAt,
   channelContext,
   members = [],
   activeTab,
@@ -99,6 +104,8 @@ export function ChannelHeader({
         : channelType === 'client_shared'
           ? MessageCircle
           : Hash;
+  const showClientLogo =
+    channelType === 'client_shared' && Boolean(clientOrganizationId);
 
   const breadcrumb = [
     channelType === 'client_shared' ? 'Client shared' : null,
@@ -139,9 +146,23 @@ export function ChannelHeader({
               )}
             </button>
           ) : null}
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[var(--radius-md)] bg-[var(--primary-soft)] text-[var(--primary)]">
-            <ChannelIcon className="h-4 w-4" />
-          </div>
+          {showClientLogo && clientOrganizationId ? (
+            <ClientOrgLogo
+              clientId={clientOrganizationId}
+              name={
+                channelContext?.clientOrganizationName ??
+                channelDisplayName ??
+                label ??
+                'Client'
+              }
+              logoUpdatedAt={clientOrganizationLogoUpdatedAt}
+              className="h-10 w-10"
+            />
+          ) : (
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[var(--radius-md)] bg-[var(--primary-soft)] text-[var(--primary)]">
+              <ChannelIcon className="h-4 w-4" />
+            </div>
+          )}
           <div className="min-w-0">
             <h2 className="truncate text-base font-semibold text-[var(--foreground)]">
               {showHashPrefix ? '#' : ''}

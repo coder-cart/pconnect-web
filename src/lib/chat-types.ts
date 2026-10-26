@@ -19,6 +19,7 @@ export interface ChatChannel {
   dmPeer?: ChatDmPeer | null;
   clientOrganizationId?: string | null;
   clientOrganizationName?: string | null;
+  clientOrganizationLogoUpdatedAt?: string | null;
   orderId?: string | null;
   unreadCount?: number;
   lastReadAt?: string | null;

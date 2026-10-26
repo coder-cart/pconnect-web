@@ -167,7 +167,7 @@ export function StartDirectMessageModal({
       next.push({ key: 'team', label: 'Your team', people: teammates });
     }
     if (studio.length > 0) {
-      next.push({ key: 'studio', label: 'Studio', people: studio });
+      next.push({ key: 'studio', label: 'Studio managers', people: studio });
     }
     return next;
   }, [filteredCandidates, isExternalUser]);
@@ -208,7 +208,7 @@ export function StartDirectMessageModal({
       title="New message"
       description={
         isExternalUser
-          ? 'Pick a teammate or someone from the studio.'
+          ? 'Pick a teammate or a studio manager/admin.'
           : 'Search and select someone to start chatting.'
       }
       size="md"
@@ -249,7 +249,7 @@ export function StartDirectMessageModal({
                   {hasQuery
                     ? 'Try another name or email.'
                     : isExternalUser
-                      ? 'Teammates and studio contacts will show up here once they are on your workspace.'
+                      ? 'Teammates and studio managers/admins will show up here once they are on your workspace.'
                       : 'People you can message will appear here.'}
                 </p>
               </div>
