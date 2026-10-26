@@ -184,6 +184,7 @@ export function Sidebar({
     user.userType,
     user.permissionCodes,
     user.roleCodes,
+    user.portalAccessLevel,
   ).map((item) => {
     if (item.href === '/chat' && messageUnreadCount > 0) {
       return { ...item, badge: messageUnreadCount };

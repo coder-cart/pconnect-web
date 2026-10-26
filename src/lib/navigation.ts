@@ -190,19 +190,28 @@ export function isEditorOnly(roleCodes: string[]): boolean {
   );
 }
 
+function isMessagingOnlyPath(pathname: string) {
+  return (
+    pathname === '/chat' ||
+    pathname.startsWith('/chat/') ||
+    pathname === '/account' ||
+    pathname.startsWith('/account/')
+  );
+}
+
 export function canAccessPath(
   pathname: string,
   userType: 'internal' | 'external',
   permissionCodes: string[],
   roleCodes: string[] = [],
+  portalAccessLevel?: 'chat_only' | 'chat_and_orders' | null,
 ): boolean {
   if (isEditorOnly(roleCodes)) {
-    return (
-      pathname === '/chat' ||
-      pathname.startsWith('/chat/') ||
-      pathname === '/account' ||
-      pathname.startsWith('/account/')
-    );
+    return isMessagingOnlyPath(pathname);
+  }
+
+  if (userType === 'external' && portalAccessLevel === 'chat_only') {
+    return isMessagingOnlyPath(pathname);
   }
 
   const rule = ROUTE_RULES.find(
@@ -232,6 +241,7 @@ export function getVisibleNavItems(
   userType: 'internal' | 'external',
   permissionCodes: string[],
   roleCodes: string[] = [],
+  portalAccessLevel?: 'chat_only' | 'chat_and_orders' | null,
 ): NavItem[] {
   const items = NAV_ITEMS.filter((item) => {
     if (item.internalOnly && userType === 'external') {
@@ -252,10 +262,11 @@ export function getVisibleNavItems(
     return true;
   });
 
-  if (isEditorOnly(roleCodes)) {
-    return items.filter((item) =>
-      ['/chat', '/account'].includes(item.href),
-    );
+  if (
+    isEditorOnly(roleCodes) ||
+    (userType === 'external' && portalAccessLevel === 'chat_only')
+  ) {
+    return items.filter((item) => ['/chat', '/account'].includes(item.href));
   }
 
   return items;

@@ -5,6 +5,7 @@ import { Modal, ModalActions } from '@/components/ui/Modal';
 import { Input } from '@/components/ui/Input';
 import { Select } from '@/components/ui/Select';
 import { apiRequest } from '@/lib/api-client';
+import { ClientPortalAccessLevel } from '@/lib/auth';
 
 export interface InviteContactOption {
   id: string;
@@ -14,6 +15,23 @@ export interface InviteContactOption {
 }
 
 const EMPTY_CONTACTS: InviteContactOption[] = [];
+
+const ACCESS_OPTIONS: Array<{
+  value: ClientPortalAccessLevel;
+  label: string;
+  hint: string;
+}> = [
+  {
+    value: 'chat_only',
+    label: 'Only chat access (1:1)',
+    hint: 'Private direct messages only. Someone must start a chat with them. No Orders.',
+  },
+  {
+    value: 'chat_and_orders',
+    label: 'Chat and Order update access',
+    hint: 'Messages hub plus create and update orders.',
+  },
+];
 
 interface LinkClientUserModalProps {
   open: boolean;
@@ -42,6 +60,8 @@ export function LinkClientUserModal({
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [accessLevel, setAccessLevel] =
+    useState<ClientPortalAccessLevel>('chat_and_orders');
   const [selectedContactId, setSelectedContactId] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -51,6 +71,7 @@ export function LinkClientUserModal({
     setFullName(initialFullName);
     setEmail(initialEmail);
     setPassword('');
+    setAccessLevel('chat_and_orders');
     setErrorMessage(null);
     const match = contacts.find(
       (contact) => contact.email.toLowerCase() === initialEmail.toLowerCase(),
@@ -72,12 +93,14 @@ export function LinkClientUserModal({
           fullName: fullName.trim(),
           email: email.trim(),
           password: password.trim() || undefined,
+          accessLevel,
         }),
       });
 
       setFullName('');
       setEmail('');
       setPassword('');
+      setAccessLevel('chat_and_orders');
       onLinked();
       onClose();
     } catch (error) {
@@ -89,6 +112,9 @@ export function LinkClientUserModal({
     }
   }
 
+  const accessHint =
+    ACCESS_OPTIONS.find((option) => option.value === accessLevel)?.hint ?? '';
+
   return (
     <Modal
       open={open}
@@ -97,8 +123,8 @@ export function LinkClientUserModal({
       description={
         mode === 'client'
           ? clientName
-            ? `Invite a teammate to ${clientName}. They will get portal access and join the messages hub.`
-            : 'Invite a teammate to your organization. They will get portal access and join the messages hub.'
+            ? `Invite a teammate to ${clientName} and choose what they can access.`
+            : 'Invite a teammate and choose what they can access.'
           : clientName
             ? `Create a portal login for ${clientName} and email the sign-in details.`
             : 'Create a portal login and email the sign-in details.'
@@ -150,6 +176,18 @@ export function LinkClientUserModal({
           onChange={(event) => setEmail(event.target.value)}
           required
         />
+        <Select
+          label="Access"
+          value={accessLevel}
+          options={ACCESS_OPTIONS.map((option) => ({
+            value: option.value,
+            label: option.label,
+          }))}
+          onChange={(event) =>
+            setAccessLevel(event.target.value as ClientPortalAccessLevel)
+          }
+        />
+        <p className="text-xs text-[var(--muted)]">{accessHint}</p>
         <Input
           label="Temporary password (optional)"
           type="password"

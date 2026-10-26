@@ -2,7 +2,12 @@
 
 import { ReactNode, useEffect, useState } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
-import { AuthenticatedUser, userHasPermission, userIsExternal } from '@/lib/auth';
+import {
+  AuthenticatedUser,
+  isClientChatOnly,
+  userHasPermission,
+  userIsExternal,
+} from '@/lib/auth';
 import { canAccessPath, isEditorOnly } from '@/lib/navigation';
 import { RestrictedState } from '@/components/ui/StatePanels';
 import { Sidebar } from '@/components/layout/Sidebar';
@@ -44,12 +49,16 @@ function AppShellContent({
     user.userType,
     user.permissionCodes,
     user.roleCodes,
+    user.portalAccessLevel,
   );
   useEffect(() => {
-    if (isEditorOnly(user.roleCodes) && !allowed) {
+    if (
+      (isEditorOnly(user.roleCodes) || isClientChatOnly(user)) &&
+      !allowed
+    ) {
       router.replace('/chat');
     }
-  }, [allowed, router, user.roleCodes]);
+  }, [allowed, router, user]);
 
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);

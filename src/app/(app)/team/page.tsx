@@ -24,9 +24,12 @@ interface ClientOrg {
   maxPortalUsers?: number;
 }
 
+type PortalAccessLevel = 'chat_only' | 'chat_and_orders';
+
 interface TeamMember {
   id: string;
   isOrgAdmin?: boolean;
+  accessLevel?: PortalAccessLevel;
   linkedAt: string;
   user: {
     id: string;
@@ -34,6 +37,12 @@ interface TeamMember {
     email: string;
     status: string;
   };
+}
+
+function accessLabel(level?: PortalAccessLevel) {
+  return level === 'chat_only'
+    ? 'Only chat (1:1)'
+    : 'Chat and Order update';
 }
 
 interface PortalMembersResponse {
@@ -62,6 +71,29 @@ export default function TeamPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [inviteOpen, setInviteOpen] = useState(false);
+  const [busyUserId, setBusyUserId] = useState<string | null>(null);
+
+  async function updateAccess(
+    member: TeamMember,
+    accessLevel: PortalAccessLevel,
+  ) {
+    if (!client || member.accessLevel === accessLevel) return;
+    setBusyUserId(member.user.id);
+    setErrorMessage(null);
+    try {
+      await apiRequest(`/clients/${client.id}/users/${member.user.id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ accessLevel }),
+      });
+      await load();
+    } catch (error) {
+      setErrorMessage(
+        error instanceof Error ? error.message : 'Unable to update access',
+      );
+    } finally {
+      setBusyUserId(null);
+    }
+  }
 
   const load = useCallback(async () => {
     if (!isExternal || !canInvitePerm) {
@@ -200,9 +232,9 @@ export default function TeamPage() {
                 {members.map((member) => (
                   <li
                     key={member.id}
-                    className="flex flex-col gap-1 py-3 first:pt-0 last:pb-0 sm:flex-row sm:items-center sm:justify-between"
+                    className="flex flex-col gap-2 py-3 first:pt-0 last:pb-0 sm:flex-row sm:items-center sm:justify-between"
                   >
-                    <div>
+                    <div className="min-w-0">
                       <p className="text-sm font-medium text-[var(--foreground)]">
                         {member.user.fullName}
                         {member.isOrgAdmin ? (
@@ -214,10 +246,36 @@ export default function TeamPage() {
                       <p className="text-xs text-[var(--muted)]">
                         {member.user.email}
                       </p>
+                      {!isOrgAdmin || member.isOrgAdmin ? (
+                        <p className="mt-1 text-xs text-[var(--muted)]">
+                          {accessLabel(member.accessLevel)}
+                        </p>
+                      ) : null}
                     </div>
-                    <Badge variant="neutral" className="w-fit capitalize">
-                      {member.user.status}
-                    </Badge>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Badge variant="neutral" className="w-fit capitalize">
+                        {member.user.status}
+                      </Badge>
+                      {isOrgAdmin && !member.isOrgAdmin ? (
+                        <select
+                          className="h-9 rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface)] px-2 text-xs text-[var(--foreground)]"
+                          value={member.accessLevel ?? 'chat_and_orders'}
+                          disabled={busyUserId === member.user.id}
+                          onChange={(event) =>
+                            void updateAccess(
+                              member,
+                              event.target.value as PortalAccessLevel,
+                            )
+                          }
+                          aria-label={`Access for ${member.user.fullName}`}
+                        >
+                          <option value="chat_only">Only chat (1:1)</option>
+                          <option value="chat_and_orders">
+                            Chat and Order update
+                          </option>
+                        </select>
+                      ) : null}
+                    </div>
                   </li>
                 ))}
               </ul>

@@ -12,6 +12,7 @@ export interface PortalMember {
   linkedAt: string;
   isOrgAdmin?: boolean;
   isDefault?: boolean;
+  accessLevel?: 'chat_only' | 'chat_and_orders';
   user: {
     id: string;
     fullName: string;
@@ -199,6 +200,34 @@ export function ClientPortalUsers({
     }
   }
 
+  async function setAccessLevel(
+    member: PortalMember,
+    accessLevel: 'chat_only' | 'chat_and_orders',
+  ) {
+    if (member.accessLevel === accessLevel) return;
+    setBusyId(member.user.id);
+    onError(null);
+    try {
+      await reloadAfter(async () => {
+        await apiRequest(`/clients/${clientId}/users/${member.user.id}`, {
+          method: 'PATCH',
+          body: JSON.stringify({ accessLevel }),
+        });
+      });
+      onNotice(
+        accessLevel === 'chat_only'
+          ? `${member.user.fullName} is now chat-only (1:1 DMs).`
+          : `${member.user.fullName} can use chat and orders.`,
+      );
+    } catch (error) {
+      onError(
+        error instanceof Error ? error.message : 'Failed to update access',
+      );
+    } finally {
+      setBusyId(null);
+    }
+  }
+
   return (
     <div className="space-y-4">
       <Card>
@@ -318,6 +347,11 @@ export function ClientPortalUsers({
                     <p className="text-xs text-[var(--muted)]">
                       {member.user.email}
                     </p>
+                    <p className="mt-1 text-xs text-[var(--muted)]">
+                      {member.accessLevel === 'chat_only'
+                        ? 'Only chat (1:1)'
+                        : 'Chat and Order update'}
+                    </p>
                   </div>
                   <Badge
                     variant={statusVariant(member.user.status)}
@@ -328,6 +362,27 @@ export function ClientPortalUsers({
                 </div>
                 {canManage ? (
                   <div className="flex flex-wrap items-center gap-2">
+                    {!member.isOrgAdmin ? (
+                      <select
+                        className="h-9 rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface)] px-2 text-xs text-[var(--foreground)]"
+                        value={member.accessLevel ?? 'chat_and_orders'}
+                        disabled={busyId === member.user.id}
+                        onChange={(event) =>
+                          void setAccessLevel(
+                            member,
+                            event.target.value as
+                              | 'chat_only'
+                              | 'chat_and_orders',
+                          )
+                        }
+                        aria-label={`Access for ${member.user.fullName}`}
+                      >
+                        <option value="chat_only">Only chat (1:1)</option>
+                        <option value="chat_and_orders">
+                          Chat and Order update
+                        </option>
+                      </select>
+                    ) : null}
                     <Button
                       size="sm"
                       variant="secondary"

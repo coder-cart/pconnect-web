@@ -1,5 +1,7 @@
 import { AUTH_TOKEN_KEY, REFRESH_TOKEN_KEY, SESSION_COOKIE } from './config';
 
+export type ClientPortalAccessLevel = 'chat_only' | 'chat_and_orders';
+
 export interface AuthenticatedUser {
   id: string;
   tenantId: string;
@@ -14,6 +16,16 @@ export interface AuthenticatedUser {
   timeZone?: string | null;
   /** Server-resolved display timezone (user → client org). Null = use browser. */
   effectiveTimeZone?: string | null;
+  /** Effective portal access for external users. Null for staff. */
+  portalAccessLevel?: ClientPortalAccessLevel | null;
+}
+
+export function isClientChatOnly(user: AuthenticatedUser | null): boolean {
+  return (
+    Boolean(user) &&
+    user!.userType === 'external' &&
+    user!.portalAccessLevel === 'chat_only'
+  );
 }
 
 export interface ApiResponse<T> {
