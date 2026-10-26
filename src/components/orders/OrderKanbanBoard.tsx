@@ -20,6 +20,7 @@ import { ApiResponse } from '@/lib/auth';
 import { ErrorState } from '@/components/ui/StatePanels';
 import { ListSkeleton } from '@/components/ui/Skeleton';
 import { Button } from '@/components/ui/Button';
+import { DeliveryLinkModal } from '@/components/orders/DeliveryLinkModal';
 import {
   clientDashboardTab,
   clientLifecycleStage,
@@ -220,6 +221,9 @@ export function OrderKanbanBoard({
   const [overColumn, setOverColumn] = useState<BoardColumnId | null>(null);
   const [busy, setBusy] = useState(false);
   const [boardRefresh, setBoardRefresh] = useState(0);
+  const [deliveryTarget, setDeliveryTarget] = useState<OrderSummary | null>(
+    null,
+  );
   const hasLoaded = useRef(false);
 
   useEffect(() => {
@@ -308,9 +312,9 @@ export function OrderKanbanBoard({
     order: OrderSummary,
     stage: ClientLifecycleStage,
     deliveryLink?: string,
-  ) {
+  ): Promise<boolean> {
     const current = managerBoardColumn(order.workflowStatus?.code);
-    if (current === stage && !deliveryLink) return;
+    if (current === stage && !deliveryLink) return true;
     const previous = orders;
     setOrders((currentOrders) =>
       currentOrders.map((item) =>
@@ -345,11 +349,13 @@ export function OrderKanbanBoard({
       });
       onMoved?.();
       setBoardRefresh((value) => value + 1);
+      return true;
     } catch (error) {
       setOrders(previous);
       setMoveError(
         error instanceof Error ? error.message : 'Could not move the order',
       );
+      return false;
     } finally {
       setBusy(false);
     }
@@ -364,21 +370,18 @@ export function OrderKanbanBoard({
       return;
 
     if (stage === 'delivered') {
-      const existing = order.deliveryLink?.trim() ?? '';
-      const link = window.prompt(
-        'Delivery link is required before marking Delivered:',
-        existing,
-      );
-      if (link == null) return;
-      if (!link.trim()) {
-        setMoveError('Add a delivery link before marking the order Delivered.');
-        return;
-      }
-      void moveOrder(order, stage, link.trim());
+      setMoveError(null);
+      setDeliveryTarget(order);
       return;
     }
 
     void moveOrder(order, stage as ClientLifecycleStage);
+  }
+
+  async function confirmDeliver(deliveryLink: string) {
+    if (!deliveryTarget) return;
+    const ok = await moveOrder(deliveryTarget, 'delivered', deliveryLink);
+    if (ok) setDeliveryTarget(null);
   }
 
   if (isLoading) return <ListSkeleton rows={4} />;
@@ -393,6 +396,17 @@ export function OrderKanbanBoard({
 
   return (
     <div className="space-y-4">
+      <DeliveryLinkModal
+        open={Boolean(deliveryTarget)}
+        orderCode={deliveryTarget?.code}
+        orderName={deliveryTarget?.name}
+        initialLink={deliveryTarget?.deliveryLink}
+        isSubmitting={busy}
+        onClose={() => {
+          if (!busy) setDeliveryTarget(null);
+        }}
+        onConfirm={confirmDeliver}
+      />
       {moveError ? (
         <ErrorState title="Order stayed in its column" description={moveError} />
       ) : null}
