@@ -89,11 +89,6 @@ export function ChannelMemberPicker({
 
   return (
     <div className="space-y-4">
-      {renderUserList(
-        'Internal team',
-        internalUsers,
-        'No internal users available.',
-      )}
       {showClientUsers
         ? renderUserList(
             'Client team members',
@@ -101,6 +96,11 @@ export function ChannelMemberPicker({
             'No portal team members yet. Add them from the Clients → Portal users tab first.',
           )
         : null}
+      {renderUserList(
+        'Internal team',
+        internalUsers,
+        'No internal users available.',
+      )}
     </div>
   );
 }

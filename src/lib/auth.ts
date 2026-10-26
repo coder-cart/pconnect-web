@@ -18,6 +18,8 @@ export interface AuthenticatedUser {
   effectiveTimeZone?: string | null;
   /** Effective portal access for external users. Null for staff. */
   portalAccessLevel?: ClientPortalAccessLevel | null;
+  /** ISO timestamp when Get Started tour was completed; null = not completed. */
+  productTourCompletedAt?: string | null;
 }
 
 export function isClientChatOnly(user: AuthenticatedUser | null): boolean {

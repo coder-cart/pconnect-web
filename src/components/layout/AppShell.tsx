@@ -21,6 +21,7 @@ import { RealtimeProvider } from '@/components/providers/RealtimeProvider';
 import { NotificationProvider, useNotifications } from '@/components/providers/NotificationProvider';
 import { UnreadMessagesProvider, useUnreadMessages } from '@/components/providers/UnreadMessagesProvider';
 import { NotificationOptInPrompt } from '@/components/pwa/NotificationOptInPrompt';
+import { ProductTourProvider } from '@/components/tour/ProductTourProvider';
 
 const SIDEBAR_COLLAPSED_KEY = 'pconnect.sidebar.collapsed';
 
@@ -206,14 +207,16 @@ export function AppShell({
       <RealtimeProvider>
         <NotificationProvider>
           <UnreadMessagesProvider>
-            <AppShellContent
-              user={user}
-              onLogout={onLogout}
-              refreshKey={refreshKey}
-              onCreated={handleCreated}
-            >
-              {children}
-            </AppShellContent>
+            <ProductTourProvider user={user}>
+              <AppShellContent
+                user={user}
+                onLogout={onLogout}
+                refreshKey={refreshKey}
+                onCreated={handleCreated}
+              >
+                {children}
+              </AppShellContent>
+            </ProductTourProvider>
           </UnreadMessagesProvider>
         </NotificationProvider>
       </RealtimeProvider>
