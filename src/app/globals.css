@@ -43,9 +43,31 @@
   --safe-right: env(safe-area-inset-right, 0px);
   --safe-bottom: env(safe-area-inset-bottom, 0px);
   --safe-left: env(safe-area-inset-left, 0px);
+  /* App shell chrome (main sidebar, chat sidebar, top bar) — exact brand #1d2353 */
+  --shell-brand: #1d2353;
+  --shell-text: #ffffff;
+  --shell-muted: #d4d8f0;
+  --shell-hover: #282f65;
+  --shell-active: #30396f;
+  --shell-border: rgba(255, 255, 255, 0.12);
+  --shell-badge: #f43f5e;
+  --shell-badge-text: #ffffff;
+  --shell-input-bg: rgba(255, 255, 255, 0.1);
+  --shell-focus-ring: rgba(165, 180, 252, 0.45);
 }
 
 [data-theme='dark'] {
+  /* Keep shell brand identical in dark mode (do not remap to surface) */
+  --shell-brand: #1d2353;
+  --shell-text: #ffffff;
+  --shell-muted: #d4d8f0;
+  --shell-hover: #282f65;
+  --shell-active: #30396f;
+  --shell-border: rgba(255, 255, 255, 0.12);
+  --shell-badge: #f43f5e;
+  --shell-badge-text: #ffffff;
+  --shell-input-bg: rgba(255, 255, 255, 0.1);
+  --shell-focus-ring: rgba(165, 180, 252, 0.45);
   --background: #0b1220;
   --foreground: #e2e8f0;
   --surface: #111827;
@@ -151,6 +173,40 @@ body {
 
 [data-theme='dark'] .brand-lockup-dark {
   display: block;
+}
+
+/* Brand navy chrome: use light logo lockup */
+.shell-chrome .brand-lockup {
+  display: none;
+}
+
+.shell-chrome .brand-lockup-dark {
+  display: block;
+}
+
+/* Exact brand navy #1d2353 — !important so light/dark surface tokens cannot override */
+.shell-chrome,
+aside.shell-chrome,
+header.shell-chrome {
+  background-color: #1d2353 !important;
+  color: var(--shell-text);
+  border-color: var(--shell-border);
+}
+
+.shell-chrome-input {
+  background: var(--shell-input-bg);
+  border-color: var(--shell-border);
+  color: var(--shell-text);
+}
+
+.shell-chrome-input::placeholder {
+  color: color-mix(in srgb, var(--shell-muted) 80%, transparent);
+}
+
+.shell-chrome-input:focus {
+  border-color: color-mix(in srgb, var(--shell-muted) 70%, white);
+  outline: none;
+  box-shadow: 0 0 0 2px var(--shell-focus-ring);
 }
 
 .animate-fade-in {

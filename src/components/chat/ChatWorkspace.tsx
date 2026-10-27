@@ -162,12 +162,12 @@ export function ChatWorkspace({
     !isExternalUser && userHasPermission(user, 'channels.create_internal');
 
   const openCreateChannel = useCallback(() => {
-    setChannelPreset(null);
+    setChannelPreset({ type: 'public' });
     setCreateChannelOpen(true);
   }, []);
 
-  const openCreateClientChannel = useCallback((clientOrganizationId: string) => {
-    setChannelPreset({ type: 'client_shared', clientOrganizationId });
+  const openCreateExternalConnection = useCallback(() => {
+    setChannelPreset({ type: 'client_shared' });
     setCreateChannelOpen(true);
   }, []);
 
@@ -933,8 +933,8 @@ export function ChatWorkspace({
           canCreateChannel={canCreateChannel}
           onSelectChannel={setSelectedChannelId}
           onCreateChannel={openCreateChannel}
-          onCreateClientChannel={
-            isExternalUser ? undefined : openCreateClientChannel
+          onCreateExternalConnection={
+            isExternalUser ? undefined : openCreateExternalConnection
           }
           onStartDirectMessage={() => setStartDmOpen(true)}
           onAcceptInvite={(invite) => void handleAcceptInvite(invite)}

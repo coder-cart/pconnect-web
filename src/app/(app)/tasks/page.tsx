@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { Plus } from 'lucide-react';
 import { apiRequest } from '@/lib/api-client';
 import { ApiResponse, userHasPermission } from '@/lib/auth';
@@ -15,8 +16,10 @@ import { EmptyState, ErrorState } from '@/components/ui/StatePanels';
 import { TaskDetailDrawer } from '@/components/tasks/TaskDetailDrawer';
 import { TaskKanban } from '@/components/tasks/TaskKanban';
 import { TaskTemplatesPanel } from '@/components/tasks/TaskTemplatesPanel';
+import { TaskCalendar } from '@/components/tasks/TaskCalendar';
 import { CreateTaskModal } from '@/components/modals/CreateTaskModal';
 import { useWorkspace } from '@/components/providers/WorkspaceProvider';
+import { cn } from '@/lib/cn';
 
 interface TaskItem {
   id: string;
@@ -25,9 +28,14 @@ interface TaskItem {
   priority: string;
   visibilityScope: string;
   dueDate?: string | null;
+  startDate?: string | null;
   assigneeUserId?: string | null;
   assignee?: { id: string; fullName: string } | null;
-  project?: { name: string; code: string };
+  project?: {
+    name: string;
+    code: string;
+    clientOrganization?: { name: string } | null;
+  };
 }
 
 function priorityVariant(priority: string) {
@@ -36,18 +44,36 @@ function priorityVariant(priority: string) {
   return 'neutral' as const;
 }
 
+function statusLabel(status: string) {
+  if (status === 'in_review' || status === 'on_hold') return 'On Hold';
+  if (status === 'in_progress') return 'In Progress';
+  if (status === 'done') return 'Completed';
+  if (status === 'cancelled') return 'Cancelled';
+  return 'To Do';
+}
+
 function statusVariant(status: string) {
   if (status === 'done') return 'success' as const;
-  if (status === 'in_progress' || status === 'in_review') return 'primary' as const;
+  if (status === 'in_progress') return 'primary' as const;
+  if (status === 'on_hold' || status === 'in_review') return 'warning' as const;
   return 'neutral' as const;
+}
+
+function isOverdue(task: TaskItem) {
+  return Boolean(
+    task.dueDate &&
+      new Date(task.dueDate) < new Date() &&
+      task.status !== 'done' &&
+      task.status !== 'cancelled',
+  );
 }
 
 export default function TasksPage() {
   const { user, refreshKey, notifyRefresh } = useWorkspace();
+  const searchParams = useSearchParams();
   const canManageTemplates = userHasPermission(user, 'templates.manage');
   const [activeTab, setActiveTab] = useState('my-tasks');
   const [tasks, setTasks] = useState<TaskItem[]>([]);
-  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
@@ -56,27 +82,41 @@ export default function TasksPage() {
 
   function loadTasks() {
     setIsLoading(true);
-    Promise.all([
-      apiRequest<ApiResponse<{ items: TaskItem[] }>>('/tasks?pageSize=100'),
-      apiRequest<ApiResponse<{ id: string }>>('/auth/me'),
-    ])
-      .then(([tasksResponse, meResponse]) => {
-        setTasks(tasksResponse.data.items);
-        setCurrentUserId(meResponse.data.id);
-      })
+    setErrorMessage(null);
+    const scope =
+      activeTab === 'my-tasks'
+        ? 'mine'
+        : activeTab === 'completed'
+          ? 'completed'
+          : 'all';
+    const params = new URLSearchParams({
+      pageSize: '100',
+      scope,
+    });
+    if (searchQuery.trim()) {
+      params.set('q', searchQuery.trim());
+    }
+
+    apiRequest<ApiResponse<{ items: TaskItem[] }>>(`/tasks?${params}`)
+      .then((response) => setTasks(response.data.items))
       .catch((error: Error) => setErrorMessage(error.message))
       .finally(() => setIsLoading(false));
   }
 
   useEffect(() => {
-    loadTasks();
-  }, [refreshKey]);
+    void Promise.resolve().then(() => loadTasks());
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [refreshKey, activeTab]);
+
+  useEffect(() => {
+    const taskId = searchParams.get('task');
+    if (!taskId) return;
+    void Promise.resolve().then(() => setSelectedTaskId(taskId));
+  }, [searchParams]);
 
   async function handleStatusChange(taskId: string, status: string) {
     setTasks((current) =>
-      current.map((task) =>
-        task.id === taskId ? { ...task, status } : task,
-      ),
+      current.map((task) => (task.id === taskId ? { ...task, status } : task)),
     );
     try {
       await apiRequest(`/tasks/${taskId}/status`, {
@@ -89,46 +129,30 @@ export default function TasksPage() {
   }
 
   const overdueCount = useMemo(
-    () =>
-      tasks.filter(
-        (task) =>
-          task.dueDate &&
-          new Date(task.dueDate) < new Date() &&
-          task.status !== 'done',
-      ).length,
+    () => tasks.filter((task) => isOverdue(task)).length,
     [tasks],
   );
 
   const filteredTasks = useMemo(() => {
     return tasks.filter((task) => {
       const query = searchQuery.toLowerCase();
-      const matchesSearch = `${task.title} ${task.status} ${task.project?.name ?? ''}`
+      const matchesSearch = `${task.title} ${task.status} ${task.project?.name ?? ''} ${task.assignee?.fullName ?? ''}`
         .toLowerCase()
         .includes(query);
-
       if (!matchesSearch) return false;
-
-      if (activeTab === 'my-tasks') {
-        return task.assignee?.id === currentUserId || task.assigneeUserId === currentUserId;
-      }
-
-      if (activeTab === 'overdue') {
-        return (
-          Boolean(task.dueDate) &&
-          new Date(task.dueDate!) < new Date() &&
-          task.status !== 'done'
-        );
-      }
-
+      if (activeTab === 'overdue') return isOverdue(task);
+      if (activeTab === 'team-tasks') return true;
       return true;
     });
-  }, [tasks, searchQuery, activeTab, currentUserId]);
+  }, [tasks, searchQuery, activeTab]);
+
+  const calendarTasks = activeTab === 'calendar' ? filteredTasks : [];
 
   return (
     <div className="space-y-4">
       <PageHeader
         title="Tasks"
-        description="Tasks filtered by project membership and internal vs shared visibility."
+        description="Studio and team to-dos. Assign work to your teammates or Colabdeck staff."
         breadcrumbs={[
           { label: 'Workspace', href: '/dashboard' },
           { label: 'Tasks' },
@@ -146,96 +170,141 @@ export default function TasksPage() {
         onChange={setActiveTab}
         items={[
           { id: 'my-tasks', label: 'My Tasks' },
-          { id: 'all-tasks', label: 'All Tasks' },
+          { id: 'team-tasks', label: 'Team Tasks' },
           {
             id: 'overdue',
             label: 'Overdue',
             badge: overdueCount > 0 ? overdueCount : undefined,
           },
           { id: 'board', label: 'Board' },
-          { id: 'templates', label: 'Templates & Recurring' },
+          { id: 'calendar', label: 'Calendar' },
+          { id: 'completed', label: 'Completed' },
+          ...(canManageTemplates
+            ? [{ id: 'templates', label: 'Templates' }]
+            : []),
         ]}
       />
 
       {activeTab === 'templates' ? (
         <TaskTemplatesPanel canManage={canManageTemplates} />
       ) : activeTab === 'board' ? (
-        <TaskKanban
-          tasks={tasks.filter((task) =>
-            `${task.title} ${task.project?.name ?? ''}`
-              .toLowerCase()
-              .includes(searchQuery.toLowerCase()),
-          )}
-          onStatusChange={handleStatusChange}
-          onSelect={setSelectedTaskId}
-        />
+        <>
+          <Card padding="sm">
+            <SearchInput
+              placeholder="Search tasks..."
+              value={searchQuery}
+              onChange={(event) => setSearchQuery(event.target.value)}
+            />
+          </Card>
+          {isLoading ? <ListSkeleton rows={4} /> : null}
+          {!isLoading && errorMessage ? (
+            <ErrorState title="Unable to load tasks" description={errorMessage} />
+          ) : null}
+          {!isLoading && !errorMessage ? (
+            <TaskKanban
+              tasks={filteredTasks}
+              onStatusChange={handleStatusChange}
+              onSelect={setSelectedTaskId}
+            />
+          ) : null}
+        </>
+      ) : activeTab === 'calendar' ? (
+        <>
+          {isLoading ? <ListSkeleton rows={4} /> : null}
+          {!isLoading && errorMessage ? (
+            <ErrorState title="Unable to load tasks" description={errorMessage} />
+          ) : null}
+          {!isLoading && !errorMessage ? (
+            <TaskCalendar
+              tasks={calendarTasks}
+              onSelect={setSelectedTaskId}
+            />
+          ) : null}
+        </>
       ) : (
         <>
-      <Card padding="sm">
-        <SearchInput
-          placeholder="Search tasks..."
-          value={searchQuery}
-          onChange={(event) => setSearchQuery(event.target.value)}
-        />
-      </Card>
+          <Card padding="sm">
+            <SearchInput
+              placeholder="Search tasks..."
+              value={searchQuery}
+              onChange={(event) => setSearchQuery(event.target.value)}
+            />
+          </Card>
 
-      {isLoading ? <ListSkeleton rows={5} /> : null}
-      {!isLoading && errorMessage ? (
-        <ErrorState title="Unable to load tasks" description={errorMessage} />
-      ) : null}
-      {!isLoading && !errorMessage && filteredTasks.length === 0 ? (
-        <EmptyState
-          title="No tasks yet"
-          description="Assigned tasks will appear here."
-        />
-      ) : null}
+          {isLoading ? <ListSkeleton rows={5} /> : null}
+          {!isLoading && errorMessage ? (
+            <ErrorState title="Unable to load tasks" description={errorMessage} />
+          ) : null}
+          {!isLoading && !errorMessage && filteredTasks.length === 0 ? (
+            <EmptyState
+              title="No tasks yet"
+              description="Create a task to get started."
+            />
+          ) : null}
 
-      {!isLoading && !errorMessage && filteredTasks.length > 0 ? (
-        <Card padding="none" className="overflow-hidden">
-          <ul className="divide-y divide-[var(--border)]">
-            {filteredTasks.map((task) => (
-              <li key={task.id}>
-                <button
-                  type="button"
-                  onClick={() => setSelectedTaskId(task.id)}
-                  className="flex w-full flex-col gap-3 px-4 py-3 text-left transition-colors hover:bg-[var(--surface-muted)] md:grid md:grid-cols-[minmax(0,2fr)_repeat(3,minmax(0,1fr))] md:items-center"
-                >
-                  <div>
-                    <p className="text-sm font-medium text-[var(--foreground)]">
-                      {task.title}
-                    </p>
-                    <p className="text-xs text-[var(--muted)]">
-                      {task.project?.name ?? 'No project'} ·{' '}
-                      {task.visibilityScope.replaceAll('_', ' ')}
-                    </p>
-                  </div>
-                  <Badge variant={priorityVariant(task.priority)} className="w-fit">
-                    {task.priority}
-                  </Badge>
-                  <Badge variant={statusVariant(task.status)} className="w-fit capitalize">
-                    {task.status.replaceAll('_', ' ')}
-                  </Badge>
-                  <span className="text-xs text-[var(--muted)]">Open details</span>
-                </button>
-              </li>
-            ))}
-          </ul>
-        </Card>
-      ) : null}
+          {!isLoading && !errorMessage && filteredTasks.length > 0 ? (
+            <Card padding="none" className="overflow-hidden">
+              <ul className="divide-y divide-[var(--border)]">
+                {filteredTasks.map((task) => (
+                  <li key={task.id}>
+                    <button
+                      type="button"
+                      onClick={() => setSelectedTaskId(task.id)}
+                      className="flex w-full items-start gap-3 px-4 py-3 text-left hover:bg-[var(--surface-muted)]"
+                    >
+                      <div className="min-w-0 flex-1">
+                        <p
+                          className={cn(
+                            'truncate text-sm font-medium text-[var(--foreground)]',
+                            isOverdue(task) && 'text-[var(--danger)]',
+                          )}
+                        >
+                          {task.title}
+                        </p>
+                        <p className="mt-0.5 truncate text-xs text-[var(--muted)]">
+                          {task.project?.clientOrganization?.name ??
+                            task.project?.name ??
+                            'Studio'}
+                          {task.assignee?.fullName
+                            ? ` · ${task.assignee.fullName}`
+                            : ' · Unassigned'}
+                          {task.dueDate
+                            ? ` · Due ${new Date(task.dueDate).toLocaleDateString()}`
+                            : ''}
+                        </p>
+                      </div>
+                      <div className="flex shrink-0 flex-col items-end gap-1">
+                        <Badge variant={statusVariant(task.status)}>
+                          {statusLabel(task.status)}
+                        </Badge>
+                        <Badge variant={priorityVariant(task.priority)}>
+                          {task.priority}
+                        </Badge>
+                      </div>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </Card>
+          ) : null}
         </>
       )}
 
       <TaskDetailDrawer
         taskId={selectedTaskId}
         onClose={() => setSelectedTaskId(null)}
-        onUpdated={loadTasks}
+        onUpdated={() => {
+          loadTasks();
+          notifyRefresh();
+        }}
       />
       <CreateTaskModal
         open={createOpen}
+        user={user}
         onClose={() => setCreateOpen(false)}
         onCreated={() => {
-          notifyRefresh();
           loadTasks();
+          notifyRefresh();
         }}
       />
     </div>

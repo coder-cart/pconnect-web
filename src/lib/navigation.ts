@@ -1,12 +1,13 @@
 import {
   BadgeCheck,
   Building2,
+  CalendarDays,
+  CheckSquare,
   ClipboardList,
   Home,
   MessageSquare,
   Receipt,
   Settings,
-  UserRound,
   Users,
   UsersRound,
   type LucideIcon,
@@ -45,6 +46,27 @@ export const NAV_ITEMS: NavItem[] = [
     externalLabel: 'Order',
     icon: ClipboardList,
     permissions: ['orders.view'],
+  },
+  {
+    href: '/tasks',
+    label: 'Tasks',
+    externalLabel: 'Tasks',
+    icon: CheckSquare,
+    permissions: ['tasks.view_internal', 'tasks.create'],
+  },
+  {
+    href: '/schedule',
+    label: 'Schedule',
+    externalLabel: 'Schedule',
+    icon: CalendarDays,
+    permissions: ['schedule.view', 'schedule.manage'],
+  },
+  {
+    href: '/workload',
+    label: 'Workload',
+    externalLabel: 'Workload',
+    icon: UsersRound,
+    permissions: ['tasks.view_internal', 'schedule.view'],
   },
   {
     href: '/clients',
@@ -150,12 +172,18 @@ const ROUTE_RULES: Array<{
   {
     prefix: '/tasks',
     permissions: ['tasks.view_internal', 'tasks.create'],
-    internalOnly: true,
+  },
+  {
+    prefix: '/schedule',
+    permissions: ['schedule.view', 'schedule.manage'],
   },
   {
     prefix: '/projects',
     permissions: ['projects.view_internal', 'projects.create'],
-    internalOnly: true,
+  },
+  {
+    prefix: '/workload',
+    permissions: ['tasks.view_internal', 'schedule.view'],
   },
   {
     prefix: '/files',
