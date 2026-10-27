@@ -28,6 +28,7 @@ import { useProductTour } from '@/components/tour/ProductTourProvider';
 interface ProfileMenuProps {
   user: AuthenticatedUser;
   onLogout: () => void;
+  tone?: 'default' | 'shell';
 }
 
 interface UserProfileState {
@@ -72,7 +73,8 @@ function parseStatusInput(value: string): {
   return { statusEmoji, statusText };
 }
 
-export function ProfileMenu({ user, onLogout }: ProfileMenuProps) {
+export function ProfileMenu({ user, onLogout, tone = 'default' }: ProfileMenuProps) {
+  const isShell = tone === 'shell';
   const containerRef = useRef<HTMLDivElement>(null);
   const { startTour } = useProductTour();
   const [open, setOpen] = useState(false);
@@ -189,7 +191,12 @@ export function ProfileMenu({ user, onLogout }: ProfileMenuProps) {
         type="button"
         data-tour="profile-menu"
         onClick={() => setOpen((value) => !value)}
-        className="inline-flex min-h-touch min-w-touch items-center gap-2 rounded-[var(--radius-md)] border border-[var(--border)] px-1.5 py-1.5 transition-colors hover:bg-[var(--surface-muted)] sm:min-h-0 sm:min-w-0 sm:px-2"
+        className={cn(
+          'inline-flex min-h-touch min-w-touch items-center gap-2 rounded-[var(--radius-md)] border px-1.5 py-1.5 transition-colors focus-visible:outline-none focus-visible:ring-2 sm:min-h-0 sm:min-w-0 sm:px-2',
+          isShell
+            ? 'border-[var(--shell-border)] hover:bg-[var(--shell-hover)] focus-visible:ring-[var(--shell-focus-ring)]'
+            : 'border-[var(--border)] hover:bg-[var(--surface-muted)] focus-visible:ring-[var(--primary-soft)]',
+        )}
         aria-label="Open profile menu"
         aria-expanded={open}
       >
@@ -197,18 +204,33 @@ export function ProfileMenu({ user, onLogout }: ProfileMenuProps) {
           <UserAvatar user={user} size="sm" />
           <span
             className={cn(
-              'absolute bottom-0 right-0 h-2.5 w-2.5 rounded-full border-2 border-[var(--surface)]',
+              'absolute bottom-0 right-0 h-2.5 w-2.5 rounded-full border-2',
+              isShell ? 'border-[var(--shell-brand)]' : 'border-[var(--surface)]',
               profile.presenceStatus === 'away'
-                ? 'bg-[var(--muted)]'
+                ? isShell
+                  ? 'bg-[var(--shell-muted)]'
+                  : 'bg-[var(--muted)]'
                 : 'bg-[var(--success)]',
             )}
           />
         </div>
-        <div className="hidden text-left md:block">
-          <p className="text-xs font-medium text-[var(--foreground)]">
+        <div className="hidden min-w-0 text-left md:block">
+          <p
+            className={cn(
+              'truncate text-xs font-medium',
+              isShell ? 'text-[var(--shell-text)]' : 'text-[var(--foreground)]',
+            )}
+          >
             {user.fullName}
           </p>
-          <p className="text-[10px] text-[var(--muted)]">{roleLabel}</p>
+          <p
+            className={cn(
+              'truncate text-[10px]',
+              isShell ? 'text-[var(--shell-muted)]' : 'text-[var(--muted)]',
+            )}
+          >
+            {roleLabel}
+          </p>
         </div>
       </button>
 

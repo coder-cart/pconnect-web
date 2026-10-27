@@ -1,12 +1,14 @@
 'use client';
 
 import { FormEvent, useEffect, useState } from 'react';
+import Link from 'next/link';
 import { X } from 'lucide-react';
 import { apiRequest } from '@/lib/api-client';
 import { ApiResponse } from '@/lib/auth';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
+import { Select } from '@/components/ui/Select';
 import { LoadingState } from '@/components/ui/StatePanels';
 
 interface ChecklistItem {
@@ -22,6 +24,12 @@ interface DependencyItem {
   dependsOn: { id: string; title: string; status: string };
 }
 
+interface CandidateUser {
+  id: string;
+  fullName: string;
+  userType: string;
+}
+
 interface TaskDetail {
   id: string;
   title: string;
@@ -29,9 +37,14 @@ interface TaskDetail {
   status: string;
   priority: string;
   visibilityScope: string;
+  startDate?: string | null;
+  dueDate?: string | null;
   estimatedHours?: string | number | null;
   actualHours?: string | number | null;
+  orderId?: string | null;
+  order?: { id: string; code: string; name: string } | null;
   project?: { id: string; name: string; code: string };
+  assigneeUserId?: string | null;
   assignee?: { id: string; fullName: string } | null;
   checklistItems?: ChecklistItem[];
   dependencies?: DependencyItem[];
@@ -54,6 +67,11 @@ interface TaskDetailDrawerProps {
   onUpdated: () => void;
 }
 
+function toDateInputValue(value?: string | null) {
+  if (!value) return '';
+  return value.slice(0, 10);
+}
+
 export function TaskDetailDrawer({
   taskId,
   onClose,
@@ -65,56 +83,76 @@ export function TaskDetailDrawer({
   const [dependencyTaskId, setDependencyTaskId] = useState('');
   const [estimatedHours, setEstimatedHours] = useState('');
   const [actualHours, setActualHours] = useState('');
+  const [assigneeUserId, setAssigneeUserId] = useState('');
+  const [startDate, setStartDate] = useState('');
+  const [dueDate, setDueDate] = useState('');
+  const [candidates, setCandidates] = useState<CandidateUser[]>([]);
   const [allTasks, setAllTasks] = useState<TaskOption[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  function applyTaskFields(detail: TaskDetail) {
+    setTask(detail);
+    setEstimatedHours(
+      detail.estimatedHours != null ? String(detail.estimatedHours) : '',
+    );
+    setActualHours(
+      detail.actualHours != null ? String(detail.actualHours) : '',
+    );
+    setAssigneeUserId(detail.assigneeUserId ?? detail.assignee?.id ?? '');
+    setStartDate(toDateInputValue(detail.startDate));
+    setDueDate(toDateInputValue(detail.dueDate));
+  }
 
   async function reloadTask() {
     if (!taskId) return;
     const refreshed = await apiRequest<ApiResponse<TaskDetail>>(
       `/tasks/${taskId}`,
     );
-    setTask(refreshed.data);
-    setEstimatedHours(
-      refreshed.data.estimatedHours != null
-        ? String(refreshed.data.estimatedHours)
-        : '',
-    );
-    setActualHours(
-      refreshed.data.actualHours != null
-        ? String(refreshed.data.actualHours)
-        : '',
-    );
+    applyTaskFields(refreshed.data);
   }
 
   useEffect(() => {
-    if (!taskId) {
-      setTask(null);
-      return;
-    }
+    if (!taskId) return;
 
-    setIsLoading(true);
-    setErrorMessage(null);
-    Promise.all([
-      apiRequest<ApiResponse<TaskDetail>>(`/tasks/${taskId}`),
-      apiRequest<ApiResponse<TaskOption[]>>('/tasks'),
-    ])
-      .then(([detail, list]) => {
-        setTask(detail.data);
-        setEstimatedHours(
-          detail.data.estimatedHours != null
-            ? String(detail.data.estimatedHours)
-            : '',
+    let cancelled = false;
+    void Promise.resolve().then(async () => {
+      if (cancelled) return;
+      setIsLoading(true);
+      setErrorMessage(null);
+      try {
+        const [detail, list, candidatesResponse] = await Promise.all([
+          apiRequest<ApiResponse<TaskDetail>>(`/tasks/${taskId}`),
+          apiRequest<ApiResponse<{ items: TaskOption[] }>>(
+            '/tasks?pageSize=100',
+          ),
+          apiRequest<
+            ApiResponse<{
+              portalUsers: CandidateUser[];
+              internalUsers: CandidateUser[];
+            }>
+          >('/tasks/assignee-candidates').catch(() => null),
+        ]);
+        if (cancelled) return;
+        applyTaskFields(detail.data);
+        setAllTasks(
+          (list.data.items ?? []).filter((item) => item.id !== taskId),
         );
-        setActualHours(
-          detail.data.actualHours != null
-            ? String(detail.data.actualHours)
-            : '',
-        );
-        setAllTasks(list.data.filter((item) => item.id !== taskId));
-      })
-      .finally(() => setIsLoading(false));
+        const people = [
+          ...(candidatesResponse?.data.portalUsers ?? []),
+          ...(candidatesResponse?.data.internalUsers ?? []),
+        ];
+        const unique = new Map(people.map((person) => [person.id, person]));
+        setCandidates(Array.from(unique.values()));
+      } finally {
+        if (!cancelled) setIsLoading(false);
+      }
+    });
+
+    return () => {
+      cancelled = true;
+    };
   }, [taskId]);
 
   if (!taskId) {
@@ -149,7 +187,7 @@ export function TaskDetailDrawer({
     }
   }
 
-  async function handleSaveHours() {
+  async function handleSaveDetails() {
     if (!taskId) return;
     setIsSaving(true);
     setErrorMessage(null);
@@ -159,6 +197,9 @@ export function TaskDetailDrawer({
         body: JSON.stringify({
           estimatedHours: estimatedHours ? Number(estimatedHours) : undefined,
           actualHours: actualHours ? Number(actualHours) : undefined,
+          assigneeUserId: assigneeUserId || null,
+          startDate: startDate || null,
+          dueDate: dueDate || null,
         }),
       });
       await reloadTask();
@@ -315,25 +356,33 @@ export function TaskDetailDrawer({
                 </p>
               ) : null}
 
-              {task.assignee ? (
+              {task.order ? (
                 <p className="text-sm text-[var(--muted)]">
-                  Assignee:{' '}
-                  <span className="font-medium text-[var(--foreground)]">
-                    {task.assignee.fullName}
-                  </span>
+                  Linked order:{' '}
+                  <Link
+                    href={`/orders/${task.order.id}`}
+                    className="font-medium text-[var(--primary)] hover:underline"
+                  >
+                    {task.order.code} · {task.order.name}
+                  </Link>
                 </p>
               ) : null}
 
               <div className="flex flex-wrap gap-2">
-                {['todo', 'in_progress', 'in_review', 'done'].map((status) => (
+                {['todo', 'in_progress', 'on_hold', 'done'].map((status) => (
                   <Button
                     key={status}
                     size="sm"
-                    variant={task.status === status ? 'primary' : 'secondary'}
+                    variant={
+                      task.status === status ||
+                      (status === 'on_hold' && task.status === 'in_review')
+                        ? 'primary'
+                        : 'secondary'
+                    }
                     disabled={isSaving}
                     onClick={() => handleStatusChangeGuarded(status)}
                   >
-                    {status.replaceAll('_', ' ')}
+                    {status === 'on_hold' ? 'On Hold' : status.replaceAll('_', ' ')}
                   </Button>
                 ))}
               </div>
@@ -344,11 +393,37 @@ export function TaskDetailDrawer({
                 </p>
               ) : null}
 
-              <div>
+              <div className="space-y-3">
                 <h4 className="text-sm font-semibold text-[var(--foreground)]">
-                  Time tracking
+                  Assignment & dates
                 </h4>
-                <div className="mt-3 grid grid-cols-2 gap-3">
+                <Select
+                  label="Assignee"
+                  value={assigneeUserId}
+                  onChange={(event) => setAssigneeUserId(event.target.value)}
+                  options={[
+                    { value: '', label: 'Unassigned' },
+                    ...candidates.map((person) => ({
+                      value: person.id,
+                      label: `${person.fullName} (${person.userType})`,
+                    })),
+                  ]}
+                />
+                <div className="grid grid-cols-2 gap-3">
+                  <Input
+                    label="Start date"
+                    type="date"
+                    value={startDate}
+                    onChange={(event) => setStartDate(event.target.value)}
+                  />
+                  <Input
+                    label="Due date"
+                    type="date"
+                    value={dueDate}
+                    onChange={(event) => setDueDate(event.target.value)}
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-3">
                   <Input
                     label="Estimated hours"
                     type="number"
@@ -367,13 +442,12 @@ export function TaskDetailDrawer({
                   />
                 </div>
                 <Button
-                  className="mt-3"
                   size="sm"
                   variant="secondary"
                   disabled={isSaving}
-                  onClick={handleSaveHours}
+                  onClick={handleSaveDetails}
                 >
-                  Save hours
+                  Save details
                 </Button>
               </div>
 

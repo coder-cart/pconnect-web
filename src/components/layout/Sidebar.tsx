@@ -124,7 +124,7 @@ function UnreadConversationLink({
         }}
         title={collapsed ? person.fullName : undefined}
         className={cn(
-          'flex items-center gap-2.5 rounded-[var(--radius-md)] px-2.5 py-2 text-left transition-colors hover:bg-[var(--surface-muted)]',
+          'flex items-center gap-2.5 rounded-[var(--radius-md)] px-2.5 py-2 text-left transition-colors hover:bg-[var(--shell-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--shell-focus-ring)]',
           collapsed && 'justify-center px-2',
         )}
       >
@@ -139,8 +139,8 @@ function UnreadConversationLink({
           />
           <span
             className={cn(
-              'absolute -bottom-0.5 -right-0.5 h-2 w-2 rounded-full border border-[var(--surface)]',
-              away ? 'bg-[var(--muted)]' : 'bg-[var(--success)]',
+              'absolute -bottom-0.5 -right-0.5 h-2 w-2 rounded-full border border-[var(--shell-brand)]',
+              away ? 'bg-[var(--shell-muted)]' : 'bg-[var(--success)]',
             )}
             aria-hidden
           />
@@ -148,19 +148,19 @@ function UnreadConversationLink({
         {!collapsed ? (
           <>
             <span className="min-w-0 flex-1">
-              <span className="block truncate text-sm font-semibold text-[var(--foreground)]">
+              <span className="block truncate text-sm font-semibold text-[var(--shell-text)]">
                 {person.fullName}
               </span>
-              <span className="block truncate text-[11px] text-[var(--muted)]">
+              <span className="block truncate text-[11px] text-[var(--shell-muted)]">
                 {preview}
               </span>
             </span>
-            <span className="shrink-0 rounded-full bg-[var(--primary-soft)] px-1.5 py-0.5 text-[10px] font-semibold text-[var(--primary)]">
+            <span className="shrink-0 rounded-full bg-[var(--shell-badge)] px-1.5 py-0.5 text-[10px] font-semibold text-[var(--shell-badge-text)]">
               {conversation.unreadCount}
             </span>
           </>
         ) : conversation.unreadCount > 0 ? (
-          <span className="absolute right-1 top-1 h-2 w-2 rounded-full bg-[var(--primary)]" />
+          <span className="absolute right-1 top-1 h-2 w-2 rounded-full bg-[var(--shell-badge)]" />
         ) : null}
       </Link>
       {open && !collapsed ? <UnreadPersonHoverCard person={person} /> : null}
@@ -213,7 +213,7 @@ export function Sidebar({
     return (
       <div className="py-2">
         {!isCollapsed ? (
-          <p className="mb-1 px-2.5 text-[11px] font-semibold uppercase tracking-wide text-[var(--muted)]">
+          <p className="mb-1 px-2.5 text-[11px] font-semibold uppercase tracking-wide text-[var(--shell-muted)]">
             Unread
           </p>
         ) : null}
@@ -234,7 +234,7 @@ export function Sidebar({
   return (
     <aside
       className={cn(
-        'flex flex-col border-r border-[var(--border)] bg-[var(--surface)] transition-[width] duration-200',
+        'shell-chrome flex flex-col border-r border-[var(--shell-border)] bg-[#1d2353] text-[var(--shell-text)] transition-[width] duration-200',
         mobile
           ? 'h-full w-full max-w-sm'
           : cn(
@@ -246,7 +246,7 @@ export function Sidebar({
     >
       <div
         className={cn(
-          'flex shrink-0 items-center border-b border-[var(--border)] px-3 py-3',
+          'flex shrink-0 items-center border-b border-[var(--shell-border)] px-3 py-3',
           isCollapsed ? 'justify-center' : 'justify-between px-4 py-4',
         )}
       >
@@ -256,7 +256,7 @@ export function Sidebar({
             <button
               type="button"
               onClick={onToggleCollapsed}
-              className="inline-flex min-h-touch min-w-touch items-center justify-center rounded-[var(--radius-md)] text-[var(--muted)] transition-colors hover:bg-[var(--surface-muted)] hover:text-[var(--foreground)]"
+              className="inline-flex min-h-touch min-w-touch items-center justify-center rounded-[var(--radius-md)] text-[var(--shell-muted)] transition-colors hover:bg-[var(--shell-hover)] hover:text-[var(--shell-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--shell-focus-ring)]"
               aria-label={isCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
             >
               {isCollapsed ? (
@@ -270,7 +270,7 @@ export function Sidebar({
             <button
               type="button"
               onClick={onClose}
-              className="inline-flex min-h-touch min-w-touch items-center justify-center rounded-[var(--radius-md)] text-[var(--muted)] transition-colors hover:bg-[var(--surface-muted)] hover:text-[var(--foreground)]"
+              className="inline-flex min-h-touch min-w-touch items-center justify-center rounded-[var(--radius-md)] text-[var(--shell-muted)] transition-colors hover:bg-[var(--shell-hover)] hover:text-[var(--shell-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--shell-focus-ring)]"
               aria-label="Close navigation menu"
             >
               <X className="h-5 w-5" />
@@ -304,12 +304,17 @@ export function Sidebar({
         ))}
       </nav>
 
-      <div className={cn('shrink-0 space-y-2 border-t border-[var(--border)] p-3', isCollapsed && 'px-2')}>
+      <div
+        className={cn(
+          'shrink-0 space-y-2 border-t border-[var(--shell-border)] p-3',
+          isCollapsed && 'px-2',
+        )}
+      >
         {showSettings || showStaff ? (
           isCollapsed ? (
             <Link
               href={showSettings ? '/admin' : '/staff'}
-              className="inline-flex w-full min-h-touch items-center justify-center rounded-[var(--radius-md)] text-[var(--muted)] hover:bg-[var(--surface-muted)]"
+              className="inline-flex w-full min-h-touch items-center justify-center rounded-[var(--radius-md)] text-[var(--shell-muted)] hover:bg-[var(--shell-hover)] hover:text-[var(--shell-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--shell-focus-ring)]"
               title="Admin tools"
               onClick={onNavigate}
             >
@@ -323,7 +328,7 @@ export function Sidebar({
           href="/account"
           onClick={onNavigate}
           className={cn(
-            'flex items-center gap-3 rounded-[var(--radius-lg)] bg-[var(--surface-muted)] p-2.5 transition-colors hover:bg-[var(--border)]/40',
+            'flex items-center gap-3 rounded-[var(--radius-lg)] bg-[var(--shell-hover)] p-2.5 transition-colors hover:bg-[var(--shell-active)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--shell-focus-ring)]',
             isCollapsed && 'justify-center p-2',
           )}
           title={isCollapsed ? user.fullName : undefined}
@@ -332,12 +337,12 @@ export function Sidebar({
           {!isCollapsed ? (
             <>
               <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-medium text-[var(--foreground)]">
+                <p className="truncate text-sm font-medium text-[var(--shell-text)]">
                   {user.fullName}
                 </p>
-                <p className="truncate text-xs text-[var(--muted)]">{roleLabel}</p>
+                <p className="truncate text-xs text-[var(--shell-muted)]">{roleLabel}</p>
               </div>
-              <ChevronUp className="h-4 w-4 shrink-0 text-[var(--muted)]" aria-hidden />
+              <ChevronUp className="h-4 w-4 shrink-0 text-[var(--shell-muted)]" aria-hidden />
             </>
           ) : null}
         </Link>
@@ -384,25 +389,25 @@ function SidebarLink({
       title={collapsed ? label : undefined}
       data-tour={tourId}
       className={cn(
-        'group relative flex items-center gap-3 rounded-[var(--radius-md)] px-3 py-2.5 text-sm font-medium transition-all duration-200',
+        'group relative flex items-center gap-3 rounded-[var(--radius-md)] px-3 py-2.5 text-sm font-medium transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--shell-focus-ring)]',
         collapsed && 'justify-center px-2',
         isActive
-          ? 'bg-[var(--primary)] text-white shadow-sm'
-          : 'text-[var(--muted-foreground)] hover:bg-[var(--surface-muted)] hover:text-[var(--foreground)]',
+          ? 'bg-[var(--shell-active)] text-[var(--shell-text)] shadow-[inset_3px_0_0_0_rgba(255,255,255,0.55)]'
+          : 'text-[var(--shell-muted)] hover:bg-[var(--shell-hover)] hover:text-[var(--shell-text)]',
       )}
       aria-current={isActive ? 'page' : undefined}
     >
       <Icon className="h-4 w-4 shrink-0" aria-hidden />
       {!collapsed ? (
         <>
-          <span className="flex-1 truncate">{label}</span>
+          <span className="min-w-0 flex-1 truncate">{label}</span>
           {item.badge ? (
             <span
               className={cn(
-                'rounded-full px-2 py-0.5 text-[10px] font-semibold',
+                'shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold',
                 isActive
                   ? 'bg-white/20 text-white'
-                  : 'bg-[var(--primary-soft)] text-[var(--primary)]',
+                  : 'bg-[var(--shell-badge)] text-[var(--shell-badge-text)]',
               )}
             >
               {item.badge}
@@ -410,7 +415,7 @@ function SidebarLink({
           ) : null}
         </>
       ) : item.badge ? (
-        <span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-[var(--primary)]" />
+        <span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-[var(--shell-badge)]" />
       ) : null}
     </Link>
   );

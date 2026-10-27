@@ -34,9 +34,11 @@ interface SearchResults {
 
 interface GlobalSearchProps {
   className?: string;
+  variant?: 'default' | 'shell';
 }
 
-export function GlobalSearch({ className }: GlobalSearchProps) {
+export function GlobalSearch({ className, variant = 'default' }: GlobalSearchProps) {
+  const isShell = variant === 'shell';
   const router = useRouter();
   const containerRef = useRef<HTMLDivElement>(null);
   const [query, setQuery] = useState('');
@@ -96,7 +98,12 @@ export function GlobalSearch({ className }: GlobalSearchProps) {
   return (
     <div ref={containerRef} className={cn('relative w-full', className)}>
       <div className="relative">
-        <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--muted)]" />
+        <Search
+          className={cn(
+            'pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2',
+            isShell ? 'text-[var(--shell-muted)]' : 'text-[var(--muted)]',
+          )}
+        />
         <input
           type="search"
           value={query}
@@ -106,7 +113,12 @@ export function GlobalSearch({ className }: GlobalSearchProps) {
           }}
           placeholder="Search anything..."
           aria-label="Global search"
-          className="h-10 w-full rounded-full border border-[var(--border)] bg-[var(--surface-muted)] pl-10 pr-4 text-sm text-[var(--foreground)] transition-all placeholder:text-[var(--muted)] focus:border-[var(--primary)] focus:bg-[var(--surface)] focus:outline-none focus:ring-2 focus:ring-[var(--primary-soft)]"
+          className={cn(
+            'h-10 w-full rounded-full border pl-10 pr-4 text-sm transition-all focus:outline-none focus:ring-2',
+            isShell
+              ? 'shell-chrome-input focus:bg-[var(--shell-hover)]'
+              : 'border-[var(--border)] bg-[var(--surface-muted)] text-[var(--foreground)] placeholder:text-[var(--muted)] focus:border-[var(--primary)] focus:bg-[var(--surface)] focus:ring-[var(--primary-soft)]',
+          )}
         />
       </div>
 

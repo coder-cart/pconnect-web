@@ -35,7 +35,7 @@ export function Logo({ compact = false, className }: LogoProps) {
       <span className="brand-lockup text-[1.05rem] font-semibold tracking-[-0.02em] text-[var(--foreground)]">
         Colab<span className="text-[var(--primary)]">deck</span>
       </span>
-      <span className="brand-lockup-dark text-[1.05rem] font-semibold tracking-[-0.02em] text-white">
+      <span className="brand-lockup-dark text-[1.05rem] font-semibold tracking-[-0.02em] text-[var(--shell-text,#ffffff)]">
         Colab<span className="text-[#a5b4fc]">deck</span>
       </span>
     </div>
