@@ -146,7 +146,7 @@ export function TopBar({
       className="shell-chrome sticky top-0 z-20 border-b border-[var(--shell-border)] bg-[#1d2353] text-[var(--shell-text)]"
       style={{ paddingTop: 'var(--safe-top)', backgroundColor: '#1d2353' }}
     >
-      <div className="flex w-full min-w-0 items-center gap-1.5 overflow-hidden px-2 py-2 sm:gap-2 sm:px-4 sm:py-2.5 lg:gap-3 lg:px-6">
+      <div className="flex w-full min-w-0 items-center gap-1.5 px-2 py-2 sm:gap-2 sm:px-4 sm:py-2.5 lg:gap-3 lg:px-6">
         <div className="flex shrink-0 items-center">
           <button
             type="button"

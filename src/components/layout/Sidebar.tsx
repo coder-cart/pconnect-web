@@ -246,17 +246,14 @@ export function Sidebar({
     >
       <div
         className={cn(
-          'flex shrink-0 items-center gap-2 border-b border-[var(--shell-border)] px-3 py-3',
+          'flex shrink-0 items-center   border-b border-[var(--shell-border)] px-3 py-3',
           isCollapsed ? 'justify-center' : 'justify-between px-4 py-3.5',
         )}
       >
         {isCollapsed ? (
-          <Logo compact className="h-8 w-8 shrink-0" />
+          <Logo compact className=" " />
         ) : (
-          <Logo
-            variant="lockup-dark"
-            className="h-8 w-auto max-w-[148px] shrink min-w-0"
-          />
+          <Logo className=" " />
         )}
         <div className="flex shrink-0 items-center gap-1">
           {!mobile && onToggleCollapsed ? (
@@ -286,7 +283,7 @@ export function Sidebar({
         </div>
       </div>
 
-      <nav className="min-h-0 flex-1 space-y-1 overflow-y-auto px-2 py-3 sm:px-3 sm:py-4">
+      <nav className="shell-scroll min-h-0 flex-1 space-y-1 overflow-y-auto px-2 py-3 sm:px-3 sm:py-4">
         {homeItem ? (
           <SidebarLink
             item={homeItem}

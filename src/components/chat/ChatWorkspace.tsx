@@ -915,14 +915,14 @@ export function ChatWorkspace({
     <>
       <div
         className={cn(
-          'grid h-full min-h-0 gap-0 lg:gap-3',
+          'grid h-full min-h-0 grid-cols-1 gap-0 overflow-hidden',
           showDesktopSidebar && (detailsOpen || threadMessageId)
-            ? 'lg:grid-cols-[280px_minmax(0,1fr)_320px]'
+            ? 'md:grid-cols-[15.5rem_minmax(0,1fr)_17.5rem] xl:grid-cols-[17rem_minmax(0,1fr)_19rem]'
             : showDesktopSidebar
-              ? 'lg:grid-cols-[280px_minmax(0,1fr)]'
+              ? 'md:grid-cols-[15.5rem_minmax(0,1fr)] xl:grid-cols-[17rem_minmax(0,1fr)]'
               : detailsOpen || threadMessageId
-                ? 'lg:grid-cols-[minmax(0,1fr)_320px]'
-                : 'lg:grid-cols-[minmax(0,1fr)]',
+                ? 'md:grid-cols-[minmax(0,1fr)_17.5rem] xl:grid-cols-[minmax(0,1fr)_19rem]'
+                : 'md:grid-cols-[minmax(0,1fr)]',
         )}
       >
         <ChannelSidebar
@@ -939,16 +939,18 @@ export function ChatWorkspace({
           onStartDirectMessage={() => setStartDmOpen(true)}
           onAcceptInvite={(invite) => void handleAcceptInvite(invite)}
           className={cn(
+            'order-1 h-full min-h-0 w-full md:col-start-1',
             showMobileChat ? 'hidden' : 'flex',
-            showDesktopSidebar ? 'lg:flex' : 'lg:hidden',
+            showDesktopSidebar ? 'md:flex' : 'md:hidden',
           )}
         />
 
         <Card
           padding="none"
           className={cn(
-            'flex min-h-0 min-w-0 flex-col overflow-hidden',
-            !showMobileChat ? 'hidden lg:flex' : 'flex',
+            'order-2 flex min-h-0 min-w-0 flex-col overflow-hidden rounded-none shadow-none',
+            !showMobileChat ? 'hidden md:flex' : 'flex',
+            showDesktopSidebar ? 'md:col-start-2' : 'md:col-start-1',
           )}
         >
           <ChannelHeader
@@ -1004,8 +1006,8 @@ export function ChatWorkspace({
                 <ChatScrollArea
                   scrollKey={selectedChannelId}
                   anchorMessageId={initialMessageId}
-                  containerClassName="px-3 py-3 sm:px-5 sm:py-4"
-                  contentClassName="space-y-0.5"
+                  containerClassName="chat-inset-x py-[var(--chat-inset-y)]"
+                  contentClassName="space-y-0"
                 >
                   <MessageList
                     messages={messages}
@@ -1028,7 +1030,7 @@ export function ChatWorkspace({
                 </ChatScrollArea>
               ) : null}
 
-              <div className="safe-pb shrink-0 border-t border-[var(--border)] bg-[var(--surface)] p-3 sm:p-4">
+              <div className="chat-inset safe-pb shrink-0 border-t border-[var(--border)] bg-[var(--surface)]">
                 <ChatComposer
                   channelId={selectedChannelId}
                   channelName={
@@ -1062,6 +1064,10 @@ export function ChatWorkspace({
             onInvite={() => setManageMembersOpen(true)}
             onJumpToPin={handleJumpToPinnedMessage}
             onClose={() => setDetailsOpen(false)}
+            className={cn(
+              'order-3',
+              showDesktopSidebar ? 'md:col-start-3' : 'md:col-start-2',
+            )}
           />
         ) : null}
 
@@ -1090,6 +1096,10 @@ export function ChatWorkspace({
             onCopyMessage={handleCopyMessage}
             onCopyLink={handleCopyLink}
             onMarkUnread={handleMarkUnread}
+            className={cn(
+              'order-3',
+              showDesktopSidebar ? 'md:col-start-3' : 'md:col-start-2',
+            )}
           />
         ) : null}
       </div>
