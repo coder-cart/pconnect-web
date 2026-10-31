@@ -38,7 +38,7 @@ export function ChatScrollArea({
         ref={containerRef}
         onScroll={handleScroll}
         className={cn(
-          'h-full overflow-y-auto overscroll-y-contain scroll-smooth px-4 py-4 sm:px-6',
+          'chat-inset-x h-full overflow-y-auto overscroll-y-contain scroll-smooth py-[var(--chat-inset-y)]',
           containerClassName,
         )}
       >
@@ -48,11 +48,11 @@ export function ChatScrollArea({
       </div>
 
       {showJumpToLatest ? (
-        <div className="pointer-events-none absolute inset-x-0 bottom-4 flex justify-center">
+        <div className="pointer-events-none absolute inset-x-0 bottom-3 flex justify-center sm:bottom-4">
           <button
             type="button"
             onClick={() => scrollToBottom('smooth')}
-            className="pointer-events-auto inline-flex items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--surface)] px-4 py-2 text-sm font-medium text-[var(--foreground)] shadow-[var(--shadow-md)] transition-colors hover:bg-[var(--surface-muted)]"
+            className="pointer-events-auto inline-flex items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--surface)] px-3 py-1.5 text-sm font-medium text-[var(--foreground)] shadow-[var(--shadow-md)] transition-colors hover:bg-[var(--surface-muted)] sm:px-4 sm:py-2"
           >
             <ArrowDown className="h-4 w-4" />
             {jumpLabel}

@@ -35,7 +35,7 @@ export function PinnedMessagesPanel({
 
   if (isLoading) {
     return (
-      <div className="p-4">
+      <div className="chat-inset">
         <ListSkeleton rows={3} />
       </div>
     );
@@ -43,7 +43,7 @@ export function PinnedMessagesPanel({
 
   if (pins.length === 0) {
     return (
-      <div className="flex flex-1 items-center justify-center p-6">
+      <div className="chat-inset flex flex-1 items-center justify-center">
         <EmptyState
           title="No pinned messages"
           description="Pin important messages from the message menu to find them here."
@@ -53,18 +53,18 @@ export function PinnedMessagesPanel({
   }
 
   return (
-    <div className="min-h-0 flex-1 overflow-y-auto p-4">
-      <div className="space-y-3">
+    <div className="chat-inset min-h-0 flex-1 overflow-y-auto">
+      <div className="space-y-2.5">
         {pins.map((pin) => (
           <div
             key={pin.id}
-            className="rounded-[var(--radius-md)] border border-[var(--border)] p-3"
+            className="rounded-[var(--radius-md)] border border-[var(--border)] p-2.5 sm:p-3"
           >
-            <div className="mb-2 flex items-start justify-between gap-3">
+            <div className="mb-1.5 flex items-start justify-between gap-2.5">
               <button
                 type="button"
                 onClick={() => onJumpToMessage(pin.message.id)}
-                className="flex min-w-0 flex-1 items-start gap-3 text-left"
+                className="flex min-w-0 flex-1 items-start gap-2.5 text-left"
               >
                 <UserAvatar
                   user={{

@@ -151,15 +151,15 @@ export function ChannelDetailsPanel({
       padding="none"
       className={cn(
         'fixed inset-0 z-40 flex min-h-0 flex-col overflow-hidden rounded-none',
-        'lg:relative lg:inset-auto lg:z-auto lg:sticky lg:top-0 lg:h-full lg:rounded-[var(--radius-lg)]',
+        'md:relative md:inset-auto md:z-auto md:sticky md:top-0 md:h-full md:rounded-[var(--radius-lg)]',
         'transition-[opacity,transform] duration-200 ease-out',
         className,
       )}
     >
-      <div className="flex shrink-0 items-start justify-between gap-3 border-b border-[var(--border)] px-4 py-4 safe-pt">
-        <div className="flex min-w-0 items-start gap-3">
-          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-[var(--radius-md)] bg-[var(--primary-soft)] text-[var(--primary)]">
-            <ChannelIcon className="h-5 w-5" />
+      <div className="chat-inset flex shrink-0 items-start justify-between gap-2.5 border-b border-[var(--border)] safe-pt">
+        <div className="flex min-w-0 items-start gap-2.5">
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[var(--radius-md)] bg-[var(--primary-soft)] text-[var(--primary)]">
+            <ChannelIcon className="h-4 w-4" />
           </div>
           <div className="min-w-0">
             <p className="truncate text-sm font-semibold text-[var(--foreground)]">
@@ -181,7 +181,7 @@ export function ChannelDetailsPanel({
         </button>
       </div>
 
-      <div className="min-h-0 flex-1 space-y-5 overflow-y-auto overscroll-contain px-4 py-4">
+      <div className="chat-inset min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain">
         <section>
           <p className="text-xs leading-relaxed text-[var(--muted)]">
             {description}

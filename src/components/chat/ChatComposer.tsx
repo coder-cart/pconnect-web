@@ -424,7 +424,7 @@ export function ChatComposer({
   }
 
   return (
-    <form onSubmit={(event) => void handleSubmit(event)} className="space-y-3">
+    <form onSubmit={(event) => void handleSubmit(event)} className="space-y-2">
       {attachments.length > 0 ? (
         <div className="flex flex-wrap gap-2">
           {attachments.map((attachment, index) => (
@@ -547,7 +547,7 @@ export function ChatComposer({
           suppressContentEditableWarning
           onInput={syncEditorState}
           className={cn(
-            'min-h-[72px] w-full bg-transparent px-3 py-2 text-sm outline-none',
+            'min-h-[52px] w-full bg-transparent px-2.5 py-2 text-sm outline-none sm:min-h-[60px] sm:px-3',
             'empty:before:text-[var(--muted)] empty:before:content-[attr(data-placeholder)]',
             '[&_a]:text-[var(--primary)] [&_a]:underline',
             '[&_[data-mention-id]]:rounded [&_[data-mention-id]]:bg-[var(--primary-soft)] [&_[data-mention-id]]:px-1 [&_[data-mention-id]]:font-medium [&_[data-mention-id]]:text-[var(--primary)]',

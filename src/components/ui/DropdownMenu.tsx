@@ -51,7 +51,7 @@ export function DropdownMenu({
       {open ? (
         <div
           className={cn(
-            'absolute top-[calc(100%+4px)] z-40 max-h-[min(24rem,70dvh)] min-w-44 max-w-[calc(100vw-1.5rem)] overflow-y-auto overscroll-contain rounded-[var(--radius-lg)] border border-[var(--border)] bg-[var(--surface)] py-1 shadow-[var(--shadow-md)]',
+            'shell-overlay-panel absolute top-[calc(100%+4px)] z-40 max-h-[min(24rem,70dvh)] min-w-44 max-w-[calc(100vw-1.5rem)] overflow-y-auto overscroll-contain rounded-[var(--radius-lg)] border border-[var(--border)] bg-[var(--surface)] py-1 text-[var(--foreground)] shadow-[var(--shadow-md)]',
             align === 'right' ? 'right-0' : 'left-0',
             menuClassName,
           )}

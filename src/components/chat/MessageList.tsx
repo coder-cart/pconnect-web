@@ -108,11 +108,11 @@ export function MessageList({
   }
 
   return (
-    <div className="space-y-0.5">
+    <div className="space-y-0">
       {unreadMessages.length > 0 ? (
         <>
           {renderEntries(groupMessagesByDate(unreadMessages, timeZone), true)}
-          <div className="my-4 flex items-center gap-3 px-3 text-xs font-medium uppercase tracking-wide text-[var(--muted)]">
+          <div className="my-2 flex items-center gap-2 px-2 text-[11px] font-medium uppercase tracking-wide text-[var(--muted)] sm:gap-3 sm:px-3 sm:text-xs">
             <span className="h-px flex-1 bg-[var(--border)]" />
             Earlier
             <span className="h-px flex-1 bg-[var(--border)]" />

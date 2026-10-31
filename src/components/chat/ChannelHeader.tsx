@@ -118,13 +118,13 @@ export function ChannelHeader({
 
   return (
     <div className="shrink-0 border-b border-[var(--border)]">
-      <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 sm:px-5 sm:py-3.5">
-        <div className="flex min-w-0 items-center gap-3">
+      <div className="chat-inset flex flex-wrap items-center justify-between gap-2 sm:gap-3">
+        <div className="flex min-w-0 items-center gap-2.5">
           {onBack ? (
             <button
               type="button"
               onClick={onBack}
-              className="inline-flex min-h-touch min-w-touch shrink-0 items-center justify-center rounded-[var(--radius-md)] text-[var(--muted)] hover:bg-[var(--surface-muted)] hover:text-[var(--foreground)] lg:hidden"
+              className="inline-flex min-h-touch min-w-touch shrink-0 items-center justify-center rounded-[var(--radius-md)] text-[var(--muted)] hover:bg-[var(--surface-muted)] hover:text-[var(--foreground)] md:hidden"
               aria-label="Back to conversations"
             >
               <ArrowLeft className="h-5 w-5" />
@@ -134,7 +134,7 @@ export function ChannelHeader({
             <button
               type="button"
               onClick={onToggleSidebar}
-              className="hidden min-h-touch min-w-touch shrink-0 items-center justify-center rounded-[var(--radius-md)] text-[var(--muted)] hover:bg-[var(--surface-muted)] hover:text-[var(--foreground)] lg:inline-flex"
+              className="hidden min-h-touch min-w-touch shrink-0 items-center justify-center rounded-[var(--radius-md)] text-[var(--muted)] hover:bg-[var(--surface-muted)] hover:text-[var(--foreground)] md:inline-flex"
               aria-label={sidebarOpen ? 'Hide conversations' : 'Show conversations'}
               aria-pressed={sidebarOpen}
               title={sidebarOpen ? 'Hide conversations' : 'Show conversations'}
@@ -156,15 +156,15 @@ export function ChannelHeader({
                 'Client'
               }
               logoUpdatedAt={clientOrganizationLogoUpdatedAt}
-              className="h-10 w-10"
+              className="h-9 w-9"
             />
           ) : (
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[var(--radius-md)] bg-[var(--primary-soft)] text-[var(--primary)]">
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[var(--radius-md)] bg-[var(--primary-soft)] text-[var(--primary)]">
               <ChannelIcon className="h-4 w-4" />
             </div>
           )}
           <div className="min-w-0">
-            <h2 className="truncate text-base font-semibold text-[var(--foreground)]">
+            <h2 className="truncate text-sm font-semibold text-[var(--foreground)] sm:text-base">
               {showHashPrefix ? '#' : ''}
               {label}
             </h2>
@@ -265,7 +265,7 @@ export function ChannelHeader({
       <Tabs
         activeId={activeTab}
         onChange={(id) => onTabChange(id as ChannelTab)}
-        className="px-4 sm:px-5"
+        className="chat-inset-x"
         items={[
           { id: 'messages', label: 'Messages' },
           { id: 'pins', label: 'Pins' },
@@ -318,13 +318,13 @@ export function ChannelHeaderSimple({
   channelContext: ChannelContext | null;
 }) {
   return (
-    <div className="border-b border-[var(--border)] px-4 py-4 sm:px-6">
-      <div className="flex items-center gap-3">
-        <div className="flex h-10 w-10 items-center justify-center rounded-[var(--radius-md)] bg-[var(--primary-soft)] text-[var(--primary)]">
+    <div className="chat-inset border-b border-[var(--border)]">
+      <div className="flex items-center gap-2.5">
+        <div className="flex h-9 w-9 items-center justify-center rounded-[var(--radius-md)] bg-[var(--primary-soft)] text-[var(--primary)]">
           <Hash className="h-4 w-4" />
         </div>
         <div>
-          <h2 className="text-base font-semibold text-[var(--foreground)]">
+          <h2 className="text-sm font-semibold text-[var(--foreground)] sm:text-base">
             #{channelName}
           </h2>
           <p className={cn('text-xs capitalize text-[var(--muted)]')}>

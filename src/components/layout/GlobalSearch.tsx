@@ -123,7 +123,7 @@ export function GlobalSearch({ className, variant = 'default' }: GlobalSearchPro
       </div>
 
       {isOpen && query.trim().length >= 2 ? (
-        <div className="absolute left-0 right-0 top-[calc(100%+8px)] z-30 max-h-96 overflow-y-auto rounded-[var(--radius-lg)] border border-[var(--border)] bg-[var(--surface)] p-2 shadow-[var(--shadow-md)]">
+        <div className="shell-overlay-panel absolute left-0 right-0 top-[calc(100%+8px)] z-30 max-h-96 overflow-y-auto rounded-[var(--radius-lg)] border border-[var(--border)] bg-[var(--surface)] p-2 text-[var(--foreground)] shadow-[var(--shadow-md)]">
           {!hasResults ? (
             <p className="px-3 py-2 text-sm text-[var(--muted)]">No results found.</p>
           ) : (

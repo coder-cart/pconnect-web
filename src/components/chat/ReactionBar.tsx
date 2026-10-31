@@ -13,7 +13,7 @@ export function ReactionBar({ reactions, onToggle, className }: ReactionBarProps
   if (reactions.length === 0) return null;
 
   return (
-    <div className={cn('mt-1.5 flex flex-wrap gap-1.5', className)}>
+    <div className={cn('mt-1 flex flex-wrap gap-1', className)}>
       {reactions.map((reaction) => (
         <button
           key={reaction.emoji}

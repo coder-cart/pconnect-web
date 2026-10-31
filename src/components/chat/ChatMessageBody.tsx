@@ -41,7 +41,7 @@ export function ChatMessageBody({
   attachments?: MessageAttachment[];
 }) {
   return (
-    <div className="space-y-2">
+    <div className="space-y-1">
       {body !== '(attachment)' ? renderMarkdownBody(body) : null}
 
       {attachments.map((attachment) => {

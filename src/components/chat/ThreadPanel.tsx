@@ -8,10 +8,10 @@ import { ChatMessageBody } from '@/components/chat/ChatMessageBody';
 import { ChatScrollArea } from '@/components/chat/ChatScrollArea';
 import { MessageItem } from '@/components/chat/MessageItem';
 import { Card } from '@/components/ui/Card';
-import { cn } from '@/lib/cn';
 import { ListSkeleton } from '@/components/ui/Skeleton';
 import { ChannelMemberOption } from '@/lib/channelMembers';
 import { ChatMessage } from '@/lib/chat-types';
+import { cn } from '@/lib/cn';
 import { formatMessageTime } from '@/lib/formatMessageDate';
 import { useViewerTimeZone } from '@/hooks/useViewerTimeZone';
 
@@ -91,11 +91,11 @@ export function ThreadPanel({
     <Card
       padding="none"
       className={cn(
-        'fixed inset-0 z-40 flex min-h-0 flex-col overflow-hidden rounded-none lg:relative lg:inset-auto lg:z-auto lg:sticky lg:top-0 lg:h-full lg:rounded-[var(--radius-lg)]',
+        'fixed inset-0 z-40 flex min-h-0 flex-col overflow-hidden rounded-none md:relative md:inset-auto md:z-auto md:sticky md:top-0 md:h-full md:rounded-[var(--radius-lg)]',
         className,
       )}
     >
-      <div className="flex shrink-0 items-center justify-between border-b border-[var(--border)] px-4 py-3 safe-pt">
+      <div className="chat-inset flex shrink-0 items-center justify-between border-b border-[var(--border)] safe-pt">
         <p className="text-sm font-semibold text-[var(--foreground)]">Thread</p>
         <button
           type="button"
@@ -107,8 +107,8 @@ export function ThreadPanel({
         </button>
       </div>
 
-      <div className="shrink-0 border-b border-[var(--border)] px-4 py-3">
-        <div className="flex gap-3">
+      <div className="chat-inset shrink-0 border-b border-[var(--border)]">
+        <div className="flex gap-2.5">
           <UserAvatar
             user={{
               id: parentMessage.sender.id,
@@ -136,12 +136,12 @@ export function ThreadPanel({
         scrollKey={threadScrollKey}
         jumpLabel="Jump to latest reply"
         className="min-h-0"
-        containerClassName="px-2 py-3"
-        contentClassName="space-y-1"
+        containerClassName="chat-inset-x py-[var(--chat-inset-y)]"
+        contentClassName="space-y-0"
       >
         {isLoading ? <ListSkeleton rows={2} /> : null}
         {!isLoading && replies.length === 0 ? (
-          <p className="px-2 text-sm text-[var(--muted)]">No replies yet.</p>
+          <p className="px-2 py-1 text-sm text-[var(--muted)]">No replies yet.</p>
         ) : null}
         {!isLoading
           ? replies.map((reply) => (
@@ -164,7 +164,7 @@ export function ThreadPanel({
           : null}
       </ChatScrollArea>
 
-      <div className="shrink-0 border-t border-[var(--border)] bg-[var(--surface)] p-4">
+      <div className="chat-inset shrink-0 border-t border-[var(--border)] bg-[var(--surface)]">
         <ChatComposer
           channelId={channelId}
           channelName={channelName}

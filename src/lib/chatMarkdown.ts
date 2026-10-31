@@ -236,7 +236,7 @@ export function renderMarkdownBody(text: string): ReactNode {
     index += 1;
   }
 
-  return createElement('div', { className: 'space-y-2 text-sm' }, blocks);
+  return createElement('div', { className: 'space-y-1 text-sm' }, blocks);
 }
 
 export function htmlToMarkdown(root: HTMLElement): string {

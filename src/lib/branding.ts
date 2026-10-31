@@ -1,22 +1,23 @@
 /**
  * Central Colabdeck branding asset map.
  *
- * Regenerate from approved masters in `/logo` with:
+ * Regenerate from the designer pack with:
  *   node logo/prepare-brand.mjs
  *
- * - Transparent mark → UI splash / compact logo / notifications fallback
- * - Purple plate icons → PWA / favicon / taskbar (`public/icons`)
- * - Lockup → login + nav (already used on the main login screen)
+ * Source: logo/colabdeck-assets/
+ * - symbol → UI splash / compact logo
+ * - horizontal lockups → login + nav
+ * - pwa / maskable / favicon / notification → OS + browser chrome
  */
 export const BRAND = {
   name: 'Colabdeck',
   shortName: 'Colabdeck',
-  /** Square mark — transparent PNG (no background plate). */
-  mark: '/brand/colabdeck-mark.png',
+  /** Square symbol — transparent PNG. */
+  mark: '/icons/icon-192.png',    
   /** Horizontal lockup for light backgrounds. */
   lockup: '/brand/colabdeck-lockup.png',
   /** Horizontal lockup for dark backgrounds. */
-  lockupDark: '/brand/colabdeck-lockup-dark.png',
+  lockupDark: '/brand/colabdeck-lockup-dark - Copy.png',
   ogImage: '/brand/colabdeck-og.png',
   favicon: '/favicon.png',
   icon192: '/icons/icon-192.png',
@@ -24,10 +25,12 @@ export const BRAND = {
   maskable192: '/icons/maskable-192.png',
   maskable512: '/icons/maskable-512.png',
   /** Shown on PWA / push notifications. */
-  notificationIcon: '/icons/icon-192.png',
+  notificationIcon: '/icons/notification-icon-192.png',
   themeColor: '#3d3adf',
   backgroundColor: '#0f1115',
 } as const;
 
-/** Sizes produced by `logo/prepare-brand.mjs`. */
-export const BRAND_ICON_SIZES = [32, 48, 72, 96, 128, 144, 152, 180, 192, 256, 384, 512] as const;
+/** Icon sizes shipped from logo/colabdeck-assets/icons. */
+export const BRAND_ICON_SIZES = [
+  32, 48, 72, 96, 128, 144, 152, 180, 192, 256, 384, 512,
+] as const;
