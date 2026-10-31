@@ -143,31 +143,26 @@ export function TopBar({
 
   return (
     <header
-      className="sticky top-0 z-20 border-b border-[var(--border)] bg-[var(--surface)]/95 backdrop-blur"
-      style={{ paddingTop: 'var(--safe-top)' }}
+      className="shell-chrome sticky top-0 z-20 border-b border-[var(--shell-border)] bg-[#1d2353] text-[var(--shell-text)]"
+      style={{ paddingTop: 'var(--safe-top)', backgroundColor: '#1d2353' }}
     >
-      <div className="flex w-full items-center gap-2 px-3 py-2 sm:gap-3 sm:px-4 sm:py-3 lg:px-6">
-        <div className="flex shrink-0 items-center gap-2 sm:gap-3">
+      <div className="flex w-full min-w-0 items-center gap-1.5 overflow-hidden px-2 py-2 sm:gap-2 sm:px-4 sm:py-2.5 lg:gap-3 lg:px-6">
+        <div className="flex shrink-0 items-center">
           <button
             type="button"
             onClick={onOpenMobileNav}
-            className="inline-flex min-h-touch min-w-touch shrink-0 items-center justify-center rounded-[var(--radius-md)] text-[var(--muted-foreground)] transition-colors hover:bg-[var(--surface-muted)] hover:text-[var(--foreground)] lg:hidden"
+            className="inline-flex min-h-touch min-w-touch shrink-0 items-center justify-center rounded-[var(--radius-md)] text-[var(--shell-muted)] transition-colors hover:bg-[var(--shell-hover)] hover:text-[var(--shell-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--shell-focus-ring)] lg:hidden"
             aria-label="Open navigation menu"
           >
             <Menu className="h-5 w-5" />
           </button>
-
-          <div className="hidden shrink-0 lg:block">
-            <p className="text-sm font-medium text-[var(--foreground)]">Workspace</p>
-            <p className="text-xs text-[var(--muted)]">Demo workspace</p>
-          </div>
         </div>
 
-        <div className="mx-1 min-w-0 flex-1 sm:mx-3 lg:mx-6 lg:max-w-xl">
-          <GlobalSearch />
+        <div className="min-w-0 flex-1 sm:max-w-none lg:max-w-xl">
+          <GlobalSearch variant="shell" />
         </div>
 
-        <div className="ml-auto flex shrink-0 items-center gap-0.5 sm:gap-1">
+        <div className="ml-auto flex min-w-0 shrink items-center gap-0.5 sm:gap-1">
           {createItems.length > 0 ? (
             <div className="relative" data-tour="topbar-create">
               <Button
@@ -195,7 +190,7 @@ export function TopBar({
                     aria-label="Close create menu"
                     onClick={() => setCreateOpen(false)}
                   />
-                  <div className="fixed inset-x-2 top-[3.75rem] z-20 rounded-[var(--radius-lg)] border border-[var(--border)] bg-[var(--surface)] p-2 shadow-[var(--shadow-md)] sm:absolute sm:inset-x-auto sm:right-0 sm:top-[calc(100%+8px)] sm:min-w-44">
+                  <div className="shell-overlay-panel fixed inset-x-2 top-[3.75rem] z-20 rounded-[var(--radius-lg)] border border-[var(--border)] bg-[var(--surface)] p-2 text-[var(--foreground)] shadow-[var(--shadow-md)] sm:absolute sm:inset-x-auto sm:right-0 sm:top-[calc(100%+8px)] sm:min-w-44">
                     {createItems.map((item) => (
                       <button
                         key={item.action}
@@ -218,6 +213,7 @@ export function TopBar({
 
           {pushStatus === 'unsupported' ? null : (
             <IconButton
+              className="hidden md:inline-flex"
               label={
                 pushBusy
                   ? 'Updating device alerts…'
@@ -233,12 +229,11 @@ export function TopBar({
               busy={pushBusy}
               onClick={() => void handlePushToggle()}
             >
-              <BellRing
-                className={`h-4 w-4 ${pushStatus === 'on' ? 'text-[var(--primary)]' : ''}`}
-              />
+              <BellRing className="h-4 w-4" />
             </IconButton>
           )}
           <IconButton
+            className="hidden sm:inline-flex"
             label={soundMuted ? 'Unmute notification sound' : 'Mute notification sound'}
             active={!soundMuted}
             onClick={handleSoundToggle}
@@ -246,10 +241,14 @@ export function TopBar({
             {soundMuted ? (
               <VolumeX className="h-4 w-4" />
             ) : (
-              <Volume2 className="h-4 w-4 text-[var(--primary)]" />
+              <Volume2 className="h-4 w-4" />
             )}
           </IconButton>
-          <IconButton label="Toggle theme" onClick={toggleTheme}>
+          <IconButton
+            className="hidden sm:inline-flex"
+            label="Toggle theme"
+            onClick={toggleTheme}
+          >
             {theme === 'light' ? (
               <Moon className="h-4 w-4" />
             ) : (
@@ -290,9 +289,9 @@ export function TopBar({
                   aria-label="Close help menu"
                   onClick={() => setHelpOpen(false)}
                 />
-                <div className="absolute right-0 top-[calc(100%+8px)] z-20 w-56 rounded-[var(--radius-lg)] border border-[var(--border)] bg-[var(--surface)] p-3 shadow-[var(--shadow-md)]">
+                <div className="shell-overlay-panel absolute right-0 top-[calc(100%+8px)] z-20 w-56 rounded-[var(--radius-lg)] border border-[var(--border)] bg-[var(--surface)] p-3 text-[var(--foreground)] shadow-[var(--shadow-md)]">
                   <p className="text-sm font-medium text-[var(--foreground)]">Need help?</p>
-                  <p className="mt-1 text-xs text-[var(--muted)]">
+                  <p className="mt-1 text-xs leading-relaxed text-[var(--muted)]">
                     Open Messages for updates or contact your workspace admin.
                   </p>
                   <Button
@@ -311,7 +310,7 @@ export function TopBar({
             ) : null}
           </div>
 
-          <ProfileMenu user={user} onLogout={onLogout} />
+          <ProfileMenu user={user} onLogout={onLogout} tone="shell" />
         </div>
       </div>
 
@@ -347,13 +346,13 @@ function IconButton({
       title={title ?? label}
       aria-pressed={active === undefined ? undefined : active}
       disabled={busy}
-      className={`relative inline-flex min-h-touch min-w-touch items-center justify-center rounded-[var(--radius-md)] text-[var(--muted-foreground)] transition-colors hover:bg-[var(--surface-muted)] hover:text-[var(--foreground)] disabled:cursor-wait disabled:opacity-60 ${
-        active ? 'bg-[var(--primary-soft)] text-[var(--primary)]' : ''
+      className={`relative inline-flex min-h-touch min-w-touch items-center justify-center rounded-[var(--radius-md)] text-[var(--shell-muted)] transition-colors hover:bg-[var(--shell-hover)] hover:text-[var(--shell-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--shell-focus-ring)] disabled:cursor-wait disabled:opacity-60 ${
+        active ? 'bg-[var(--shell-active)] text-[var(--shell-text)]' : ''
       } ${className ?? ''}`}
     >
       {children}
       {badge ? (
-        <span className="absolute right-1 top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-[var(--primary)] px-1 text-[10px] font-semibold text-white">
+        <span className="absolute right-1 top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-[var(--shell-badge)] px-1 text-[10px] font-semibold text-[var(--shell-badge-text)]">
           {badge > 9 ? '9+' : badge}
         </span>
       ) : null}

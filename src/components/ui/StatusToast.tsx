@@ -43,15 +43,16 @@ export function StatusToast({
       role="status"
       aria-live="polite"
       className={cn(
-        'pointer-events-none fixed left-1/2 z-[60] w-[min(22rem,calc(100vw-1.5rem))] -translate-x-1/2 rounded-[var(--radius-lg)] border px-3 py-2.5 shadow-[var(--shadow-md)]',
+        'shell-overlay-panel shell-status-toast pointer-events-none fixed left-1/2 z-[60] w-[min(24rem,calc(100vw-1.5rem))] -translate-x-1/2 rounded-[var(--radius-lg)] border px-3 py-2.5 shadow-[var(--shadow-md)]',
         'top-[calc(3.75rem+var(--safe-top))] sm:top-[4.5rem]',
+        'bg-[var(--surface)] text-[var(--foreground)]',
         message.tone === 'success' &&
-          'border-[color-mix(in_srgb,var(--success)_35%,var(--border))] bg-[var(--surface)] text-[var(--foreground)]',
+          'border-[color-mix(in_srgb,var(--success)_35%,var(--border))]',
         message.tone === 'error' &&
-          'border-[color-mix(in_srgb,var(--danger)_35%,var(--border))] bg-[var(--surface)] text-[var(--foreground)]',
-        message.tone === 'info' &&
-          'border-[var(--border)] bg-[var(--surface)] text-[var(--foreground)]',
+          'border-[color-mix(in_srgb,var(--danger)_35%,var(--border))]',
+        message.tone === 'info' && 'border-[var(--border)]',
       )}
+      style={{ color: 'var(--foreground)' }}
     >
       <div className="flex items-start gap-2">
         <Icon
@@ -63,7 +64,9 @@ export function StatusToast({
           )}
           aria-hidden
         />
-        <p className="text-sm font-medium leading-snug">{message.text}</p>
+        <p className="min-w-0 flex-1 break-words text-sm font-medium leading-snug text-[var(--foreground)]">
+          {message.text}
+        </p>
       </div>
     </div>
   );

@@ -28,6 +28,7 @@ import { useProductTour } from '@/components/tour/ProductTourProvider';
 interface ProfileMenuProps {
   user: AuthenticatedUser;
   onLogout: () => void;
+  tone?: 'default' | 'shell';
 }
 
 interface UserProfileState {
@@ -72,7 +73,8 @@ function parseStatusInput(value: string): {
   return { statusEmoji, statusText };
 }
 
-export function ProfileMenu({ user, onLogout }: ProfileMenuProps) {
+export function ProfileMenu({ user, onLogout, tone = 'default' }: ProfileMenuProps) {
+  const isShell = tone === 'shell';
   const containerRef = useRef<HTMLDivElement>(null);
   const { startTour } = useProductTour();
   const [open, setOpen] = useState(false);
@@ -189,33 +191,55 @@ export function ProfileMenu({ user, onLogout }: ProfileMenuProps) {
         type="button"
         data-tour="profile-menu"
         onClick={() => setOpen((value) => !value)}
-        className="inline-flex min-h-touch min-w-touch items-center gap-2 rounded-[var(--radius-md)] border border-[var(--border)] px-1.5 py-1.5 transition-colors hover:bg-[var(--surface-muted)] sm:min-h-0 sm:min-w-0 sm:px-2"
+        className={cn(
+          'inline-flex min-h-touch min-w-touch max-w-full items-center gap-2 rounded-[var(--radius-md)] border px-1.5 py-1.5 transition-colors focus-visible:outline-none focus-visible:ring-2 sm:min-h-0 sm:min-w-0 sm:px-2',
+          isShell
+            ? 'border-[var(--shell-border)] hover:bg-[var(--shell-hover)] focus-visible:ring-[var(--shell-focus-ring)]'
+            : 'border-[var(--border)] hover:bg-[var(--surface-muted)] focus-visible:ring-[var(--primary-soft)]',
+        )}
         aria-label="Open profile menu"
         aria-expanded={open}
       >
-        <div className="relative">
+        <div className="relative shrink-0">
           <UserAvatar user={user} size="sm" />
           <span
             className={cn(
-              'absolute bottom-0 right-0 h-2.5 w-2.5 rounded-full border-2 border-[var(--surface)]',
+              'absolute bottom-0 right-0 h-2.5 w-2.5 rounded-full border-2',
+              isShell ? 'border-[var(--shell-brand)]' : 'border-[var(--surface)]',
               profile.presenceStatus === 'away'
-                ? 'bg-[var(--muted)]'
+                ? isShell
+                  ? 'bg-[var(--shell-muted)]'
+                  : 'bg-[var(--muted)]'
                 : 'bg-[var(--success)]',
             )}
           />
         </div>
-        <div className="hidden text-left md:block">
-          <p className="text-xs font-medium text-[var(--foreground)]">
+        <div className="hidden min-w-0 max-w-[9rem] text-left md:block lg:max-w-[14rem] xl:max-w-[18rem]">
+          <p
+            className={cn(
+              'truncate text-xs font-medium leading-tight',
+              isShell ? 'text-white' : 'text-[var(--foreground)]',
+            )}
+            title={user.fullName}
+          >
             {user.fullName}
           </p>
-          <p className="text-[10px] text-[var(--muted)]">{roleLabel}</p>
+          <p
+            className={cn(
+              'truncate text-[11px] leading-tight',
+              isShell ? 'text-[#e7e9ff]' : 'text-[var(--muted)]',
+            )}
+            title={hasStatus ? currentStatusLabel : roleLabel}
+          >
+            {hasStatus ? currentStatusLabel : roleLabel}
+          </p>
         </div>
       </button>
 
       {open ? (
-        <div className="fixed inset-x-2 top-[3.75rem] z-30 max-h-[min(32rem,calc(100dvh-5rem))] w-auto overflow-y-auto rounded-[var(--radius-lg)] border border-[var(--border)] bg-[var(--surface)] p-3 shadow-[var(--shadow-md)] sm:absolute sm:inset-x-auto sm:right-0 sm:top-[calc(100%+8px)] sm:max-h-[min(32rem,70dvh)] sm:w-80">
+        <div className="shell-overlay-panel fixed inset-x-2 top-[3.75rem] z-50 max-h-[calc(100dvh-4.5rem)] w-auto overflow-y-auto rounded-[var(--radius-lg)] border border-[var(--border)] bg-[var(--surface)] p-3 text-[var(--foreground)] shadow-[var(--shadow-md)] sm:absolute sm:inset-x-auto sm:right-0 sm:top-[calc(100%+8px)] sm:max-h-[min(36rem,calc(100dvh-5.5rem))] sm:w-80 sm:overflow-y-auto">
           <div className="flex items-center gap-3 border-b border-[var(--border)] pb-3">
-            <div className="relative">
+            <div className="relative shrink-0">
               <UserAvatar user={user} size="md" />
               <span
                 className={cn(
@@ -226,11 +250,11 @@ export function ProfileMenu({ user, onLogout }: ProfileMenuProps) {
                 )}
               />
             </div>
-            <div className="min-w-0">
+            <div className="min-w-0 flex-1">
               <p className="truncate text-sm font-semibold text-[var(--foreground)]">
                 {user.fullName}
               </p>
-              <p className="text-xs capitalize text-[var(--muted)]">
+              <p className="truncate text-xs capitalize text-[var(--muted)]">
                 {profile.presenceStatus === 'away' ? 'Away' : 'Active'}
                 {hasStatus ? ` · ${currentStatusLabel}` : ''}
               </p>
@@ -267,20 +291,21 @@ export function ProfileMenu({ user, onLogout }: ProfileMenuProps) {
                     disabled={statusBusy}
                     onClick={() => void applyPreset(preset)}
                     className={cn(
-                      'rounded-full border px-2.5 py-1 text-xs transition-colors disabled:opacity-60',
+                      'max-w-full rounded-full border px-2.5 py-1 text-left text-xs transition-colors disabled:opacity-60',
                       isActive
                         ? 'border-[var(--primary)] bg-[var(--primary-soft)] text-[var(--primary)]'
                         : 'border-[var(--border)] text-[var(--foreground)] hover:bg-[var(--surface-muted)]',
                     )}
                   >
-                    <span aria-hidden>{preset.emoji}</span> {preset.text}
+                    <span aria-hidden>{preset.emoji}</span>{' '}
+                    <span className="whitespace-normal">{preset.text}</span>
                   </button>
                 );
               })}
             </div>
 
             <form
-              className="flex gap-2"
+              className="flex min-w-0 gap-2"
               onSubmit={(event) => void saveCustomStatus(event)}
             >
               <input
@@ -288,7 +313,7 @@ export function ProfileMenu({ user, onLogout }: ProfileMenuProps) {
                 onChange={(event) => setStatusDraft(event.target.value)}
                 placeholder="Custom status…"
                 disabled={statusBusy}
-                className="h-9 min-w-0 flex-1 rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface-muted)] px-3 text-sm outline-none focus:border-[var(--primary)] disabled:opacity-60"
+                className="h-9 min-w-0 flex-1 rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface-muted)] px-3 text-sm text-[var(--foreground)] outline-none placeholder:text-[var(--muted)] focus:border-[var(--primary)] disabled:opacity-60"
               />
               <Button
                 type="submit"
@@ -310,17 +335,18 @@ export function ProfileMenu({ user, onLogout }: ProfileMenuProps) {
               type="button"
               disabled={statusBusy}
               onClick={() => void toggleAway()}
-              className="w-full rounded-[var(--radius-md)] px-3 py-2 text-left text-sm hover:bg-[var(--surface-muted)] disabled:opacity-60"
+              className="w-full rounded-[var(--radius-md)] px-3 py-2 text-left text-sm text-[var(--foreground)] hover:bg-[var(--surface-muted)] disabled:opacity-60"
             >
               {profile.presenceStatus === 'away'
                 ? 'Set yourself as active'
                 : 'Set yourself as away'}
             </button>
             <DropdownMenu
+              menuClassName="shell-overlay-panel text-[var(--foreground)]"
               trigger={
                 <button
                   type="button"
-                  className="flex w-full items-center justify-between rounded-[var(--radius-md)] px-3 py-2 text-left text-sm hover:bg-[var(--surface-muted)]"
+                  className="flex w-full items-center justify-between gap-2 rounded-[var(--radius-md)] px-3 py-2 text-left text-sm text-[var(--foreground)] hover:bg-[var(--surface-muted)]"
                 >
                   <span className="inline-flex items-center gap-2">
                     <Bell className="h-4 w-4" />
