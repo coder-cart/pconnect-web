@@ -8,6 +8,7 @@ import { ChatMessageBody } from '@/components/chat/ChatMessageBody';
 import { ChatScrollArea } from '@/components/chat/ChatScrollArea';
 import { MessageItem } from '@/components/chat/MessageItem';
 import { Card } from '@/components/ui/Card';
+import { cn } from '@/lib/cn';
 import { ListSkeleton } from '@/components/ui/Skeleton';
 import { ChannelMemberOption } from '@/lib/channelMembers';
 import { ChatMessage } from '@/lib/chat-types';
@@ -45,6 +46,7 @@ interface ThreadPanelProps {
   onCopyMessage: (body: string) => void;
   onCopyLink: (channelId: string, messageId: string) => void;
   onMarkUnread: (messageId: string) => Promise<void>;
+  className?: string;
 }
 
 export function ThreadPanel({
@@ -68,6 +70,7 @@ export function ThreadPanel({
   onCopyMessage,
   onCopyLink,
   onMarkUnread,
+  className,
 }: ThreadPanelProps) {
   const timeZone = useViewerTimeZone();
 
@@ -87,7 +90,10 @@ export function ThreadPanel({
   return (
     <Card
       padding="none"
-      className="fixed inset-0 z-40 flex min-h-0 flex-col overflow-hidden rounded-none lg:relative lg:inset-auto lg:z-auto lg:sticky lg:top-0 lg:h-full lg:rounded-[var(--radius-lg)]"
+      className={cn(
+        'fixed inset-0 z-40 flex min-h-0 flex-col overflow-hidden rounded-none lg:relative lg:inset-auto lg:z-auto lg:sticky lg:top-0 lg:h-full lg:rounded-[var(--radius-lg)]',
+        className,
+      )}
     >
       <div className="flex shrink-0 items-center justify-between border-b border-[var(--border)] px-4 py-3 safe-pt">
         <p className="text-sm font-semibold text-[var(--foreground)]">Thread</p>

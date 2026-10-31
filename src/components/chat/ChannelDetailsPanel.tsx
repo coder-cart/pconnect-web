@@ -39,6 +39,7 @@ interface ChannelDetailsPanelProps {
   onInvite: () => void;
   onJumpToPin: (messageId: string) => void;
   onClose: () => void;
+  className?: string;
 }
 
 function collectAttachments(messages: ChatMessage[], kind: 'file' | 'link') {
@@ -76,6 +77,7 @@ export function ChannelDetailsPanel({
   onInvite,
   onJumpToPin,
   onClose,
+  className,
 }: ChannelDetailsPanelProps) {
   useEffect(() => {
     function handleKeyDown(event: KeyboardEvent) {
@@ -151,6 +153,7 @@ export function ChannelDetailsPanel({
         'fixed inset-0 z-40 flex min-h-0 flex-col overflow-hidden rounded-none',
         'lg:relative lg:inset-auto lg:z-auto lg:sticky lg:top-0 lg:h-full lg:rounded-[var(--radius-lg)]',
         'transition-[opacity,transform] duration-200 ease-out',
+        className,
       )}
     >
       <div className="flex shrink-0 items-start justify-between gap-3 border-b border-[var(--border)] px-4 py-4 safe-pt">
