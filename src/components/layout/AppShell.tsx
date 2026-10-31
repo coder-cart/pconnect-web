@@ -45,6 +45,8 @@ function AppShellContent({
   const { total: messageUnreadCount } = useUnreadMessages();
   const pathname = usePathname();
   const router = useRouter();
+  const isChatRoute =
+    pathname === '/chat' || pathname.startsWith('/chat/');
   const allowed = canAccessPath(
     pathname,
     user.userType,
@@ -92,8 +94,8 @@ function AppShellContent({
   }, [pathname]);
 
   return (
-    <div className="app-root min-h-screen bg-[var(--background)] text-[var(--foreground)]">
-      <div className="flex min-h-screen">
+    <div className="app-root h-dvh overflow-hidden bg-[var(--background)] text-[var(--foreground)]">
+      <div className="flex h-full min-h-0">
         <div
           className={cn(
             'hidden shrink-0 transition-[width] duration-200 lg:block',
@@ -111,7 +113,7 @@ function AppShellContent({
           />
         </div>
 
-        <div className="flex min-w-0 flex-1 flex-col">
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col">
           <TopBar
             user={user}
             unreadCount={unreadCount}
@@ -120,7 +122,12 @@ function AppShellContent({
             onCreate={setCreateAction}
           />
 
-          <main className="page-pad flex-1 overflow-auto">
+          <main
+            className={cn(
+              'min-h-0 flex-1',
+              isChatRoute ? 'overflow-hidden p-0' : 'page-pad overflow-auto',
+            )}
+          >
             {allowed ? (
               children
             ) : (
