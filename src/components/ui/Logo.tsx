@@ -3,41 +3,78 @@ import { BRAND } from '@/lib/branding';
 
 interface LogoProps {
   compact?: boolean;
+  /** Prefer PNG lockup wordmark from brand pack. */
+  variant?: 'auto' | 'mark' | 'lockup' | 'lockup-dark';
   className?: string;
 }
 
-export function Logo({ compact = false, className }: LogoProps) {
-  if (compact) {
+export function Logo({
+  compact = false,
+  variant = 'auto',
+  className,
+}: LogoProps) {
+  if (compact || variant === 'mark') {
     return (
       <img
         src={BRAND.mark}
         alt={BRAND.name}
         width={32}
         height={32}
-        className={cn('h-8 w-8 object-contain', className)}
+        className={cn('h-8 w-8 object-contain ml-2', className)}
+      />
+    );
+  }
+
+  if (variant === 'lockup') {
+    return (
+      <img
+        src={BRAND.lockup}
+        alt={BRAND.name}
+        width={209}
+        height={72}
+        className={cn(
+          'h-9 w-auto max-w-full object-contain object-left',
+          className,
+        )}
+      />
+    );
+  }
+
+  if (variant === 'lockup-dark') {
+    return (
+      <img
+        src={BRAND.lockupDark}
+        alt={BRAND.name}
+        width={209}
+        height={72}
+        className={cn(
+          'h-9 w-auto max-w-full object-contain object-left',
+          className,
+        )}
       />
     );
   }
 
   return (
     <div
-      className={cn('flex items-center gap-2.5', className)}
+      className={cn('flex items-center', className)}
       role="img"
       aria-label={BRAND.name}
     >
       <img
-        src={BRAND.mark}
+        src={BRAND.lockup}
         alt=""
-        width={36}
-        height={36}
-        className="h-9 w-9 shrink-0 object-contain"
+        width={209}
+        height={72}
+        className="brand-lockup h-8 w-auto max-w-[180px] object-contain object-left sm:h-9 sm:max-w-[220px]"
       />
-      <span className="brand-lockup text-[1.05rem] font-semibold tracking-[-0.02em] text-[var(--foreground)]">
-        Colab<span className="text-[var(--primary)]">deck</span>
-      </span>
-      <span className="brand-lockup-dark text-[1.05rem] font-semibold tracking-[-0.02em] text-white">
-        Colab<span className="text-[#a5b4fc]">deck</span>
-      </span>
+      <img
+        src={BRAND.lockupDark}
+        alt=""
+        width={209}
+        height={72}
+        className="brand-lockup-dark h-8 w-auto max-w-[180px] object-contain object-left sm:h-9 sm:max-w-[220px]"
+      />
     </div>
   );
 }
