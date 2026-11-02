@@ -610,7 +610,7 @@ export function OrderDetailView({
                     onChange={(event) => setClientNameDraft(event.target.value)}
                   />
                   <div className="space-y-2">
-                    <div className="flex items-center justify-between">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
                       <p className="text-sm font-medium text-[var(--foreground)]">
                         Work lines
                       </p>

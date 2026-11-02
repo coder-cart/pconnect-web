@@ -1,6 +1,13 @@
 'use client';
 
-import { FormEvent, useCallback, useEffect, useMemo, useState } from 'react';
+import {
+  FormEvent,
+  ReactNode,
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+} from 'react';
 import { Search } from 'lucide-react';
 import { Modal, ModalActions } from '@/components/ui/Modal';
 import { Input } from '@/components/ui/Input';
@@ -244,6 +251,7 @@ export function ManageChannelMembersModal({
     <Modal
       open={open}
       onClose={onClose}
+      size="lg"
       title={
         clientAdminMode
           ? 'Add team members'
@@ -276,140 +284,118 @@ export function ManageChannelMembersModal({
 
       {!isLoading && channel ? (
         <div className="space-y-5">
-          <div className="space-y-2">
-            <p className="text-sm font-medium text-[var(--foreground)]">
-              Current members ({channel.members.length})
-            </p>
-            <div className="max-h-44 space-y-2 overflow-y-auto rounded-[var(--radius-md)] border border-[var(--border)] p-3">
-              {channel.members.length === 0 ? (
-                <p className="text-sm text-[var(--muted)]">No members yet.</p>
-              ) : null}
-              {orderedMembers.map((member) => (
-                <div
+          <AccessSection title={`Current members (${channel.members.length})`}>
+            {channel.members.length === 0 ? (
+              <p className="px-3 py-3 text-sm text-[var(--muted)]">No members yet.</p>
+            ) : (
+              orderedMembers.map((member) => (
+                <AccessPersonRow
                   key={member.userId}
-                  className="flex items-start justify-between gap-3"
-                >
-                  <div className="min-w-0 flex-1">
-                    <p className="text-sm font-medium text-[var(--foreground)]">
-                      {member.user.fullName}
-                    </p>
-                    <p className="truncate text-xs text-[var(--muted)]">
-                      {member.user.email}
-                    </p>
-                  </div>
-                  <div className="flex shrink-0 items-center gap-2">
-                    <Badge
-                      variant={
-                        member.user.userType === 'external' ? 'warning' : 'default'
-                      }
-                    >
-                      {member.user.userType === 'external' ? 'Client' : 'Internal'}
-                    </Badge>
-                    {!clientAdminMode ||
-                    member.user.userType === 'external' ? (
+                  name={member.user.fullName}
+                  email={member.user.email}
+                  badge={
+                    <RoleBadge userType={member.user.userType} />
+                  }
+                  action={
+                    !clientAdminMode || member.user.userType === 'external' ? (
                       <Button
                         type="button"
                         variant="ghost"
                         size="sm"
+                        className="shrink-0"
                         disabled={actionUserId === member.userId}
                         onClick={() => void handleRemoveMember(member.userId)}
                       >
                         Remove
                       </Button>
-                    ) : null}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
+                    ) : null
+                  }
+                />
+              ))
+            )}
+          </AccessSection>
 
           {showClientUsers ? (
-            <div className="space-y-2">
-              <p className="text-sm font-medium text-[var(--foreground)]">
-                Pending invites ({pendingInvites.length})
-              </p>
-              <div className="max-h-36 space-y-2 overflow-y-auto rounded-[var(--radius-md)] border border-[var(--border)] p-3">
-                {pendingInvites.length === 0 ? (
-                  <p className="text-sm text-[var(--muted)]">No pending invites.</p>
-                ) : null}
-                {pendingInvites.map((invite) => (
-                  <div
+            <AccessSection title={`Pending invites (${pendingInvites.length})`}>
+              {pendingInvites.length === 0 ? (
+                <p className="px-3 py-3 text-sm text-[var(--muted)]">
+                  No pending invites.
+                </p>
+              ) : (
+                pendingInvites.map((invite) => (
+                  <AccessPersonRow
                     key={invite.id}
-                    className="flex items-start justify-between gap-3"
-                  >
-                    <div className="min-w-0 flex-1">
-                      <p className="text-sm font-medium text-[var(--foreground)]">
-                        {invite.user.fullName}
-                      </p>
-                      <p className="truncate text-xs text-[var(--muted)]">
-                        {invite.user.email}
-                      </p>
-                    </div>
-                    <div className="flex shrink-0 items-center gap-2">
-                      <Badge variant="warning">Pending</Badge>
+                    name={invite.user.fullName}
+                    email={invite.user.email}
+                    badge={<Badge variant="warning">Pending</Badge>}
+                    action={
                       <Button
                         type="button"
                         variant="ghost"
                         size="sm"
+                        className="shrink-0"
                         disabled={actionInviteId === invite.id}
                         onClick={() => void handleRevokeInvite(invite.id)}
                       >
                         Revoke
                       </Button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
+                    }
+                  />
+                ))
+              )}
+            </AccessSection>
           ) : null}
 
           {availableCandidates.length > 0 ? (
-            <div className="space-y-3">
-              <p className="text-sm font-medium text-[var(--foreground)]">
-                {clientAdminMode
+            <AccessSection
+              title={
+                clientAdminMode
                   ? 'Your team members'
                   : showClientUsers
                     ? 'People you can add'
-                    : 'Add people'}
-              </p>
-              <div className="relative">
-                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--muted)]" />
+                    : 'Add people'
+              }
+            >
+              <div className="border-b border-[var(--border)] p-2">
                 <Input
                   value={searchQuery}
                   onChange={(event) => setSearchQuery(event.target.value)}
                   placeholder="Search by name or email"
-                  className="pl-10"
+                  leadingIcon={<Search className="h-4 w-4" />}
                 />
               </div>
-              <div className="max-h-48 space-y-1 overflow-y-auto rounded-[var(--radius-md)] border border-[var(--border)] p-2">
-                {filteredCandidates.length === 0 ? (
-                  <p className="px-2 py-3 text-sm text-[var(--muted)]">
-                    No matching people found.
-                  </p>
-                ) : (
-                  filteredCandidates.map((user) => (
+              {filteredCandidates.length === 0 ? (
+                <p className="px-3 py-3 text-sm text-[var(--muted)]">
+                  No matching people found.
+                </p>
+              ) : (
+                filteredCandidates.map((user) => {
+                  const selected = selectedUserId === user.id;
+                  return (
                     <button
                       key={user.id}
                       type="button"
                       onClick={() => setSelectedUserId(user.id)}
-                      className={`flex w-full flex-col rounded-[var(--radius-md)] px-3 py-2 text-left ${
-                        selectedUserId === user.id
-                          ? 'bg-[var(--primary-soft)] text-[var(--primary)]'
+                      className={`flex w-full min-w-0 items-center gap-3 border-b border-[var(--border)] px-3 py-2.5 text-left last:border-b-0 ${
+                        selected
+                          ? 'bg-[var(--primary-soft)]'
                           : 'hover:bg-[var(--surface-muted)]'
                       }`}
                     >
-                      <span className="text-sm font-medium">{user.fullName}</span>
-                      <span className="text-xs opacity-80">
-                        {user.email} ·{' '}
-                        {user.userType === 'external'
-                          ? 'client team (invite)'
-                          : 'internal'}
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate text-sm font-medium text-[var(--foreground)]">
+                          {user.fullName}
+                        </span>
+                        <span className="block truncate text-xs text-[var(--muted)]">
+                          {user.email}
+                        </span>
                       </span>
+                      <RoleBadge userType={user.userType} />
                     </button>
-                  ))
-                )}
-              </div>
-            </div>
+                  );
+                })
+              )}
+            </AccessSection>
           ) : (
             <p className="text-sm text-[var(--muted)]">
               {clientAdminMode
@@ -432,5 +418,58 @@ export function ManageChannelMembersModal({
         <p className="mt-4 text-sm text-[var(--danger)]">{errorMessage}</p>
       ) : null}
     </Modal>
+  );
+}
+
+function AccessSection({
+  title,
+  children,
+}: {
+  title: string;
+  children: ReactNode;
+}) {
+  return (
+    <section className="space-y-2">
+      <h3 className="text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">
+        {title}
+      </h3>
+      <div className="overflow-hidden rounded-[var(--radius-md)] border border-[var(--border)]">
+        {children}
+      </div>
+    </section>
+  );
+}
+
+function AccessPersonRow({
+  name,
+  email,
+  badge,
+  action,
+}: {
+  name: string;
+  email: string;
+  badge: ReactNode;
+  action?: ReactNode;
+}) {
+  return (
+    <div className="flex flex-col gap-2 border-b border-[var(--border)] px-3 py-2.5 last:border-b-0 sm:flex-row sm:items-center sm:gap-3">
+      <div className="min-w-0 flex-1">
+        <p className="truncate text-sm font-medium text-[var(--foreground)]">{name}</p>
+        <p className="truncate text-xs text-[var(--muted)]">{email}</p>
+      </div>
+      <div className="flex shrink-0 items-center justify-end gap-2">
+        {badge}
+        {action}
+      </div>
+    </div>
+  );
+}
+
+function RoleBadge({ userType }: { userType: string }) {
+  const isClient = userType === 'external';
+  return (
+    <Badge variant={isClient ? 'primary' : 'neutral'} className="shrink-0">
+      {isClient ? 'Client' : 'Internal'}
+    </Badge>
   );
 }

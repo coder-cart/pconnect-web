@@ -24,6 +24,11 @@ export interface ChatChannel {
   unreadCount?: number;
   lastReadAt?: string | null;
   viewerCanInviteClientTeammates?: boolean;
+  latestMessage?: {
+    body: string;
+    createdAt: string;
+    senderName: string;
+  } | null;
 }
 
 export function getChannelLabel(channel: Pick<ChatChannel, 'name' | 'type' | 'displayName'>) {

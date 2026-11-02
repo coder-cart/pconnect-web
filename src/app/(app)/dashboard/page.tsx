@@ -198,15 +198,15 @@ export default function DashboardPage() {
     <div className="space-y-6">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <h1 className="text-xl font-semibold tracking-tight text-[var(--foreground)] sm:text-2xl">
+          <h1 className="break-words text-xl font-semibold tracking-tight text-[var(--foreground)] sm:text-2xl">
             Welcome back, {firstName}
           </h1>
           <p className="mt-1 text-sm text-[var(--muted)]">
             Here&apos;s what&apos;s happening in your workspace today · {roleLabel}
           </p>
         </div>
-        <div className="inline-flex items-center rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm text-[var(--muted)] shadow-[var(--shadow-sm)]">
-          {today}
+        <div className="inline-flex max-w-full items-center rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-xs text-[var(--muted)] shadow-[var(--shadow-sm)] sm:text-sm">
+          <span className="break-words">{today}</span>
         </div>
       </div>
 
@@ -366,7 +366,7 @@ function ClientPortal({
       </div>
 
       <Card>
-        <div className="mb-3 flex items-center justify-between">
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
           <h2 className="text-base font-semibold text-[var(--foreground)]">
             Recent orders
           </h2>

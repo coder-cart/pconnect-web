@@ -88,7 +88,7 @@
 }
 
 [data-theme='dark'] {
-  /* Keep shell brand identical in dark mode */
+  /* Light-mode chrome stays brand navy. Dark mode dims the bar and sidebars below. */
   --shell-brand: #1d2353;
   --shell-text: #ffffff;
   --shell-muted: #d4d8f0;
@@ -99,19 +99,20 @@
   --shell-badge-text: #ffffff;
   --shell-input-bg: rgba(255, 255, 255, 0.1);
   --shell-focus-ring: rgba(165, 180, 252, 0.45);
-  --background: #0b1220;
-  --foreground: #e2e8f0;
-  --surface: #111827;
-  --surface-muted: #0f172a;
-  --chat-sidebar-bg: #30396f;
-  --border: #1f2937;
-  --border-strong: #334155;
-  --primary: #3b82f6;
-  --primary-hover: #60a5fa;
-  --primary-soft: rgba(59, 130, 246, 0.15);
-  --primary-foreground: #ffffff;
-  --muted: #94a3b8;
-  --muted-foreground: #cbd5e1;
+  /* Dim surfaces and soft text so dark mode is easier to look at for long sessions. */
+  --background: #1a1c22;
+  --foreground: #d5d8e0;
+  --surface: #22252c;
+  --surface-muted: #1e2128;
+  --chat-sidebar-bg: #262b40;
+  --border: #323743;
+  --border-strong: #3e4554;
+  --primary: #9db7e8;
+  --primary-hover: #b7cbf0;
+  --primary-soft: rgba(157, 183, 232, 0.16);
+  --primary-foreground: #1a1c22;
+  --muted: #a3aab6;
+  --muted-foreground: #c5cbd6;
   --success: #22c55e;
   --success-soft: rgba(34, 197, 94, 0.15);
   --warning: #f59e0b;
@@ -225,6 +226,28 @@ header.shell-chrome {
   border-color: var(--shell-border);
 }
 
+/* Dark mode bar and sidebars: dim charcoal and soft text, same as the page. */
+[data-theme='dark'] header.shell-chrome,
+[data-theme='dark'] aside.shell-chrome,
+[data-theme='dark'] aside.chat-sidebar {
+  --shell-brand: #1e2128;
+  --shell-text: #d5d8e0;
+  --shell-muted: #a3aab6;
+  --shell-hover: #2a2e38;
+  --shell-active: #343944;
+  --shell-border: rgba(255, 255, 255, 0.08);
+  --shell-input-bg: rgba(255, 255, 255, 0.06);
+  --shell-focus-ring: rgba(157, 183, 232, 0.35);
+  --chat-sidebar-bg: #1e2128;
+  color: var(--shell-text);
+  border-color: var(--shell-border);
+}
+
+[data-theme='dark'] header.shell-chrome,
+[data-theme='dark'] aside.shell-chrome {
+  background-color: #1e2128 !important;
+}
+
 .shell-chrome-input {
   background: var(--shell-input-bg);
   border-color: var(--shell-border);
@@ -310,9 +333,49 @@ header.shell-chrome .shell-overlay-panel textarea::placeholder {
 }
 
 .page-pad {
-  padding: var(--page-pad-y) var(--page-pad-x);
+  padding: var(--page-pad-y) max(var(--page-pad-x), var(--safe-right))
+    var(--page-pad-y) max(var(--page-pad-x), var(--safe-left));
   max-width: 100%;
   box-sizing: border-box;
+}
+
+input,
+select,
+textarea {
+  max-width: 100%;
+}
+
+/* Menus opened from the top bar. Fixed under the measured bar until desktop. */
+.shell-menu {
+  position: fixed;
+  z-index: 50;
+  left: max(0.5rem, var(--safe-left));
+  right: max(0.5rem, var(--safe-right));
+  top: calc(var(--app-header-height, 4.25rem) + 0.5rem);
+  max-height: calc(100dvh - var(--app-header-height, 4.25rem) - 1rem - var(--safe-bottom));
+}
+
+@media (min-width: 1024px) {
+  .shell-menu {
+    position: absolute;
+    left: auto;
+    right: 0;
+    top: calc(100% + 8px);
+    width: max-content;
+    max-width: min(24rem, calc(100vw - 2rem));
+    max-height: min(36rem, calc(100dvh - 6rem));
+  }
+}
+
+@media (max-width: 1023px) {
+  .shell-menu-search {
+    position: fixed;
+    z-index: 50;
+    left: max(0.5rem, var(--safe-left));
+    right: max(0.5rem, var(--safe-right));
+    top: calc(var(--app-header-height, 4.25rem) + 0.5rem);
+    max-height: calc(100dvh - var(--app-header-height, 4.25rem) - 1rem - var(--safe-bottom));
+  }
 }
 
 /* Chat fills the main pane flush under the top bar (AppShell uses p-0 on /chat). */
@@ -322,7 +385,35 @@ header.shell-chrome .shell-overlay-panel textarea::placeholder {
   max-width: none;
 }
 
-/* Navy sidebars: thin vertical scrollbar, no horizontal bar. */
+/* One slim scrollbar for every panel. Navy rails override the thumb below. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--muted) 50%, transparent) transparent;
+}
+
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+*::-webkit-scrollbar-thumb {
+  background-color: color-mix(in srgb, var(--muted) 45%, transparent);
+  border-radius: 999px;
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background-color: color-mix(in srgb, var(--muted) 70%, transparent);
+}
+
+*::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+/* Navy sidebars: light thumb, no horizontal bar. */
 .shell-scroll {
   overflow-x: hidden;
   scrollbar-width: thin;

@@ -27,6 +27,7 @@ import {
 import { EmojiPicker } from '@/components/chat/EmojiPicker';
 import { MentionPicker } from '@/components/chat/MentionPicker';
 import { cn } from '@/lib/cn';
+import { CHAT_MEDIA_UPLOADS_ENABLED } from '@/lib/chat-release';
 import {
   ChannelMemberOption,
   filterMentionCandidates,
@@ -299,7 +300,7 @@ export function ChatComposer({
   }
 
   async function handleFileSelected(fileList: FileList | null) {
-    if (!channelId || !fileList?.[0]) return;
+    if (!CHAT_MEDIA_UPLOADS_ENABLED || !channelId || !fileList?.[0]) return;
 
     const file = fileList[0];
     setIsUploading(true);
@@ -320,7 +321,7 @@ export function ChatComposer({
   }
 
   async function startRecording(kind: 'audio' | 'video') {
-    if (!channelId || isRecording) return;
+    if (!CHAT_MEDIA_UPLOADS_ENABLED || !channelId || isRecording) return;
 
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
@@ -592,16 +593,20 @@ export function ChatComposer({
                 <button
                   type="button"
                   className="rounded-[var(--radius-sm)] p-1.5 text-[var(--muted)] hover:bg-[var(--surface-muted)] hover:text-[var(--foreground)]"
-                  aria-label="Add attachment"
+                  aria-label={
+                    CHAT_MEDIA_UPLOADS_ENABLED ? 'Add attachment' : 'Add link'
+                  }
                 >
                   <Plus className="h-4 w-4" />
                 </button>
               }
             >
-              <DropdownMenuItem onClick={() => fileInputRef.current?.click()}>
-                <Paperclip className="h-4 w-4" />
-                Upload file
-              </DropdownMenuItem>
+              {CHAT_MEDIA_UPLOADS_ENABLED ? (
+                <DropdownMenuItem onClick={() => fileInputRef.current?.click()}>
+                  <Paperclip className="h-4 w-4" />
+                  Upload file
+                </DropdownMenuItem>
+              ) : null}
               <DropdownMenuItem onClick={() => setLinkOpen(true)}>
                 <Link2 className="h-4 w-4" />
                 Add link
@@ -648,7 +653,7 @@ export function ChatComposer({
             >
               <AtSign className="h-4 w-4" />
             </button>
-            {!isThread ? (
+            {CHAT_MEDIA_UPLOADS_ENABLED && !isThread ? (
               <>
                 <button
                   type="button"
@@ -697,12 +702,14 @@ export function ChatComposer({
         />
       </div>
 
-      <input
-        ref={fileInputRef}
-        type="file"
-        className="hidden"
-        onChange={(event) => void handleFileSelected(event.target.files)}
-      />
+      {CHAT_MEDIA_UPLOADS_ENABLED ? (
+        <input
+          ref={fileInputRef}
+          type="file"
+          className="hidden"
+          onChange={(event) => void handleFileSelected(event.target.files)}
+        />
+      ) : null}
 
       {isRecording ? (
         <p className="text-xs text-[var(--primary)]">Recording clip...</p>

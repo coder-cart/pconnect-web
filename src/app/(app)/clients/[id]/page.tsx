@@ -1236,7 +1236,7 @@ export default function ClientDetailPage() {
           </Card>
 
           <Card>
-            <div className="mb-3 flex items-center justify-between gap-3">
+            <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
               <div className="flex items-center gap-2">
                 <Workflow className="h-4 w-4 text-[var(--primary)]" />
                 <h3 className="text-sm font-medium text-[var(--foreground)]">

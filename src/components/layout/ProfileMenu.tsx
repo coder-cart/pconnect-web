@@ -7,8 +7,12 @@ import {
   Compass,
   KeyRound,
   LogOut,
+  Moon,
   Settings,
+  Sun,
   UserRound,
+  Volume2,
+  VolumeX,
   X,
 } from 'lucide-react';
 import { AuthenticatedUser } from '@/lib/auth';
@@ -24,6 +28,13 @@ import {
 import { Button } from '@/components/ui/Button';
 import { cn } from '@/lib/cn';
 import { useProductTour } from '@/components/tour/ProductTourProvider';
+import { useTheme } from '@/components/providers/ThemeProvider';
+import {
+  isNotificationSoundMuted,
+  playNotificationSound,
+  setNotificationSoundMuted,
+  unlockNotificationSound,
+} from '@/lib/notification-sound';
 
 interface ProfileMenuProps {
   user: AuthenticatedUser;
@@ -77,12 +88,18 @@ export function ProfileMenu({ user, onLogout, tone = 'default' }: ProfileMenuPro
   const isShell = tone === 'shell';
   const containerRef = useRef<HTMLDivElement>(null);
   const { startTour } = useProductTour();
+  const { theme, toggleTheme } = useTheme();
   const [open, setOpen] = useState(false);
+  const [soundMuted, setSoundMuted] = useState(false);
   const [profile, setProfile] = useState<UserProfileState>({});
   const [statusDraft, setStatusDraft] = useState('');
   const [statusBusy, setStatusBusy] = useState(false);
   const [statusError, setStatusError] = useState<string | null>(null);
   const roleLabel = getRoleLabel(user.userType, user.roleCodes);
+
+  useEffect(() => {
+    setSoundMuted(isNotificationSoundMuted());
+  }, [open]);
 
   useEffect(() => {
     apiRequest<ApiResponse<UserProfileState>>('/users/me')
@@ -169,6 +186,16 @@ export function ProfileMenu({ user, onLogout, tone = 'default' }: ProfileMenuPro
     }
   }
 
+  function toggleSound() {
+    const next = !soundMuted;
+    setSoundMuted(next);
+    setNotificationSoundMuted(next);
+    if (!next) {
+      unlockNotificationSound();
+      playNotificationSound();
+    }
+  }
+
   async function toggleNotificationsPaused() {
     const response = await apiRequest<ApiResponse<UserProfileState>>(
       '/users/me',
@@ -192,7 +219,7 @@ export function ProfileMenu({ user, onLogout, tone = 'default' }: ProfileMenuPro
         data-tour="profile-menu"
         onClick={() => setOpen((value) => !value)}
         className={cn(
-          'inline-flex min-h-touch min-w-touch max-w-full items-center gap-2 rounded-[var(--radius-md)] border px-1.5 py-1.5 transition-colors focus-visible:outline-none focus-visible:ring-2 sm:min-h-0 sm:min-w-0 sm:px-2',
+          'inline-flex min-h-touch min-w-touch max-w-full items-center gap-2 rounded-[var(--radius-md)] border px-1.5 py-1.5 transition-colors focus-visible:outline-none focus-visible:ring-2 lg:min-h-0 lg:min-w-0 lg:px-2',
           isShell
             ? 'border-[var(--shell-border)] hover:bg-[var(--shell-hover)] focus-visible:ring-[var(--shell-focus-ring)]'
             : 'border-[var(--border)] hover:bg-[var(--surface-muted)] focus-visible:ring-[var(--primary-soft)]',
@@ -214,7 +241,7 @@ export function ProfileMenu({ user, onLogout, tone = 'default' }: ProfileMenuPro
             )}
           />
         </div>
-        <div className="hidden min-w-0 max-w-[9rem] text-left md:block lg:max-w-[14rem] xl:max-w-[18rem]">
+        <div className="hidden min-w-0 max-w-[9rem] text-left lg:block xl:max-w-[18rem]">
           <p
             className={cn(
               'truncate text-xs font-medium leading-tight',
@@ -237,7 +264,7 @@ export function ProfileMenu({ user, onLogout, tone = 'default' }: ProfileMenuPro
       </button>
 
       {open ? (
-        <div className="shell-overlay-panel fixed inset-x-2 top-[3.75rem] z-50 max-h-[calc(100dvh-4.5rem)] w-auto overflow-y-auto rounded-[var(--radius-lg)] border border-[var(--border)] bg-[var(--surface)] p-3 text-[var(--foreground)] shadow-[var(--shadow-md)] sm:absolute sm:inset-x-auto sm:right-0 sm:top-[calc(100%+8px)] sm:max-h-[min(36rem,calc(100dvh-5.5rem))] sm:w-80 sm:overflow-y-auto">
+        <div className="shell-overlay-panel shell-menu w-auto overflow-y-auto rounded-[var(--radius-lg)] border border-[var(--border)] bg-[var(--surface)] p-3 text-[var(--foreground)] shadow-[var(--shadow-md)] lg:w-80">
           <div className="flex items-center gap-3 border-b border-[var(--border)] pb-3">
             <div className="relative shrink-0">
               <UserAvatar user={user} size="md" />
@@ -328,6 +355,33 @@ export function ProfileMenu({ user, onLogout, tone = 'default' }: ProfileMenuPro
             {statusError ? (
               <p className="text-xs text-[var(--danger)]">{statusError}</p>
             ) : null}
+          </div>
+
+          <div className="space-y-1 border-b border-[var(--border)] py-2 lg:hidden">
+            <button
+              type="button"
+              onClick={toggleTheme}
+              className="flex min-h-touch w-full items-center gap-2 rounded-[var(--radius-md)] px-3 py-2 text-left text-sm text-[var(--foreground)] hover:bg-[var(--surface-muted)]"
+            >
+              {theme === 'light' ? (
+                <Moon className="h-4 w-4" />
+              ) : (
+                <Sun className="h-4 w-4" />
+              )}
+              {theme === 'light' ? 'Dark theme' : 'Light theme'}
+            </button>
+            <button
+              type="button"
+              onClick={toggleSound}
+              className="flex min-h-touch w-full items-center gap-2 rounded-[var(--radius-md)] px-3 py-2 text-left text-sm text-[var(--foreground)] hover:bg-[var(--surface-muted)]"
+            >
+              {soundMuted ? (
+                <VolumeX className="h-4 w-4" />
+              ) : (
+                <Volume2 className="h-4 w-4" />
+              )}
+              {soundMuted ? 'Unmute notification sound' : 'Mute notification sound'}
+            </button>
           </div>
 
           <div className="space-y-1 border-b border-[var(--border)] py-2">

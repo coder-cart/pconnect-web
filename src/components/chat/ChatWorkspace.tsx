@@ -6,6 +6,7 @@ import { apiRequest } from '@/lib/api-client';
 import {
   ApiResponse,
   AuthenticatedUser,
+  isProductionOnlyStaff,
   userHasPermission,
   userIsExternal,
 } from '@/lib/auth';
@@ -23,6 +24,7 @@ import { EmptyState, ErrorState } from '@/components/ui/StatePanels';
 import { ListSkeleton } from '@/components/ui/Skeleton';
 import { CreateChannelModal } from '@/components/modals/CreateChannelModal';
 import { ManageChannelMembersModal } from '@/components/modals/ManageChannelMembersModal';
+import { AddConnectionModal } from '@/components/modals/AddConnectionModal';
 import { StartDirectMessageModal } from '@/components/modals/StartDirectMessageModal';
 import { ChatComposer } from '@/components/chat/ChatComposer';
 import { ChannelSidebar } from '@/components/chat/ChannelSidebar';
@@ -36,6 +38,7 @@ import { ChatScrollArea } from '@/components/chat/ChatScrollArea';
 import { useRealtime } from '@/components/providers/RealtimeProvider';
 import { useUnreadMessages } from '@/components/providers/UnreadMessagesProvider';
 import { cn } from '@/lib/cn';
+import { CHAT_HUDDLE_ENABLED } from '@/lib/chat-release';
 import { ChannelMemberOption, ChannelNotificationPreference } from '@/lib/channelMembers';
 
 interface ChatWorkspaceProps {
@@ -133,6 +136,7 @@ export function ChatWorkspace({
     clientOrganizationId?: string;
   } | null>(null);
   const [startDmOpen, setStartDmOpen] = useState(false);
+  const [addConnectionOpen, setAddConnectionOpen] = useState(false);
   const [manageMembersOpen, setManageMembersOpen] = useState(false);
   const [viewerCanInviteClientTeammates, setViewerCanInviteClientTeammates] =
     useState(false);
@@ -160,14 +164,15 @@ export function ChatWorkspace({
   const isExternalUser = userIsExternal(user);
   const canCreateChannel =
     !isExternalUser && userHasPermission(user, 'channels.create_internal');
+  const canAddConnection =
+    !isExternalUser &&
+    !isProductionOnlyStaff(user.roleCodes) &&
+    ['company_owner', 'internal_admin', 'internal_manager'].some((role) =>
+      user.roleCodes.includes(role),
+    );
 
   const openCreateChannel = useCallback(() => {
     setChannelPreset(null);
-    setCreateChannelOpen(true);
-  }, []);
-
-  const openCreateClientChannel = useCallback((clientOrganizationId: string) => {
-    setChannelPreset({ type: 'client_shared', clientOrganizationId });
     setCreateChannelOpen(true);
   }, []);
 
@@ -295,6 +300,21 @@ export function ChatWorkspace({
       if (channelId === activeChannelId) {
         setMessages((current) => appendUniqueById(current, typedMessage));
       }
+
+      setChannels((current) =>
+        current.map((channel) =>
+          channel.id === channelId
+            ? {
+                ...channel,
+                latestMessage: {
+                  body: typedMessage.body,
+                  createdAt: typedMessage.createdAt,
+                  senderName: typedMessage.sender.fullName,
+                },
+              }
+            : channel,
+        ),
+      );
     });
   }, [subscribeMessageCreated]);
 
@@ -373,9 +393,11 @@ export function ChatWorkspace({
       apiRequest<ApiResponse<unknown>>(`/channels/${requestChannelId}/read`, {
         method: 'POST',
       }),
-      apiRequest<ApiResponse<{ joinPath?: string } | null>>(
-        `/channels/${requestChannelId}/huddles/active`,
-      ).catch(() => ({ success: true, data: null })),
+      CHAT_HUDDLE_ENABLED
+        ? apiRequest<ApiResponse<{ joinPath?: string } | null>>(
+            `/channels/${requestChannelId}/huddles/active`,
+          ).catch(() => ({ success: true, data: null }))
+        : Promise.resolve({ success: true as const, data: null }),
     ])
       .then(([messagesResponse, , huddleResponse]) => {
         if (cancelled || selectedChannelIdRef.current !== requestChannelId) {
@@ -917,12 +939,12 @@ export function ChatWorkspace({
         className={cn(
           'grid h-full min-h-0 grid-cols-1 gap-0 overflow-hidden',
           showDesktopSidebar && (detailsOpen || threadMessageId)
-            ? 'md:grid-cols-[15.5rem_minmax(0,1fr)_17.5rem] xl:grid-cols-[17rem_minmax(0,1fr)_19rem]'
+            ? 'lg:grid-cols-[15.5rem_minmax(0,1fr)_17.5rem] xl:grid-cols-[17rem_minmax(0,1fr)_19rem]'
             : showDesktopSidebar
-              ? 'md:grid-cols-[15.5rem_minmax(0,1fr)] xl:grid-cols-[17rem_minmax(0,1fr)]'
+              ? 'lg:grid-cols-[15.5rem_minmax(0,1fr)] xl:grid-cols-[17rem_minmax(0,1fr)]'
               : detailsOpen || threadMessageId
-                ? 'md:grid-cols-[minmax(0,1fr)_17.5rem] xl:grid-cols-[minmax(0,1fr)_19rem]'
-                : 'md:grid-cols-[minmax(0,1fr)]',
+                ? 'lg:grid-cols-[minmax(0,1fr)_17.5rem] xl:grid-cols-[minmax(0,1fr)_19rem]'
+                : 'lg:grid-cols-[minmax(0,1fr)]',
         )}
       >
         <ChannelSidebar
@@ -931,17 +953,17 @@ export function ChatWorkspace({
           pendingInvites={pendingInvites}
           acceptingInviteId={acceptingInviteId}
           canCreateChannel={canCreateChannel}
+          canAddConnection={canAddConnection}
+          showInternalSections={!isExternalUser}
           onSelectChannel={setSelectedChannelId}
           onCreateChannel={openCreateChannel}
-          onCreateClientChannel={
-            isExternalUser ? undefined : openCreateClientChannel
-          }
+          onAddConnection={() => setAddConnectionOpen(true)}
           onStartDirectMessage={() => setStartDmOpen(true)}
           onAcceptInvite={(invite) => void handleAcceptInvite(invite)}
           className={cn(
-            'order-1 h-full min-h-0 w-full md:col-start-1',
+            'order-1 h-full min-h-0 w-full lg:col-start-1',
             showMobileChat ? 'hidden' : 'flex',
-            showDesktopSidebar ? 'md:flex' : 'md:hidden',
+            showDesktopSidebar ? 'lg:flex' : 'lg:hidden',
           )}
         />
 
@@ -949,8 +971,8 @@ export function ChatWorkspace({
           padding="none"
           className={cn(
             'order-2 flex min-h-0 min-w-0 flex-col overflow-hidden rounded-none shadow-none',
-            !showMobileChat ? 'hidden md:flex' : 'flex',
-            showDesktopSidebar ? 'md:col-start-2' : 'md:col-start-1',
+            !showMobileChat ? 'hidden lg:flex' : 'flex',
+            showDesktopSidebar ? 'lg:col-start-2' : 'lg:col-start-1',
           )}
         >
           <ChannelHeader
@@ -1066,7 +1088,7 @@ export function ChatWorkspace({
             onClose={() => setDetailsOpen(false)}
             className={cn(
               'order-3',
-              showDesktopSidebar ? 'md:col-start-3' : 'md:col-start-2',
+              showDesktopSidebar ? 'lg:col-start-3' : 'lg:col-start-2',
             )}
           />
         ) : null}
@@ -1098,7 +1120,7 @@ export function ChatWorkspace({
             onMarkUnread={handleMarkUnread}
             className={cn(
               'order-3',
-              showDesktopSidebar ? 'md:col-start-3' : 'md:col-start-2',
+              showDesktopSidebar ? 'lg:col-start-3' : 'lg:col-start-2',
             )}
           />
         ) : null}
@@ -1121,6 +1143,11 @@ export function ChatWorkspace({
         onClose={() => setStartDmOpen(false)}
         onStarted={handleDirectMessageStarted}
         isExternalUser={isExternalUser}
+      />
+      <AddConnectionModal
+        open={addConnectionOpen}
+        onClose={() => setAddConnectionOpen(false)}
+        onStarted={handleDirectMessageStarted}
       />
       <ManageChannelMembersModal
         open={manageMembersOpen}

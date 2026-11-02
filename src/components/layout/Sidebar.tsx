@@ -234,7 +234,7 @@ export function Sidebar({
   return (
     <aside
       className={cn(
-        'shell-chrome flex flex-col border-r border-[var(--shell-border)] bg-[#1d2353] text-[var(--shell-text)] transition-[width] duration-200',
+        'shell-chrome flex flex-col border-r border-[var(--shell-border)] bg-[var(--shell-brand)] text-[var(--shell-text)] transition-[width] duration-200',
         mobile
           ? 'h-full w-full max-w-sm'
           : cn(

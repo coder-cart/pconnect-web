@@ -23,7 +23,7 @@ export function NotificationPopover({ onClose }: NotificationPopoverProps) {
   } = useNotificationPreview();
 
   return (
-    <div className="shell-overlay-panel fixed inset-x-2 top-[3.75rem] z-30 flex max-h-[min(32rem,calc(100dvh-5rem))] w-auto flex-col overflow-hidden rounded-[var(--radius-lg)] border border-[var(--border)] bg-[var(--surface)] text-[var(--foreground)] shadow-[var(--shadow-md)] sm:absolute sm:inset-x-auto sm:right-0 sm:top-[calc(100%+8px)] sm:max-h-96 sm:w-96 sm:max-w-[calc(100vw-2rem)]">
+    <div className="shell-overlay-panel shell-menu flex w-auto flex-col overflow-hidden rounded-[var(--radius-lg)] border border-[var(--border)] bg-[var(--surface)] text-[var(--foreground)] shadow-[var(--shadow-md)] lg:w-96">
       <div className="flex shrink-0 items-center justify-between gap-2 border-b border-[var(--border)] px-4 py-3">
         <div className="min-w-0">
           <p className="truncate text-sm font-semibold text-[var(--foreground)]">

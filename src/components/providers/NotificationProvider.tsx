@@ -6,6 +6,7 @@ import {
   useCallback,
   useContext,
   useEffect,
+  useRef,
   useState,
 } from 'react';
 import { apiRequest } from '@/lib/api-client';
@@ -49,6 +50,8 @@ const NotificationContext = createContext<NotificationContextValue | null>(null)
 export function NotificationProvider({ children }: { children: ReactNode }) {
   const { subscribeNotificationCreated } = useRealtime();
   const [notifications, setNotifications] = useState<NotificationRecord[]>([]);
+  const notificationsRef = useRef(notifications);
+  notificationsRef.current = notifications;
   const [unreadCount, setUnreadCount] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -213,17 +216,21 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
         return;
       }
 
-      if (shouldPlayForNotification(notification)) {
-        playNotificationSound();
-      }
-
+      const replacedExisting = notificationsRef.current.some(
+        (item) => item.id === notification.id,
+      );
       setNotifications((current) => {
         const withoutDuplicate = current.filter(
           (item) => item.id !== notification.id,
         );
         return [notification, ...withoutDuplicate].slice(0, 50);
       });
-      setUnreadCount((current) => current + 1);
+      if (!replacedExisting && shouldPlayForNotification(notification)) {
+        playNotificationSound();
+      }
+      if (!replacedExisting) {
+        setUnreadCount((current) => current + 1);
+      }
       void loadUnreadCount();
     });
   }, [subscribeNotificationCreated, loadUnreadCount]);

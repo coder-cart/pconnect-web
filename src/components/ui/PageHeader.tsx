@@ -23,7 +23,7 @@ export function PageHeader({
 
       <div className="flex flex-col gap-3 sm:gap-4 lg:flex-row lg:items-start lg:justify-between">
         <div className="min-w-0">
-          <h1 className="truncate text-lg font-semibold tracking-tight text-[var(--foreground)] sm:text-xl md:text-2xl">
+          <h1 className="break-words text-lg font-semibold tracking-tight text-[var(--foreground)] sm:text-xl md:text-2xl">
             {title}
           </h1>
           {description ? (

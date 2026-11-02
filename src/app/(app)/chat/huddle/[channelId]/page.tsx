@@ -12,11 +12,11 @@ export default function HuddlePage() {
   return (
     <div className="mx-auto max-w-xl py-12">
       <Card padding="lg" className="text-center">
-        <Headphones className="mx-auto h-10 w-10 text-[var(--primary)]" />
-        <h1 className="mt-4 text-lg font-semibold">Huddle room</h1>
+        <Headphones className="mx-auto h-10 w-10 text-[var(--muted)]" />
+        <h1 className="mt-4 text-lg font-semibold">Huddle is not available</h1>
         <p className="mt-2 text-sm text-[var(--muted)]">
-          Audio huddles are link-based for now. WebRTC integration can be added
-          later with a provider such as Livekit or Daily.co.
+          Voice and video huddles are turned off for this release. You can
+          keep talking in the channel.
         </p>
         <p className="mt-4 text-xs text-[var(--muted)]">
           Channel: {channelId}

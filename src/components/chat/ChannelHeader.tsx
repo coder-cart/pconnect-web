@@ -30,6 +30,7 @@ import {
 } from '@/lib/channelMembers';
 import { ChannelContext, getChannelLabel, isDirectOrGroupChannel } from '@/lib/chat-types';
 import { cn } from '@/lib/cn';
+import { CHAT_HUDDLE_ENABLED } from '@/lib/chat-release';
 
 type ChannelTab = 'messages' | 'canvas' | 'pins';
 
@@ -124,7 +125,7 @@ export function ChannelHeader({
             <button
               type="button"
               onClick={onBack}
-              className="inline-flex min-h-touch min-w-touch shrink-0 items-center justify-center rounded-[var(--radius-md)] text-[var(--muted)] hover:bg-[var(--surface-muted)] hover:text-[var(--foreground)] md:hidden"
+              className="inline-flex min-h-touch min-w-touch shrink-0 items-center justify-center rounded-[var(--radius-md)] text-[var(--muted)] hover:bg-[var(--surface-muted)] hover:text-[var(--foreground)] lg:hidden"
               aria-label="Back to conversations"
             >
               <ArrowLeft className="h-5 w-5" />
@@ -134,7 +135,7 @@ export function ChannelHeader({
             <button
               type="button"
               onClick={onToggleSidebar}
-              className="hidden min-h-touch min-w-touch shrink-0 items-center justify-center rounded-[var(--radius-md)] text-[var(--muted)] hover:bg-[var(--surface-muted)] hover:text-[var(--foreground)] md:inline-flex"
+              className="hidden min-h-touch min-w-touch shrink-0 items-center justify-center rounded-[var(--radius-md)] text-[var(--muted)] hover:bg-[var(--surface-muted)] hover:text-[var(--foreground)] lg:inline-flex"
               aria-label={sidebarOpen ? 'Hide conversations' : 'Show conversations'}
               aria-pressed={sidebarOpen}
               title={sidebarOpen ? 'Hide conversations' : 'Show conversations'}
@@ -182,7 +183,7 @@ export function ChannelHeader({
 
         <div className="flex flex-wrap items-center gap-2">
           {previewMembers.length > 0 ? (
-            <div className="hidden items-center sm:flex">
+            <div className="hidden items-center lg:flex">
               {previewMembers.map((member, index) => (
                 <span
                   key={member.id}
@@ -241,16 +242,25 @@ export function ChannelHeader({
               </Button>
             }
           >
-            <DropdownMenuItem onClick={onStartHuddle}>
-              <Headphones className="h-4 w-4" />
-              Start huddle
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={onCopyHuddleLink} disabled={!huddleLink}>
-              <Copy className="h-4 w-4" />
-              Copy huddle link
-            </DropdownMenuItem>
+            {CHAT_HUDDLE_ENABLED ? (
+              <>
+                <DropdownMenuItem onClick={onStartHuddle}>
+                  <Headphones className="h-4 w-4" />
+                  Start huddle
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={onCopyHuddleLink} disabled={!huddleLink}>
+                  <Copy className="h-4 w-4" />
+                  Copy huddle link
+                </DropdownMenuItem>
+              </>
+            ) : null}
             {onNotificationChange ? (
-              <div className="border-t border-[var(--border)] px-2 py-1">
+              <div
+                className={cn(
+                  'px-2 py-1',
+                  CHAT_HUDDLE_ENABLED && 'border-t border-[var(--border)]',
+                )}
+              >
                 <ChannelNotificationMenu
                   preference={notificationPreference}
                   isUpdating={isUpdatingNotification}
@@ -294,7 +304,7 @@ function HeaderIconButton({
       onClick={onClick}
       aria-label={label}
       title={label}
-      className="group relative inline-flex h-8 w-8 items-center justify-center rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface)] text-[var(--muted)] transition-colors hover:bg-[var(--surface-muted)] hover:text-[var(--foreground)]"
+      className="group relative inline-flex h-11 w-11 items-center justify-center rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface)] text-[var(--muted)] transition-colors hover:bg-[var(--surface-muted)] hover:text-[var(--foreground)] lg:h-8 lg:w-8"
       {...props}
     >
       {children}

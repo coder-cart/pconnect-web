@@ -111,7 +111,7 @@ export function GlobalSearch({ className, variant = 'default' }: GlobalSearchPro
           onFocus={() => {
             if (hasResults) setIsOpen(true);
           }}
-          placeholder="Search anything..."
+          placeholder={isShell ? 'Search' : 'Search anything...'}
           aria-label="Global search"
           className={cn(
             'h-10 w-full rounded-full border pl-10 pr-4 text-sm transition-all focus:outline-none focus:ring-2',
@@ -123,7 +123,7 @@ export function GlobalSearch({ className, variant = 'default' }: GlobalSearchPro
       </div>
 
       {isOpen && query.trim().length >= 2 ? (
-        <div className="shell-overlay-panel absolute left-0 right-0 top-[calc(100%+8px)] z-30 max-h-96 overflow-y-auto rounded-[var(--radius-lg)] border border-[var(--border)] bg-[var(--surface)] p-2 text-[var(--foreground)] shadow-[var(--shadow-md)]">
+        <div className="shell-overlay-panel shell-menu-search absolute left-0 right-0 top-[calc(100%+8px)] z-30 max-h-96 overflow-y-auto rounded-[var(--radius-lg)] border border-[var(--border)] bg-[var(--surface)] p-2 text-[var(--foreground)] shadow-[var(--shadow-md)]">
           {!hasResults ? (
             <p className="px-3 py-2 text-sm text-[var(--muted)]">No results found.</p>
           ) : (

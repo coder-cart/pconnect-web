@@ -151,7 +151,7 @@ export function ChannelDetailsPanel({
       padding="none"
       className={cn(
         'fixed inset-0 z-40 flex min-h-0 flex-col overflow-hidden rounded-none',
-        'md:relative md:inset-auto md:z-auto md:sticky md:top-0 md:h-full md:rounded-[var(--radius-lg)]',
+        'lg:relative lg:inset-auto lg:z-auto lg:sticky lg:top-0 lg:h-full lg:rounded-[var(--radius-lg)]',
         'transition-[opacity,transform] duration-200 ease-out',
         className,
       )}

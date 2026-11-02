@@ -1,6 +1,6 @@
 'use client';
 
-import { ReactNode, useMemo, useState } from 'react';
+import { ReactNode, useState } from 'react';
 import { ChevronDown, Hash, Plus, Search, Users } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { ClientOrgLogo } from '@/components/ui/ClientOrgLogo';
@@ -20,9 +20,11 @@ interface ChannelSidebarProps {
   pendingInvites: PendingChannelInvite[];
   acceptingInviteId: string | null;
   canCreateChannel: boolean;
+  canAddConnection: boolean;
+  showInternalSections: boolean;
   onSelectChannel: (channelId: string) => void;
   onCreateChannel: () => void;
-  onCreateClientChannel?: (clientOrganizationId: string) => void;
+  onAddConnection: () => void;
   onStartDirectMessage: () => void;
   onAcceptInvite: (invite: PendingChannelInvite) => void;
   className?: string;
@@ -190,7 +192,13 @@ function ChannelButton({
               </span>
             ) : null}
           </span>
-          {channel.clientOrganizationName && channel.type === 'client_shared' ? (
+          {isDirect && channel.latestMessage?.body ? (
+            <span className="mt-0.5 block truncate text-[11px] text-[var(--shell-muted)]">
+              {channel.latestMessage.body}
+            </span>
+          ) : channel.clientOrganizationName &&
+            channel.type === 'client_shared' &&
+            channel.clientOrganizationName !== label ? (
             <span className="mt-0.5 block truncate text-[11px] text-[var(--shell-muted)]">
               {channel.clientOrganizationName}
             </span>
@@ -208,12 +216,14 @@ function ChannelButton({
 
 function SidebarSection({
   title,
+  unreadCount = 0,
   action,
   collapsed,
   onToggle,
   children,
 }: {
   title: string;
+  unreadCount?: number;
   action?: ReactNode;
   collapsed: boolean;
   onToggle: () => void;
@@ -225,12 +235,17 @@ function SidebarSection({
         <button
           type="button"
           onClick={onToggle}
-          className="flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wide text-[var(--shell-muted)] transition-colors hover:text-[var(--shell-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--shell-focus-ring)]"
+          className="flex min-w-0 items-center gap-1 text-[11px] font-semibold uppercase tracking-wide text-[var(--shell-muted)] transition-colors hover:text-[var(--shell-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--shell-focus-ring)]"
         >
           <ChevronDown
-            className={cn('h-3.5 w-3.5 transition-transform', collapsed && '-rotate-90')}
+            className={cn('h-3.5 w-3.5 shrink-0 transition-transform', collapsed && '-rotate-90')}
           />
-          {title}
+          <span className="truncate">{title}</span>
+          {unreadCount > 0 ? (
+            <span className="shrink-0 rounded-full bg-[var(--shell-badge)] px-1.5 text-[10px] font-semibold normal-case tracking-normal text-[var(--shell-badge-text)]">
+              {unreadCount > 99 ? '99+' : unreadCount}
+            </span>
+          ) : null}
         </button>
         {action}
       </div>
@@ -241,15 +256,44 @@ function SidebarSection({
 
 type SidebarFilter = 'all' | 'channels' | 'dms' | 'unread';
 
+function uniqueChannels(channels: ChatChannel[]) {
+  const seen = new Set<string>();
+  return channels.filter((channel) => {
+    if (seen.has(channel.id)) return false;
+    seen.add(channel.id);
+    return true;
+  });
+}
+
+function unreadTotal(channels: ChatChannel[]) {
+  return channels.reduce((sum, channel) => sum + (channel.unreadCount ?? 0), 0);
+}
+
+function sortConversations(channels: ChatChannel[]) {
+  return [...channels].sort((left, right) => {
+    const leftUnread = (left.unreadCount ?? 0) > 0 ? 1 : 0;
+    const rightUnread = (right.unreadCount ?? 0) > 0 ? 1 : 0;
+    if (leftUnread !== rightUnread) return rightUnread - leftUnread;
+
+    const leftTime = left.latestMessage?.createdAt ?? '';
+    const rightTime = right.latestMessage?.createdAt ?? '';
+    if (leftTime !== rightTime) return rightTime.localeCompare(leftTime);
+
+    return getChannelLabel(left).localeCompare(getChannelLabel(right));
+  });
+}
+
 export function ChannelSidebar({
   channels,
   selectedChannelId,
   pendingInvites,
   acceptingInviteId,
   canCreateChannel,
+  canAddConnection,
+  showInternalSections,
   onSelectChannel,
   onCreateChannel,
-  onCreateClientChannel,
+  onAddConnection,
   onStartDirectMessage,
   onAcceptInvite,
   className,
@@ -279,78 +323,50 @@ export function ChannelSidebar({
     );
   };
 
-  const unreadChannels = channels.filter(
-    (channel) => (channel.unreadCount ?? 0) > 0 && matchesSearch(channel),
-  );
-  const unreadIds = new Set(unreadChannels.map((channel) => channel.id));
-  const teamChannels = channels.filter(
-    (channel) =>
-      (channel.type === 'public' || channel.type === 'private') &&
-      !unreadIds.has(channel.id) &&
-      matchesSearch(channel),
-  );
-  const clientChannels = channels.filter(
-    (channel) =>
-      channel.type === 'client_shared' &&
-      !unreadIds.has(channel.id) &&
-      matchesSearch(channel),
-  );
-  const directMessages = channels.filter(
-    (channel) =>
-      channel.type === 'direct' &&
-      !unreadIds.has(channel.id) &&
-      matchesSearch(channel),
-  );
-  const groupMessages = channels.filter(
-    (channel) =>
-      channel.type === 'group' &&
-      !unreadIds.has(channel.id) &&
-      matchesSearch(channel),
-  );
+  const visibleChannels = uniqueChannels(channels).filter(matchesSearch);
+  const includeUnread = (channel: ChatChannel) =>
+    filter !== 'unread' || (channel.unreadCount ?? 0) > 0;
 
-  const clientGroups = useMemo(() => {
-    const groups = new Map<
-      string,
-      {
-        orgName: string;
-        clientOrganizationId: string | null;
-        channels: ChatChannel[];
-      }
-    >();
-
-    for (const channel of clientChannels) {
-      const orgName = channel.clientOrganizationName ?? 'Client messages';
-      const clientOrganizationId = channel.clientOrganizationId ?? null;
-      const orgKey = clientOrganizationId ?? orgName;
-      const existing = groups.get(orgKey);
-
-      if (existing) {
-        existing.channels.push(channel);
-      } else {
-        groups.set(orgKey, { orgName, clientOrganizationId, channels: [channel] });
-      }
-    }
-
-    return Array.from(groups.values()).sort((left, right) =>
-      left.orgName.localeCompare(right.orgName),
-    );
-  }, [clientChannels]);
+  const clientChannels = sortConversations(
+    visibleChannels.filter(
+      (channel) => channel.type === 'client_shared' && includeUnread(channel),
+    ),
+  );
+  const teamChannels = sortConversations(
+    visibleChannels.filter(
+      (channel) =>
+        showInternalSections &&
+        (channel.type === 'public' || channel.type === 'private') &&
+        includeUnread(channel),
+    ),
+  );
+  const directMessages = sortConversations(
+    visibleChannels.filter(
+      (channel) => channel.type === 'direct' && includeUnread(channel),
+    ),
+  );
+  const groupMessages = sortConversations(
+    visibleChannels.filter(
+      (channel) => channel.type === 'group' && includeUnread(channel),
+    ),
+  );
 
   const hasVisibleResults =
-    unreadChannels.length > 0 ||
+    clientChannels.length > 0 ||
     teamChannels.length > 0 ||
-    clientGroups.length > 0 ||
     directMessages.length > 0 ||
     groupMessages.length > 0;
 
-  const showChannels = filter === 'all' || filter === 'channels';
-  const showDms = filter === 'all' || filter === 'dms';
-  const showUnreadOnly = filter === 'unread';
+  const showChannels =
+    filter === 'all' || filter === 'channels' || filter === 'unread';
+  const showDms = filter === 'all' || filter === 'dms' || filter === 'unread';
+  const showSection = (count: number) =>
+    filter === 'unread' || Boolean(normalizedQuery) ? count > 0 : true;
 
   return (
     <aside
       className={cn(
-        'flex h-full min-h-0 flex-col overflow-hidden border-r border-[var(--shell-border)] bg-[var(--chat-sidebar-bg)] text-[var(--shell-text)]',
+        'chat-sidebar flex h-full min-h-0 flex-col overflow-hidden border-r border-[var(--shell-border)] bg-[var(--chat-sidebar-bg)] text-[var(--shell-text)]',
         className,
       )}
     >
@@ -431,47 +447,59 @@ export function ChannelSidebar({
           </div>
         ) : null}
 
-        {!hasVisibleResults ? (
+        {!hasVisibleResults && (filter === 'unread' || Boolean(normalizedQuery)) ? (
           <p className="px-2 py-3 text-sm text-[var(--shell-muted)]">
             {normalizedQuery
               ? 'No channels or direct messages match your search.'
-              : 'No conversations yet.'}
+              : filter === 'unread'
+                ? 'No unread conversations.'
+                : 'No conversations yet.'}
           </p>
         ) : null}
 
-        {(showUnreadOnly || unreadChannels.length > 0) &&
-        (showUnreadOnly || filter === 'all') ? (
+        {showChannels && showSection(clientChannels.length) ? (
           <SidebarSection
-            title={showUnreadOnly ? 'Unread' : 'Pinned'}
-            collapsed={false}
-            onToggle={() => undefined}
+            title="External Connections"
+            unreadCount={unreadTotal(clientChannels)}
+            collapsed={clientsCollapsed}
+            onToggle={() => setClientsCollapsed((current) => !current)}
           >
-            {(showUnreadOnly ? unreadChannels : unreadChannels.slice(0, 4)).map(
-              (channel) => (
+            {clientChannels.length === 0 ? (
+              <p className="px-2 py-1.5 text-xs text-[var(--shell-muted)]">
+                Client connections appear here.
+              </p>
+            ) : (
+              clientChannels.map((channel) => (
                 <ChannelButton
                   key={channel.id}
                   channel={channel}
                   isActive={channel.id === selectedChannelId}
-                  emphasize
                   onSelect={onSelectChannel}
                 />
-              ),
+              ))
             )}
-            {showUnreadOnly && unreadChannels.length === 0 ? (
-              <p className="px-2 py-1.5 text-xs text-[var(--shell-muted)]">
-                No unread conversations.
-              </p>
-            ) : null}
           </SidebarSection>
         ) : null}
 
-        {showChannels && !showUnreadOnly ? (
+        {showInternalSections &&
+        showChannels &&
+        showSection(teamChannels.length) ? (
           <SidebarSection
             title="Internal Connections"
+            unreadCount={unreadTotal(teamChannels)}
             collapsed={teamCollapsed}
             onToggle={() => setTeamCollapsed((current) => !current)}
             action={
-              canCreateChannel ? (
+              canAddConnection ? (
+                <button
+                  type="button"
+                  onClick={onAddConnection}
+                  className="rounded-[var(--radius-sm)] p-1 text-[var(--shell-muted)] hover:bg-[var(--shell-hover)] hover:text-[var(--shell-text)]"
+                  aria-label="Add connection"
+                >
+                  <Plus className="h-4 w-4" />
+                </button>
+              ) : canCreateChannel ? (
                 <button
                   type="button"
                   onClick={onCreateChannel}
@@ -500,57 +528,10 @@ export function ChannelSidebar({
           </SidebarSection>
         ) : null}
 
-        {showChannels && !showUnreadOnly ? (
-          <SidebarSection
-            title="External Connections"
-            collapsed={clientsCollapsed}
-            onToggle={() => setClientsCollapsed((current) => !current)}
-          >
-            {clientGroups.length === 0 ? (
-              <p className="px-2 py-1.5 text-xs text-[var(--shell-muted)]">
-                Client connections appear here.
-              </p>
-            ) : (
-              clientGroups.map((group) => (
-                <div key={group.orgName} className="space-y-1">
-                  <div className="flex items-center justify-between px-3 py-1">
-                    <p className="text-[11px] font-medium text-[var(--shell-muted)]">
-                      {group.orgName}
-                    </p>
-                    {canCreateChannel &&
-                    onCreateClientChannel &&
-                    group.clientOrganizationId ? (
-                      <button
-                        type="button"
-                        onClick={() =>
-                          onCreateClientChannel(
-                            group.clientOrganizationId as string,
-                          )
-                        }
-                        className="rounded-[var(--radius-sm)] p-0.5 text-[var(--shell-muted)] hover:bg-[var(--shell-hover)] hover:text-[var(--shell-text)]"
-                        aria-label={`Create channel for ${group.orgName}`}
-                      >
-                        <Plus className="h-3.5 w-3.5" />
-                      </button>
-                    ) : null}
-                  </div>
-                  {group.channels.map((channel) => (
-                    <ChannelButton
-                      key={channel.id}
-                      channel={channel}
-                      isActive={channel.id === selectedChannelId}
-                      onSelect={onSelectChannel}
-                    />
-                  ))}
-                </div>
-              ))
-            )}
-          </SidebarSection>
-        ) : null}
-
-        {showDms && !showUnreadOnly ? (
+        {showDms && showSection(directMessages.length) ? (
           <SidebarSection
             title="Direct messages"
+            unreadCount={unreadTotal(directMessages)}
             collapsed={dmsCollapsed}
             onToggle={() => setDmsCollapsed((current) => !current)}
             action={
@@ -581,7 +562,7 @@ export function ChannelSidebar({
           </SidebarSection>
         ) : null}
 
-        {showDms && !showUnreadOnly && groupMessages.length > 0 ? (
+        {showDms && groupMessages.length > 0 ? (
           <SidebarSection
             title="Group messages"
             collapsed={false}

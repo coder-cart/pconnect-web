@@ -1,6 +1,6 @@
 'use client';
 
-import { ReactNode, useCallback, useEffect, useState } from 'react';
+import { ReactNode, useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   Bell,
@@ -53,6 +53,7 @@ export function TopBar({
   onCreate,
 }: TopBarProps) {
   const router = useRouter();
+  const headerRef = useRef<HTMLElement>(null);
   const { theme, toggleTheme } = useTheme();
   const [createOpen, setCreateOpen] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
@@ -64,6 +65,28 @@ export function TopBar({
 
   useEffect(() => {
     setSoundMuted(isNotificationSoundMuted());
+  }, []);
+
+  useEffect(() => {
+    const header = headerRef.current;
+    if (!header) return;
+
+    function applyHeaderHeight() {
+      if (!header) return;
+      document.documentElement.style.setProperty(
+        '--app-header-height',
+        `${header.getBoundingClientRect().height}px`,
+      );
+    }
+
+    applyHeaderHeight();
+    const observer = new ResizeObserver(applyHeaderHeight);
+    observer.observe(header);
+    window.addEventListener('resize', applyHeaderHeight);
+    return () => {
+      observer.disconnect();
+      window.removeEventListener('resize', applyHeaderHeight);
+    };
   }, []);
 
   const showToast = useCallback((text: string, tone: StatusToastTone = 'success') => {
@@ -143,10 +166,11 @@ export function TopBar({
 
   return (
     <header
-      className="shell-chrome sticky top-0 z-20 border-b border-[var(--shell-border)] bg-[#1d2353] text-[var(--shell-text)]"
-      style={{ paddingTop: 'var(--safe-top)', backgroundColor: '#1d2353' }}
+      ref={headerRef}
+      className="shell-chrome sticky top-0 z-30 border-b border-[var(--shell-border)] bg-[var(--shell-brand)] text-[var(--shell-text)]"
+      style={{ paddingTop: 'var(--safe-top)' }}
     >
-      <div className="flex w-full min-w-0 items-center gap-1.5 px-2 py-2 sm:gap-2 sm:px-4 sm:py-2.5 lg:gap-3 lg:px-6">
+      <div className="flex w-full min-w-0 items-center gap-1 px-2 py-1.5 sm:gap-2 sm:px-4 sm:py-2.5 lg:gap-3 lg:px-6">
         <div className="flex shrink-0 items-center">
           <button
             type="button"
@@ -158,30 +182,32 @@ export function TopBar({
           </button>
         </div>
 
-        <div className="min-w-0 flex-1 sm:max-w-none lg:max-w-xl">
+        <div className="min-w-[6.5rem] flex-1 lg:max-w-xl">
           <GlobalSearch variant="shell" />
         </div>
 
-        <div className="ml-auto flex min-w-0 shrink items-center gap-0.5 sm:gap-1">
+        <div className="ml-auto flex shrink-0 items-center gap-0.5 sm:gap-1">
           {createItems.length > 0 ? (
             <div className="relative" data-tour="topbar-create">
-              <Button
-                variant="primary"
-                size="sm"
-                aria-label="Create new item"
-                className="hidden sm:inline-flex"
-                onClick={() => setCreateOpen((value) => !value)}
-              >
-                <Plus className="h-4 w-4" />
-                Create
-              </Button>
-              <IconButton
-                className="sm:hidden"
-                label="Create new item"
-                onClick={() => setCreateOpen((value) => !value)}
-              >
-                <Plus className="h-4 w-4" />
-              </IconButton>
+              <div className="hidden lg:block">
+                <Button
+                  variant="primary"
+                  size="sm"
+                  aria-label="Create new item"
+                  onClick={() => setCreateOpen((value) => !value)}
+                >
+                  <Plus className="h-4 w-4" />
+                  Create
+                </Button>
+              </div>
+              <div className="lg:hidden">
+                <IconButton
+                  label="Create new item"
+                  onClick={() => setCreateOpen((value) => !value)}
+                >
+                  <Plus className="h-4 w-4" />
+                </IconButton>
+              </div>
               {createOpen ? (
                 <>
                   <button
@@ -190,7 +216,7 @@ export function TopBar({
                     aria-label="Close create menu"
                     onClick={() => setCreateOpen(false)}
                   />
-                  <div className="shell-overlay-panel fixed inset-x-2 top-[3.75rem] z-20 rounded-[var(--radius-lg)] border border-[var(--border)] bg-[var(--surface)] p-2 text-[var(--foreground)] shadow-[var(--shadow-md)] sm:absolute sm:inset-x-auto sm:right-0 sm:top-[calc(100%+8px)] sm:min-w-44">
+                  <div className="shell-overlay-panel shell-menu rounded-[var(--radius-lg)] border border-[var(--border)] bg-[var(--surface)] p-2 text-[var(--foreground)] shadow-[var(--shadow-md)] lg:min-w-44">
                     {createItems.map((item) => (
                       <button
                         key={item.action}
@@ -212,8 +238,8 @@ export function TopBar({
           ) : null}
 
           {pushStatus === 'unsupported' ? null : (
+            <div className="hidden lg:block">
             <IconButton
-              className="hidden md:inline-flex"
               label={
                 pushBusy
                   ? 'Updating device alerts…'
@@ -231,9 +257,10 @@ export function TopBar({
             >
               <BellRing className="h-4 w-4" />
             </IconButton>
+            </div>
           )}
+          <div className="hidden lg:block">
           <IconButton
-            className="hidden sm:inline-flex"
             label={soundMuted ? 'Unmute notification sound' : 'Mute notification sound'}
             active={!soundMuted}
             onClick={handleSoundToggle}
@@ -244,8 +271,9 @@ export function TopBar({
               <Volume2 className="h-4 w-4" />
             )}
           </IconButton>
+          </div>
+          <div className="hidden lg:block">
           <IconButton
-            className="hidden sm:inline-flex"
             label="Toggle theme"
             onClick={toggleTheme}
           >
@@ -255,6 +283,7 @@ export function TopBar({
               <Sun className="h-4 w-4" />
             )}
           </IconButton>
+          </div>
 
           <div className="relative">
             <IconButton
@@ -277,7 +306,7 @@ export function TopBar({
             ) : null}
           </div>
 
-          <div className="relative hidden sm:block">
+          <div className="relative hidden lg:block">
             <IconButton label="Help and support" onClick={() => setHelpOpen((v) => !v)}>
               <HelpCircle className="h-4 w-4" />
             </IconButton>
