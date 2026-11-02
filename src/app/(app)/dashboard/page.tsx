@@ -252,7 +252,7 @@ export default function DashboardPage() {
       {!isLoading && !errorMessage && !isExternal ? (
         <div className="space-y-6">
           {canViewOrders ? (
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
+            <div className="grid grid-cols-2 gap-2 sm:gap-3 lg:grid-cols-3 xl:grid-cols-5">
               <DashboardMetricCard
                 label="Total orders"
                 value={totalActive}
@@ -314,7 +314,7 @@ export default function DashboardPage() {
           )}
 
           {canViewOrders ? (
-            <div className="grid gap-4 xl:grid-cols-[1.4fr_0.85fr]">
+            <div className="grid min-w-0 gap-4 xl:grid-cols-[1.4fr_0.85fr]">
               <RecentOrdersTable
                 orders={activeOrders}
                 hideClientIdentity={hideClientIdentity}

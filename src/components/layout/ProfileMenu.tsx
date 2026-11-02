@@ -35,6 +35,12 @@ import {
   setNotificationSoundMuted,
   unlockNotificationSound,
 } from '@/lib/notification-sound';
+import { useRealtime } from '@/components/providers/RealtimeProvider';
+import {
+  applyPresenceUpdate,
+  CUSTOM_STATUS_PRESETS,
+  formatCustomStatus,
+} from '@/lib/user-presence';
 
 interface ProfileMenuProps {
   user: AuthenticatedUser;
@@ -49,20 +55,8 @@ interface UserProfileState {
   notificationsPaused?: boolean;
 }
 
-const STATUS_PRESETS: Array<{ emoji: string; text: string }> = [
-  { emoji: '📅', text: 'In a meeting' },
-  { emoji: '📞', text: 'On a call' },
-  { emoji: '🎯', text: 'Focusing' },
-  { emoji: '🤒', text: 'Out sick' },
-  { emoji: '🌴', text: 'On vacation' },
-  { emoji: '⏳', text: 'Be right back' },
-];
-
 function formatStatusDraft(profile: UserProfileState) {
-  return [profile.statusEmoji, profile.statusText]
-    .filter(Boolean)
-    .join(' ')
-    .trim();
+  return formatCustomStatus(profile);
 }
 
 function parseStatusInput(value: string): {
@@ -89,6 +83,7 @@ export function ProfileMenu({ user, onLogout, tone = 'default' }: ProfileMenuPro
   const containerRef = useRef<HTMLDivElement>(null);
   const { startTour } = useProductTour();
   const { theme, toggleTheme } = useTheme();
+  const { subscribePresenceUpdated } = useRealtime();
   const [open, setOpen] = useState(false);
   const [soundMuted, setSoundMuted] = useState(false);
   const [profile, setProfile] = useState<UserProfileState>({});
@@ -109,6 +104,21 @@ export function ProfileMenu({ user, onLogout, tone = 'default' }: ProfileMenuPro
       })
       .catch(() => undefined);
   }, []);
+
+  useEffect(() => {
+    return subscribePresenceUpdated((payload) => {
+      if (payload.userId !== user.id) {
+        return;
+      }
+      setProfile((current) => applyPresenceUpdate(current, payload));
+      setStatusDraft(
+        formatStatusDraft({
+          statusEmoji: payload.statusEmoji,
+          statusText: payload.statusText,
+        }),
+      );
+    });
+  }, [subscribePresenceUpdated, user.id]);
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
@@ -307,7 +317,7 @@ export function ProfileMenu({ user, onLogout, tone = 'default' }: ProfileMenuPro
             </div>
 
             <div className="flex flex-wrap gap-1.5">
-              {STATUS_PRESETS.map((preset) => {
+              {CUSTOM_STATUS_PRESETS.map((preset) => {
                 const isActive =
                   profile.statusEmoji === preset.emoji &&
                   profile.statusText === preset.text;

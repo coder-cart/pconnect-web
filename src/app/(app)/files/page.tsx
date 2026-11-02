@@ -5,11 +5,16 @@ import {
   Download,
   FolderOpen,
   History,
+  MoreHorizontal,
   Pencil,
   Share2,
   Trash2,
   Upload,
 } from 'lucide-react';
+import {
+  DropdownMenu,
+  DropdownMenuItem,
+} from '@/components/ui/DropdownMenu';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
@@ -278,8 +283,69 @@ export default function FilesPage() {
           }
         />
       ) : (
-        <Card>
-          <div className="overflow-x-auto overscroll-x-contain">
+        <Card padding="none" className="overflow-hidden">
+          <ul className="divide-y divide-[var(--border)] md:hidden">
+            {files.map((file) => (
+              <li key={file.id} className="px-3 py-2.5">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-medium text-[var(--foreground)]">
+                      {file.fileName}
+                    </p>
+                    <p className="truncate text-xs text-[var(--muted)]">
+                      {file.project?.name ?? 'No project'}
+                      {' · '}
+                      {formatBytes(file.sizeBytes)}
+                    </p>
+                  </div>
+                  <Badge
+                    variant={
+                      file.visibilityScope === 'shared_with_client'
+                        ? 'warning'
+                        : 'neutral'
+                    }
+                  >
+                    {file.visibilityScope === 'shared_with_client'
+                      ? 'Shared'
+                      : 'Internal'}
+                  </Badge>
+                </div>
+                <div className="mt-2 flex items-center gap-2">
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    onClick={() => void handleDownload(file)}
+                  >
+                    <Download className="h-4 w-4" />
+                    Download
+                  </Button>
+                  {!isExternal ? (
+                    <DropdownMenu
+                      trigger={
+                        <Button size="sm" variant="secondary" aria-label={`Actions for ${file.fileName}`}>
+                          <MoreHorizontal className="h-4 w-4" />
+                        </Button>
+                      }
+                    >
+                      <DropdownMenuItem onClick={() => setShareFile(file)}>
+                        Share
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => setEditFile(file)}>
+                        Edit
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => setVersionsFile(file)}>
+                        Versions
+                      </DropdownMenuItem>
+                      <DropdownMenuItem destructive onClick={() => void handleDelete(file)}>
+                        Delete
+                      </DropdownMenuItem>
+                    </DropdownMenu>
+                  ) : null}
+                </div>
+              </li>
+            ))}
+          </ul>
+          <div className="hidden overflow-x-auto overscroll-x-contain md:block">
             <table className="min-w-[560px] w-full text-left text-sm">
               <thead className="border-b border-[var(--border)] text-[var(--muted)]">
                 <tr>

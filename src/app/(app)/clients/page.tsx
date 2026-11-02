@@ -2,7 +2,11 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { MessageSquare, UserPlus, Workflow } from 'lucide-react';
+import { MessageSquare, MoreHorizontal, UserPlus, Workflow } from 'lucide-react';
+import {
+  DropdownMenu,
+  DropdownMenuItem,
+} from '@/components/ui/DropdownMenu';
 import { ResourceListPage } from '@/components/ui/ResourceListPage';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
@@ -85,29 +89,34 @@ export default function ClientsPage() {
         }
         getItemKey={(item) => item.id}
         renderItem={(item) => (
-          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+          <div className="flex items-center gap-2">
             <button
               type="button"
               onClick={() => router.push(`/clients/${item.id}`)}
-              className="flex items-center gap-3 rounded-[var(--radius-md)] text-left transition-colors hover:opacity-80"
+              className="flex min-w-0 flex-1 items-center gap-3 rounded-[var(--radius-md)] text-left transition-colors hover:opacity-80"
             >
-              <div className="flex h-11 w-11 items-center justify-center rounded-full bg-[var(--primary-soft)] text-sm font-semibold text-[var(--primary)]">
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[var(--primary-soft)] text-xs font-semibold text-[var(--primary)]">
                 {getInitials(item.name)}
               </div>
-              <div>
-                <p className="text-sm font-medium text-[var(--foreground)]">
+              <div className="min-w-0">
+                <p className="truncate text-sm font-medium text-[var(--foreground)]">
                   {item.name}
                 </p>
-                <p className="text-xs text-[var(--muted)]">
+                <p className="truncate text-xs text-[var(--muted)]">
+                  <span className="capitalize sm:hidden">
+                    {item.status.replaceAll('_', ' ')}
+                    {' · '}
+                  </span>
                   {item.primaryContactEmail ?? 'No contact email'}
                 </p>
               </div>
             </button>
 
-            <div className="flex flex-wrap items-center gap-3">
-              <Badge variant={statusVariant(item.status)} className="capitalize">
-                {item.status.replaceAll('_', ' ')}
-              </Badge>
+            <Badge variant={statusVariant(item.status)} className="hidden capitalize sm:inline-flex">
+              {item.status.replaceAll('_', ' ')}
+            </Badge>
+
+            <div className="hidden items-center gap-2 lg:flex">
               <Button
                 size="sm"
                 variant="secondary"
@@ -138,6 +147,29 @@ export default function ClientsPage() {
                 </Button>
               ) : null}
             </div>
+
+            <DropdownMenu
+              className="lg:hidden"
+              trigger={
+                <Button size="sm" variant="secondary" aria-label={`Actions for ${item.name}`}>
+                  <MoreHorizontal className="h-4 w-4" />
+                </Button>
+              }
+            >
+              <DropdownMenuItem onClick={() => void openClientMessages(item.id)}>
+                Open messages
+              </DropdownMenuItem>
+              {canManageClients ? (
+                <DropdownMenuItem onClick={() => setOnboardingClientId(item.id)}>
+                  Start onboarding
+                </DropdownMenuItem>
+              ) : null}
+              {canManageClients ? (
+                <DropdownMenuItem onClick={() => setLinkClient(item)}>
+                  Link user
+                </DropdownMenuItem>
+              ) : null}
+            </DropdownMenu>
           </div>
         )}
       />

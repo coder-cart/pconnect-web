@@ -629,7 +629,10 @@ function OrderCard({
   const artist = artistName(order);
   const count = order.inFileCount || order.imageCount || 0;
   const deliveryHref = toExternalHref(order.deliveryLink ?? '');
-  const isRevision = Boolean(order.parentOrderId);
+  const isRevision =
+    Boolean(order.hasOpenClientRevision) ||
+    (order.clientRevisionCount ?? 0) > 0 ||
+    (order.clientRevisions?.length ?? 0) > 0;
   const stage = clientLifecycleStage(order.workflowStatus?.code);
   const isDelivered = stage === 'delivered';
   const isCompleted = stage === 'completed';
@@ -638,10 +641,16 @@ function OrderCard({
   const subtitle =
     variant === 'client'
       ? isRevision
-        ? 'Revision'
+        ? order.hasOpenClientRevision
+          ? 'Revision in progress'
+          : 'Has revisions'
         : 'New Order'
       : `${order.clientOrganization?.name ?? 'No client'}${
-          isRevision ? ' · Revision' : ' · New Order'
+          isRevision
+            ? order.hasOpenClientRevision
+              ? ' · Revision in progress'
+              : ' · Has revisions'
+            : ' · New Order'
         }`;
 
   function openOrder() {

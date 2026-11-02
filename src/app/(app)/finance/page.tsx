@@ -230,7 +230,7 @@ export default function FinancePage() {
         <ListSkeleton rows={4} />
       ) : activeTab === 'overview' ? (
         <>
-          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          <div className="grid grid-cols-2 gap-2 sm:gap-4 xl:grid-cols-4">
             <StatCard
               label="Total Revenue"
               value={formatCurrency(summary?.totalRevenue ?? 0)}
@@ -355,7 +355,39 @@ function InvoiceTable({
   onPay?: (invoice: InvoiceRecord) => void;
 }) {
   return (
-    <div className="overflow-x-auto overscroll-x-contain">
+    <>
+    <ul className="divide-y divide-[var(--border)] md:hidden">
+      {invoices.map((invoice) => {
+        const payable =
+          invoice.status !== 'paid' && invoice.status !== 'cancelled';
+        return (
+          <li key={invoice.id} className="flex items-start justify-between gap-3 px-3 py-2.5">
+            <div className="min-w-0">
+              <p className="truncate text-sm font-medium text-[var(--foreground)]">
+                {invoice.invoiceNumber}
+              </p>
+              <p className="truncate text-xs text-[var(--muted)]">
+                {invoice.clientOrganization?.name ?? 'No client'}
+              </p>
+              <p className="mt-1 text-sm text-[var(--foreground)]">
+                {formatCurrency(Number(invoice.totalAmount))}
+              </p>
+            </div>
+            <div className="flex shrink-0 flex-col items-end gap-1.5">
+              <Badge variant={statusVariant(invoice.status)}>
+                {invoice.status.replace('_', ' ')}
+              </Badge>
+              {payable && onPay ? (
+                <Button size="sm" onClick={() => onPay(invoice)}>
+                  Pay
+                </Button>
+              ) : null}
+            </div>
+          </li>
+        );
+      })}
+    </ul>
+    <div className="hidden overflow-x-auto overscroll-x-contain md:block">
       <table className="min-w-[560px] w-full text-left text-sm">
         <thead className="border-b border-[var(--border)] text-[var(--muted)]">
           <tr>
@@ -404,6 +436,7 @@ function InvoiceTable({
         </tbody>
       </table>
     </div>
+    </>
   );
 }
 
@@ -432,7 +465,50 @@ function ExpenseTable({
   onUpdateStatus: (expenseId: string, status: 'approved' | 'rejected') => void;
 }) {
   return (
-    <div className="overflow-x-auto overscroll-x-contain">
+    <>
+    <ul className="divide-y divide-[var(--border)] md:hidden">
+      {expenses.map((expense) => (
+        <li key={expense.id} className="px-3 py-2.5">
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <p className="truncate text-sm font-medium text-[var(--foreground)]">
+                {expense.category}
+              </p>
+              <p className="truncate text-xs text-[var(--muted)]">
+                {expense.description}
+              </p>
+              <p className="mt-1 text-xs text-[var(--muted)]">
+                {expense.submitter?.fullName ?? 'No submitter'}
+                {' · '}
+                {formatCurrency(Number(expense.amount))}
+              </p>
+            </div>
+            <Badge variant={expenseStatusVariant(expense.approvalStatus)}>
+              {expense.approvalStatus}
+            </Badge>
+          </div>
+          {canManageFinance && expense.approvalStatus === 'pending' ? (
+            <div className="mt-2 flex gap-2">
+              <Button
+                size="sm"
+                variant="secondary"
+                onClick={() => onUpdateStatus(expense.id, 'approved')}
+              >
+                Approve
+              </Button>
+              <Button
+                size="sm"
+                variant="secondary"
+                onClick={() => onUpdateStatus(expense.id, 'rejected')}
+              >
+                Reject
+              </Button>
+            </div>
+          ) : null}
+        </li>
+      ))}
+    </ul>
+    <div className="hidden overflow-x-auto overscroll-x-contain md:block">
       <table className="min-w-[560px] w-full text-left text-sm">
         <thead className="border-b border-[var(--border)] text-[var(--muted)]">
           <tr>
@@ -492,5 +568,6 @@ function ExpenseTable({
         </tbody>
       </table>
     </div>
+    </>
   );
 }

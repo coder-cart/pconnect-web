@@ -18,6 +18,7 @@ interface CreateChannelModalProps {
   presetType?: string;
   presetClientOrganizationId?: string;
   lockClientOrganization?: boolean;
+  audience?: 'staff' | 'client';
 }
 
 interface MemberCandidatesResponse {
@@ -37,6 +38,7 @@ export function CreateChannelModal({
   presetType,
   presetClientOrganizationId,
   lockClientOrganization = false,
+  audience = 'staff',
 }: CreateChannelModalProps) {
   const [name, setName] = useState('');
   const [type, setType] = useState('public');
@@ -48,8 +50,9 @@ export function CreateChannelModal({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  const isClientChannel = type === 'client_shared';
-  const showMemberPicker = type === 'private' || isClientChannel;
+  const isClientAudience = audience === 'client';
+  const isClientChannel = !isClientAudience && type === 'client_shared';
+  const showMemberPicker = isClientAudience || type === 'private' || isClientChannel;
   const canSubmit =
     name.trim().length > 0 && (!isClientChannel || clientOrganizationId.length > 0);
 
@@ -59,15 +62,20 @@ export function CreateChannelModal({
     }
 
     setName('');
-    setType(presetType ?? 'public');
+    setType(isClientAudience ? 'private' : (presetType ?? 'public'));
     setClientOrganizationId(presetClientOrganizationId ?? '');
     setSelectedMemberIds([]);
     setErrorMessage(null);
 
+    if (isClientAudience) {
+      setClients([]);
+      return;
+    }
+
     apiRequest<ApiResponse<ClientOption[]>>('/clients')
       .then((response) => setClients(response.data))
       .catch(() => setClients([]));
-  }, [open, presetType, presetClientOrganizationId]);
+  }, [open, presetType, presetClientOrganizationId, isClientAudience]);
 
   useEffect(() => {
     if (!open) {
@@ -104,7 +112,7 @@ export function CreateChannelModal({
         method: 'POST',
         body: JSON.stringify({
           name: name.trim(),
-          type,
+          type: isClientAudience ? 'private' : type,
           clientOrganizationId: isClientChannel ? clientOrganizationId : undefined,
           memberUserIds: showMemberPicker ? selectedMemberIds : undefined,
         }),
@@ -124,11 +132,19 @@ export function CreateChannelModal({
     <Modal
       open={open}
       onClose={onClose}
-      title={isClientChannel ? 'Create client channel' : 'Create team channel'}
+      title={
+        isClientAudience
+          ? 'Create private channel'
+          : isClientChannel
+            ? 'Create client channel'
+            : 'Create team channel'
+      }
       description={
-        isClientChannel
-          ? 'Create a shared channel with a client. Add client contacts to invite them.'
-          : 'Create a public or private internal channel, or a shared channel with a client.'
+        isClientAudience
+          ? 'Only people in your organization can see this channel. Members are notified when someone sends a message.'
+          : isClientChannel
+            ? 'Create a shared channel with a client. Add client contacts to invite them.'
+            : 'Create a public or private internal channel, or a shared channel with a client.'
       }
       footer={
         <ModalActions
@@ -145,9 +161,10 @@ export function CreateChannelModal({
           label="Channel name"
           value={name}
           onChange={(event) => setName(event.target.value)}
-          placeholder={isClientChannel ? 'e.g. design' : 'e.g. engineering'}
+          placeholder={isClientAudience ? 'e.g. design-review' : isClientChannel ? 'e.g. design' : 'e.g. engineering'}
           required
         />
+        {isClientAudience ? null : (
         <Select
           label="Channel type"
           value={type}
@@ -158,6 +175,7 @@ export function CreateChannelModal({
             { value: 'client_shared', label: 'Client channel (shared with a client)' },
           ]}
         />
+        )}
 
         {isClientChannel ? (
           <Select
@@ -182,7 +200,9 @@ export function CreateChannelModal({
             </p>
             <p className="text-xs text-[var(--muted)]">
               You are added automatically.
-              {isClientChannel
+              {isClientAudience
+                ? ' Select teammates below. Everyone added is notified about new messages.'
+                : isClientChannel
                 ? clientUsers.length > 0
                   ? ' Select client team members below — they receive an invite to join.'
                   : ' This client has no portal team members yet. Add them on Clients → Portal users, then invite them here.'
@@ -190,10 +210,10 @@ export function CreateChannelModal({
             </p>
             <ChannelMemberPicker
               internalUsers={internalUsers}
-              clientUsers={isClientChannel ? clientUsers : []}
+              clientUsers={isClientAudience || isClientChannel ? clientUsers : []}
               selectedUserIds={selectedMemberIds}
               onChange={setSelectedMemberIds}
-              showClientUsers={isClientChannel}
+              showClientUsers={isClientAudience || isClientChannel}
             />
           </div>
         ) : null}

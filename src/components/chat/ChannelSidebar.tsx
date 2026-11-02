@@ -13,6 +13,11 @@ import {
   PendingChannelInvite,
 } from '@/lib/chat-types';
 import { cn } from '@/lib/cn';
+import {
+  availabilityLabel,
+  formatCustomStatus,
+  isAway,
+} from '@/lib/user-presence';
 
 interface ChannelSidebarProps {
   channels: ChatChannel[];
@@ -22,6 +27,7 @@ interface ChannelSidebarProps {
   canCreateChannel: boolean;
   canAddConnection: boolean;
   showInternalSections: boolean;
+  internalEmptyText?: string;
   onSelectChannel: (channelId: string) => void;
   onCreateChannel: () => void;
   onAddConnection: () => void;
@@ -39,7 +45,7 @@ function ChannelIcon({ type }: { type: string }) {
 }
 
 function DmPeerAvatar({ peer }: { peer: ChatDmPeer }) {
-  const away = peer.presenceStatus === 'away';
+  const away = isAway(peer.presenceStatus);
   return (
     <span className="relative shrink-0">
       <UserAvatar
@@ -63,11 +69,7 @@ function DmPeerAvatar({ peer }: { peer: ChatDmPeer }) {
 }
 
 function DmHoverCard({ peer }: { peer: ChatDmPeer }) {
-  const away = peer.presenceStatus === 'away';
-  const statusLine = [peer.statusEmoji, peer.statusText]
-    .filter(Boolean)
-    .join(' ')
-    .trim();
+  const statusLine = formatCustomStatus(peer);
 
   return (
     <div
@@ -93,7 +95,7 @@ function DmHoverCard({ peer }: { peer: ChatDmPeer }) {
             </p>
           ) : null}
           <p className="mt-1 text-xs font-medium text-[var(--foreground)]">
-            {away ? 'Away' : 'Active'}
+            {availabilityLabel(peer.presenceStatus)}
           </p>
           {statusLine ? (
             <p className="mt-1 truncate text-xs text-[var(--muted)]">{statusLine}</p>
@@ -120,6 +122,7 @@ function ChannelButton({
   const label = getChannelLabel(channel);
   const isDirect = channel.type === 'direct';
   const peer = channel.dmPeer ?? null;
+  const peerStatusLine = peer ? formatCustomStatus(peer) : '';
   const showHash =
     channel.type !== 'direct' &&
     channel.type !== 'group' &&
@@ -185,6 +188,11 @@ function ChannelButton({
             >
               {showHash ? '#' : ''}
               {label}
+              {peer?.statusEmoji ? (
+                <span className="ml-1 font-normal" aria-hidden>
+                  {peer.statusEmoji}
+                </span>
+              ) : null}
             </span>
             {unreadCount > 0 ? (
               <span className="shrink-0 rounded-full bg-[var(--shell-badge)] px-1.5 py-0.5 text-[10px] font-semibold text-[var(--shell-badge-text)]">
@@ -192,7 +200,11 @@ function ChannelButton({
               </span>
             ) : null}
           </span>
-          {isDirect && channel.latestMessage?.body ? (
+          {isDirect && peerStatusLine ? (
+            <span className="mt-0.5 block truncate text-[11px] text-[var(--shell-muted)]">
+              {peerStatusLine}
+            </span>
+          ) : isDirect && channel.latestMessage?.body ? (
             <span className="mt-0.5 block truncate text-[11px] text-[var(--shell-muted)]">
               {channel.latestMessage.body}
             </span>
@@ -291,6 +303,7 @@ export function ChannelSidebar({
   canCreateChannel,
   canAddConnection,
   showInternalSections,
+  internalEmptyText = 'No internal connections yet.',
   onSelectChannel,
   onCreateChannel,
   onAddConnection,
@@ -513,7 +526,7 @@ export function ChannelSidebar({
           >
             {teamChannels.length === 0 ? (
               <p className="px-2 py-1.5 text-xs text-[var(--shell-muted)]">
-                No internal connections yet.
+                {internalEmptyText}
               </p>
             ) : (
               teamChannels.map((channel) => (

@@ -38,6 +38,8 @@ import {
 import { OrderFilesPanel } from '@/components/orders/OrderFilesPanel';
 import { OrderChannelChat } from '@/components/orders/OrderChannelChat';
 import { FolderStatusField } from '@/components/orders/FolderStatusField';
+import { OrderRevisionHistory } from '@/components/orders/OrderRevisionHistory';
+import { RequestRevisionModal } from '@/components/orders/RequestRevisionModal';
 import {
   ServiceMultiSelect,
   serviceIdsFromLines,
@@ -86,6 +88,7 @@ export function OrderDetailView({
   const { user, refreshKey, notifyRefresh } = useWorkspace();
   const canManage = userHasPermission(user, 'orders.manage');
   const canView = userHasPermission(user, 'orders.view');
+  const canCreate = userHasPermission(user, 'orders.create');
   const canViewFinance = userHasAnyPermission(user, [
     'finance.invoices.view_all',
     'finance.invoices.create',
@@ -109,6 +112,7 @@ export function OrderDetailView({
     'client',
   );
   const [busy, setBusy] = useState(false);
+  const [revisionModalOpen, setRevisionModalOpen] = useState(false);
   const [clientNotesDraft, setClientNotesDraft] = useState('');
   const [sourceLinkDraft, setSourceLinkDraft] = useState('');
   const [clientNameDraft, setClientNameDraft] = useState('');
@@ -572,9 +576,45 @@ export function OrderDetailView({
                 <ClientDeliveryActions
                   order={order}
                   busy={busy}
+                  canRequestRevision={
+                    canCreate &&
+                    !order.hasOpenClientRevision &&
+                    (clientLifecycleStage(order.workflowStatus?.code) ===
+                      'delivered' ||
+                      clientLifecycleStage(order.workflowStatus?.code) ===
+                        'completed')
+                  }
                   onAcknowledge={() => runClientAction('acknowledge')}
                   onSaveHistory={() => runClientAction('save-to-history')}
+                  onRequestRevision={() => setRevisionModalOpen(true)}
                 />
+              ) : null}
+              {order ? <OrderRevisionHistory order={order} /> : null}
+              {canCreate &&
+              order &&
+              !isExternal &&
+              !order.hasOpenClientRevision &&
+              (clientLifecycleStage(order.workflowStatus?.code) === 'delivered' ||
+                clientLifecycleStage(order.workflowStatus?.code) ===
+                  'completed') ? (
+                <Card className="flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <h3 className="text-sm font-medium text-[var(--foreground)]">
+                      Request a revision
+                    </h3>
+                    <p className="text-xs text-[var(--muted)]">
+                      Adds a revision round under this order. No new order is
+                      created.
+                    </p>
+                  </div>
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    onClick={() => setRevisionModalOpen(true)}
+                  >
+                    Request revision
+                  </Button>
+                </Card>
               ) : null}
               {canManage ? (
                 <OrderExcelEditor
@@ -1019,6 +1059,16 @@ export function OrderDetailView({
           ) : null}
         </>
       ) : null}
+
+      <RequestRevisionModal
+        open={revisionModalOpen}
+        order={order}
+        onClose={() => setRevisionModalOpen(false)}
+        onCreated={() => {
+          notifyRefresh();
+          load();
+        }}
+      />
     </div>
   );
 }
@@ -1026,20 +1076,24 @@ export function OrderDetailView({
 function ClientDeliveryActions({
   order,
   busy,
+  canRequestRevision,
   onAcknowledge,
   onSaveHistory,
+  onRequestRevision,
 }: {
   order: OrderSummary;
   busy: boolean;
+  canRequestRevision?: boolean;
   onAcknowledge: () => void;
   onSaveHistory: () => void;
+  onRequestRevision?: () => void;
 }) {
   const stage = clientLifecycleStage(order.workflowStatus?.code);
   const canReceive = stage === 'delivered';
   const isCompleted = stage === 'completed' || Boolean(order.clientAcknowledgedAt);
   const deliveryHref = toExternalHref(order.deliveryLink ?? '');
 
-  if (!canReceive && !isCompleted && !order.historySavedAt) {
+  if (!canReceive && !isCompleted && !order.historySavedAt && !canRequestRevision) {
     return null;
   }
 
@@ -1085,6 +1139,16 @@ function ClientDeliveryActions({
           </Button>
         </div>
       )}
+      {canRequestRevision ? (
+        <Button
+          size="sm"
+          variant="secondary"
+          onClick={onRequestRevision}
+          disabled={busy}
+        >
+          Request revision
+        </Button>
+      ) : null}
     </Card>
   );
 }

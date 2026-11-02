@@ -17,7 +17,7 @@ export function RecentOrdersTable({
   hideClientIdentity?: boolean;
 }) {
   return (
-    <Card className="overflow-hidden p-0">
+    <Card className="min-w-0 max-w-full overflow-hidden p-0">
       <div className="flex items-center justify-between gap-2 border-b border-[var(--border)] px-4 py-3">
         <div>
           <h2 className="text-sm font-semibold text-[var(--foreground)]">
@@ -36,7 +36,7 @@ export function RecentOrdersTable({
       {orders.length === 0 ? (
         <p className="px-4 py-6 text-sm text-[var(--muted)]">No orders to show.</p>
       ) : (
-        <div className="overflow-x-auto">
+        <div className="max-w-full overflow-x-auto overscroll-x-contain">
           <table className="min-w-full text-left text-sm">
             <thead className="bg-[var(--surface-muted)] text-xs uppercase tracking-wide text-[var(--muted)]">
               <tr>

@@ -4,6 +4,9 @@ export interface ChannelMemberOption {
   email: string;
   userType: 'internal' | 'external';
   avatarUpdatedAt?: string | null;
+  presenceStatus?: 'active' | 'away' | string | null;
+  statusText?: string | null;
+  statusEmoji?: string | null;
   inChannel?: boolean;
 }
 

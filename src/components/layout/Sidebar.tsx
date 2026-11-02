@@ -15,6 +15,11 @@ import {
   useUnreadMessages,
 } from '@/components/providers/UnreadMessagesProvider';
 import { cn } from '@/lib/cn';
+import {
+  availabilityLabel,
+  formatCustomStatus,
+  isAway,
+} from '@/lib/user-presence';
 
 interface SidebarProps {
   user: AuthenticatedUser;
@@ -45,11 +50,7 @@ function previewText(body: string) {
 }
 
 function UnreadPersonHoverCard({ person }: { person: UnreadPerson }) {
-  const away = person.presenceStatus === 'away';
-  const statusLine = [person.statusEmoji, person.statusText]
-    .filter(Boolean)
-    .join(' ')
-    .trim();
+  const statusLine = formatCustomStatus(person);
 
   return (
     <div
@@ -75,7 +76,7 @@ function UnreadPersonHoverCard({ person }: { person: UnreadPerson }) {
             </p>
           ) : null}
           <p className="mt-1 text-xs font-medium text-[var(--foreground)]">
-            {away ? 'Away' : 'Active'}
+            {availabilityLabel(person.presenceStatus)}
           </p>
           {statusLine ? (
             <p className="mt-1 truncate text-xs text-[var(--muted)]">{statusLine}</p>
@@ -97,7 +98,8 @@ function UnreadConversationLink({
 }) {
   const [open, setOpen] = useState(false);
   const person = personForConversation(conversation);
-  const away = person.presenceStatus === 'away';
+  const away = isAway(person.presenceStatus);
+  const statusLine = formatCustomStatus(person);
   const preview = conversation.latestMessage?.body
     ? previewText(conversation.latestMessage.body)
     : conversation.name;
@@ -150,9 +152,14 @@ function UnreadConversationLink({
             <span className="min-w-0 flex-1">
               <span className="block truncate text-sm font-semibold text-[var(--shell-text)]">
                 {person.fullName}
+                {person.statusEmoji ? (
+                  <span className="ml-1 font-normal" aria-hidden>
+                    {person.statusEmoji}
+                  </span>
+                ) : null}
               </span>
               <span className="block truncate text-[11px] text-[var(--shell-muted)]">
-                {preview}
+                {statusLine || preview}
               </span>
             </span>
             <span className="shrink-0 rounded-full bg-[var(--shell-badge)] px-1.5 py-0.5 text-[10px] font-semibold text-[var(--shell-badge-text)]">

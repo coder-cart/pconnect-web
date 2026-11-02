@@ -2,12 +2,12 @@
 
 import type { ReactNode } from 'react';
 import {
-  ArrowLeft,
   Copy,
   Hash,
   Headphones,
   Info,
   MessageCircle,
+  MessagesSquare,
   MoreVertical,
   PanelLeftClose,
   PanelLeftOpen,
@@ -28,9 +28,19 @@ import {
   ChannelMemberOption,
   ChannelNotificationPreference,
 } from '@/lib/channelMembers';
-import { ChannelContext, getChannelLabel, isDirectOrGroupChannel } from '@/lib/chat-types';
+import {
+  ChannelContext,
+  ChatDmPeer,
+  getChannelLabel,
+  isDirectOrGroupChannel,
+} from '@/lib/chat-types';
 import { cn } from '@/lib/cn';
 import { CHAT_HUDDLE_ENABLED } from '@/lib/chat-release';
+import {
+  availabilityLabel,
+  formatCustomStatus,
+  isAway,
+} from '@/lib/user-presence';
 
 type ChannelTab = 'messages' | 'canvas' | 'pins';
 
@@ -41,6 +51,7 @@ interface ChannelHeaderProps {
   clientOrganizationId?: string | null;
   clientOrganizationLogoUpdatedAt?: string | null;
   channelContext: ChannelContext | null;
+  dmPeer?: ChatDmPeer | null;
   members?: ChannelMemberOption[];
   activeTab: ChannelTab;
   onTabChange: (tab: ChannelTab) => void;
@@ -69,6 +80,7 @@ export function ChannelHeader({
   clientOrganizationId,
   clientOrganizationLogoUpdatedAt,
   channelContext,
+  dmPeer = null,
   members = [],
   activeTab,
   onTabChange,
@@ -116,6 +128,11 @@ export function ChannelHeader({
 
   const previewMembers = members.slice(0, 4);
   const extraMembers = Math.max(0, members.length - previewMembers.length);
+  const dmStatusLine = dmPeer ? formatCustomStatus(dmPeer) : '';
+  const dmAvailability =
+    channelType === 'direct' && dmPeer
+      ? availabilityLabel(dmPeer.presenceStatus)
+      : null;
 
   return (
     <div className="shrink-0 border-b border-[var(--border)]">
@@ -125,10 +142,11 @@ export function ChannelHeader({
             <button
               type="button"
               onClick={onBack}
-              className="inline-flex min-h-touch min-w-touch shrink-0 items-center justify-center rounded-[var(--radius-md)] text-[var(--muted)] hover:bg-[var(--surface-muted)] hover:text-[var(--foreground)] lg:hidden"
-              aria-label="Back to conversations"
+              className="inline-flex min-h-touch shrink-0 items-center gap-1.5 rounded-[var(--radius-md)] px-2 text-[var(--muted)] hover:bg-[var(--surface-muted)] hover:text-[var(--foreground)] lg:hidden"
+              aria-label="Chats"
             >
-              <ArrowLeft className="h-5 w-5" />
+              <MessagesSquare className="h-4 w-4 shrink-0" />
+              <span className="text-sm font-medium">Chats</span>
             </button>
           ) : null}
           {onToggleSidebar ? (
@@ -159,6 +177,26 @@ export function ChannelHeader({
               logoUpdatedAt={clientOrganizationLogoUpdatedAt}
               className="h-9 w-9"
             />
+          ) : channelType === 'direct' && dmPeer ? (
+            <span className="relative shrink-0">
+              <UserAvatar
+                user={{
+                  id: dmPeer.id,
+                  fullName: dmPeer.fullName,
+                  avatarUpdatedAt: dmPeer.avatarUpdatedAt,
+                }}
+                size="sm"
+              />
+              <span
+                className={cn(
+                  'absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full border-2 border-[var(--surface)]',
+                  isAway(dmPeer.presenceStatus)
+                    ? 'bg-[var(--muted)]'
+                    : 'bg-[var(--success)]',
+                )}
+                aria-hidden
+              />
+            </span>
           ) : (
             <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[var(--radius-md)] bg-[var(--primary-soft)] text-[var(--primary)]">
               <ChannelIcon className="h-4 w-4" />
@@ -169,7 +207,12 @@ export function ChannelHeader({
               {showHashPrefix ? '#' : ''}
               {label}
             </h2>
-            {breadcrumb.length > 0 ? (
+            {dmAvailability ? (
+              <p className="mt-0.5 truncate text-xs text-[var(--muted)]">
+                {dmAvailability}
+                {dmStatusLine ? ` · ${dmStatusLine}` : ''}
+              </p>
+            ) : breadcrumb.length > 0 ? (
               <p className="mt-0.5 truncate text-xs text-[var(--muted)]">
                 {breadcrumb.join(' › ')}
               </p>
@@ -184,25 +227,40 @@ export function ChannelHeader({
         <div className="flex flex-wrap items-center gap-2">
           {previewMembers.length > 0 ? (
             <div className="hidden items-center lg:flex">
-              {previewMembers.map((member, index) => (
-                <span
-                  key={member.id}
-                  className={cn(
-                    'relative inline-flex rounded-full ring-2 ring-[var(--surface)]',
-                    index > 0 && '-ml-2',
-                  )}
-                  title={member.fullName}
-                >
-                  <UserAvatar
-                    user={{
-                      id: member.id,
-                      fullName: member.fullName,
-                      avatarUpdatedAt: member.avatarUpdatedAt,
-                    }}
-                    size="xs"
-                  />
-                </span>
-              ))}
+              {previewMembers.map((member, index) => {
+                const memberStatus = formatCustomStatus(member);
+                const title = memberStatus
+                  ? `${member.fullName} · ${availabilityLabel(member.presenceStatus)} · ${memberStatus}`
+                  : `${member.fullName} · ${availabilityLabel(member.presenceStatus)}`;
+                return (
+                  <span
+                    key={member.id}
+                    className={cn(
+                      'relative inline-flex rounded-full ring-2 ring-[var(--surface)]',
+                      index > 0 && '-ml-2',
+                    )}
+                    title={title}
+                  >
+                    <UserAvatar
+                      user={{
+                        id: member.id,
+                        fullName: member.fullName,
+                        avatarUpdatedAt: member.avatarUpdatedAt,
+                      }}
+                      size="xs"
+                    />
+                    <span
+                      className={cn(
+                        'absolute -bottom-0.5 -right-0.5 h-2 w-2 rounded-full border border-[var(--surface)]',
+                        isAway(member.presenceStatus)
+                          ? 'bg-[var(--muted)]'
+                          : 'bg-[var(--success)]',
+                      )}
+                      aria-hidden
+                    />
+                  </span>
+                );
+              })}
               {extraMembers > 0 ? (
                 <span className="-ml-2 inline-flex h-6 min-w-6 items-center justify-center rounded-full bg-[var(--surface-muted)] px-1.5 text-[10px] font-semibold text-[var(--muted)] ring-2 ring-[var(--surface)]">
                   +{extraMembers}

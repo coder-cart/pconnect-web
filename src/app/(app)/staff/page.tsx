@@ -284,7 +284,43 @@ export default function StaffPage() {
 
       {!isLoading && !errorMessage && filtered.length > 0 ? (
         <Card padding="none" className="overflow-hidden">
-          <div className="overflow-x-auto overscroll-x-contain">
+          <ul className="divide-y divide-[var(--border)] md:hidden">
+            {filtered.map((item) => {
+              const roleCodes = item.userRoles?.map((role) => role.role.code) ?? [];
+              return (
+                <li
+                  key={item.id}
+                  className="flex items-start justify-between gap-3 px-3 py-2.5"
+                >
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-medium text-[var(--foreground)]">
+                      {item.fullName}
+                    </p>
+                    <p className="truncate text-xs text-[var(--muted)]">{item.email}</p>
+                    <p className="mt-1 truncate text-xs text-[var(--muted)]">
+                      {getRoleLabel('internal', roleCodes)}
+                      {' · '}
+                      {item.lastLoginAt
+                        ? new Date(item.lastLoginAt).toLocaleDateString()
+                        : 'No login yet'}
+                    </p>
+                  </div>
+                  <div className="flex shrink-0 flex-col items-end gap-1.5">
+                    <Badge
+                      variant={item.status === 'active' ? 'success' : 'neutral'}
+                      className="capitalize"
+                    >
+                      {item.status}
+                    </Badge>
+                    <Button size="sm" variant="secondary" onClick={() => openEdit(item)}>
+                      Edit
+                    </Button>
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+          <div className="hidden overflow-x-auto overscroll-x-contain md:block">
             <table className="w-full min-w-[640px] text-left text-sm md:min-w-[720px]">
               <thead>
                 <tr className="border-b border-[var(--border)] text-xs font-medium uppercase tracking-wide text-[var(--muted)]">

@@ -7,6 +7,7 @@ import {
   ApiResponse,
   AuthenticatedUser,
   isProductionOnlyStaff,
+  isClientChatOnly,
   userHasPermission,
   userIsExternal,
 } from '@/lib/auth';
@@ -40,6 +41,7 @@ import { useUnreadMessages } from '@/components/providers/UnreadMessagesProvider
 import { cn } from '@/lib/cn';
 import { CHAT_HUDDLE_ENABLED } from '@/lib/chat-release';
 import { ChannelMemberOption, ChannelNotificationPreference } from '@/lib/channelMembers';
+import { applyPresenceUpdate } from '@/lib/user-presence';
 
 interface ChatWorkspaceProps {
   user: AuthenticatedUser;
@@ -158,12 +160,16 @@ export function ChatWorkspace({
     leaveChannel,
     subscribeMessageCreated,
     subscribeChannelEvents,
+    subscribePresenceUpdated,
   } = useRealtime();
   const { unreadByChannel, loaded: unreadLoaded, setActiveChannel } =
     useUnreadMessages();
   const isExternalUser = userIsExternal(user);
-  const canCreateChannel =
+  const canCreateStaffChannel =
     !isExternalUser && userHasPermission(user, 'channels.create_internal');
+  const canCreateClientPrivateChannel =
+    isExternalUser && !isClientChatOnly(user);
+  const canCreateChannel = canCreateStaffChannel || canCreateClientPrivateChannel;
   const canAddConnection =
     !isExternalUser &&
     !isProductionOnlyStaff(user.roleCodes) &&
@@ -224,8 +230,16 @@ export function ChatWorkspace({
       .then((data) => {
         if (data.length > 0) {
           setSelectedChannelId((current) => {
-            const preferred = current ?? initialChannelId;
+            const preferred = current ?? initialChannelId ?? null;
             if (preferred) return preferred;
+
+            // Mobile opens on the conversation list; desktop still picks a default.
+            const isMobileViewport =
+              typeof window !== 'undefined' &&
+              window.matchMedia('(max-width: 1023px)').matches;
+            if (isMobileViewport) {
+              return null;
+            }
 
             if (isExternalUser) {
               const hub = data.find((channel) => channel.type === 'client_shared');
@@ -362,6 +376,29 @@ export function ChatWorkspace({
       }
     });
   }, [subscribeChannelEvents, user.id]);
+
+  useEffect(() => {
+    return subscribePresenceUpdated((payload) => {
+      setChannels((current) =>
+        current.map((channel) => {
+          if (!channel.dmPeer || channel.dmPeer.id !== payload.userId) {
+            return channel;
+          }
+          return {
+            ...channel,
+            dmPeer: applyPresenceUpdate(channel.dmPeer, payload),
+          };
+        }),
+      );
+      setChannelMembers((current) =>
+        current.map((member) =>
+          member.id === payload.userId
+            ? applyPresenceUpdate(member, payload)
+            : member,
+        ),
+      );
+    });
+  }, [subscribePresenceUpdated]);
 
   useEffect(() => {
     if (!selectedChannelId || isLoadingChannels) return;
@@ -817,7 +854,7 @@ export function ChatWorkspace({
     (channel) => channel.id === selectedChannelId,
   );
   const canManageMembers =
-    (canCreateChannel &&
+    (canCreateStaffChannel &&
       (selectedChannel?.type === 'private' ||
         selectedChannel?.type === 'client_shared')) ||
     (isExternalUser &&
@@ -954,7 +991,12 @@ export function ChatWorkspace({
           acceptingInviteId={acceptingInviteId}
           canCreateChannel={canCreateChannel}
           canAddConnection={canAddConnection}
-          showInternalSections={!isExternalUser}
+          showInternalSections
+          internalEmptyText={
+            isExternalUser
+              ? 'Your organization channels appear here.'
+              : 'No internal connections yet.'
+          }
           onSelectChannel={setSelectedChannelId}
           onCreateChannel={openCreateChannel}
           onAddConnection={() => setAddConnectionOpen(true)}
@@ -984,6 +1026,7 @@ export function ChatWorkspace({
               selectedChannel?.clientOrganizationLogoUpdatedAt
             }
             channelContext={channelContext}
+            dmPeer={selectedChannel?.dmPeer}
             members={channelMembers}
             activeTab={channelTab}
             onTabChange={setChannelTab}
@@ -1017,7 +1060,7 @@ export function ChatWorkspace({
               <PinnedMessagesPanel
                 pins={pinnedMessages}
                 isLoading={isLoadingPins}
-                canUnpin={canCreateChannel}
+                canUnpin={canCreateStaffChannel}
                 onJumpToMessage={handleJumpToPinnedMessage}
                 onUnpin={handleUnpin}
               />
@@ -1137,6 +1180,7 @@ export function ChatWorkspace({
         presetType={channelPreset?.type}
         presetClientOrganizationId={channelPreset?.clientOrganizationId}
         lockClientOrganization={Boolean(channelPreset?.clientOrganizationId)}
+        audience={isExternalUser ? 'client' : 'staff'}
       />
       <StartDirectMessageModal
         open={startDmOpen}

@@ -211,7 +211,47 @@ export function ServiceMasterManager() {
             No services yet. Add the first service to build your catalogue.
           </p>
         ) : (
-          <div className="overflow-x-auto overscroll-x-contain">
+          <>
+          <ul className="divide-y divide-[var(--border)] md:hidden">
+            {services.map((service) => (
+              <li
+                key={service.id}
+                className="flex items-start justify-between gap-3 py-2.5"
+              >
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-medium text-[var(--foreground)]">
+                    {service.name}
+                  </p>
+                  <p className="truncate text-xs text-[var(--muted)]">
+                    {service.code}
+                    {service.category ? ` · ${service.category}` : ''}
+                    {' · '}
+                    {formatEta(service.estimatedTatHours)}
+                  </p>
+                  {canViewFinance ? (
+                    <p className="mt-1 text-xs text-[var(--muted)]">
+                      {formatMoney(service.defaultPrice, 'USD')}
+                      {' · '}
+                      {formatEditorMoney(service.artistRatePerImage)}
+                    </p>
+                  ) : null}
+                </div>
+                <div className="flex shrink-0 flex-col items-end gap-1.5">
+                  <Badge variant={service.isActive ? 'success' : 'neutral'}>
+                    {service.isActive ? 'Active' : 'Inactive'}
+                  </Badge>
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    onClick={() => openEdit(service)}
+                  >
+                    Edit
+                  </Button>
+                </div>
+              </li>
+            ))}
+          </ul>
+          <div className="hidden overflow-x-auto overscroll-x-contain md:block">
             <table className="w-full min-w-[720px] text-left text-sm md:min-w-[860px]">
               <thead>
                 <tr className="border-b border-[var(--border)] text-xs font-medium uppercase tracking-wide text-[var(--muted)]">
@@ -293,6 +333,7 @@ export function ServiceMasterManager() {
               </tbody>
             </table>
           </div>
+          </>
         )}
       </Card>
 

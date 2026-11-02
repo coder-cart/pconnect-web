@@ -1,3 +1,25 @@
+export type ClientRevisionStatus =
+  | 'open'
+  | 'in_progress'
+  | 'delivered'
+  | 'approved'
+  | 'superseded';
+
+export interface ClientRevisionSummary {
+  id: string;
+  round: number;
+  status: ClientRevisionStatus;
+  instructions?: string;
+  requestLink?: string | null;
+  previousDeliveryLink?: string | null;
+  deliveryLink?: string | null;
+  deliveredAt?: string | null;
+  approvedAt?: string | null;
+  createdAt?: string;
+  legacyOrderId?: string | null;
+  requestedBy?: { id: string; fullName: string } | null;
+}
+
 export interface OrderSummary {
   id: string;
   code: string;
@@ -23,6 +45,14 @@ export interface OrderSummary {
   outputFormat?: string | null;
   parentOrderId?: string | null;
   deliveryLink?: string | null;
+  finalDeliveryLink?: string | null;
+  finalDeliveredLink?: string | null;
+  originalOrderLink?: string | null;
+  originalDeliveredLink?: string | null;
+  hasOpenClientRevision?: boolean;
+  clientRevisionCount?: number;
+  supersededAt?: string | null;
+  clientRevisions?: ClientRevisionSummary[];
   clientAcknowledgedAt?: string | null;
   historySavedAt?: string | null;
   internalNotes?: string | null;

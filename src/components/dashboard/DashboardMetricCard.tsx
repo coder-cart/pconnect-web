@@ -47,22 +47,26 @@ export function DashboardMetricCard({
   const points = sparkline?.length ? sparkline : [0.35, 0.42, 0.38, 0.55, 0.48, 0.62, 0.7];
 
   return (
-    <Card className="animate-fade-in p-4">
-      <div className="flex items-start justify-between gap-2">
+    <Card padding="sm" className="animate-fade-in">
+      <div className="flex items-center gap-2.5">
         <div
           className={cn(
-            'flex h-9 w-9 items-center justify-center rounded-[var(--radius-md)]',
+            'flex h-8 w-8 shrink-0 items-center justify-center rounded-[var(--radius-md)]',
             styles.icon,
           )}
         >
           <Icon className="h-4 w-4" aria-hidden />
         </div>
-        <Sparkline points={points} color={styles.stroke} />
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-lg font-semibold leading-none tracking-tight text-[var(--foreground)] sm:text-xl">
+            {value}
+          </p>
+          <p className="mt-1 truncate text-xs text-[var(--muted)]">{label}</p>
+        </div>
+        <span className="hidden sm:block">
+          <Sparkline points={points} color={styles.stroke} />
+        </span>
       </div>
-      <p className="mt-3 text-2xl font-semibold tracking-tight text-[var(--foreground)]">
-        {value}
-      </p>
-      <p className="mt-0.5 text-sm text-[var(--muted)]">{label}</p>
     </Card>
   );
 }

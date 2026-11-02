@@ -1,11 +1,15 @@
 'use client';
 
 import { useState } from 'react';
-import { UserPlus } from 'lucide-react';
+import { MoreHorizontal, UserPlus } from 'lucide-react';
 import { apiRequest } from '@/lib/api-client';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
+import {
+  DropdownMenu,
+  DropdownMenuItem,
+} from '@/components/ui/DropdownMenu';
 
 export interface PortalMember {
   id: string;
@@ -361,10 +365,10 @@ export function ClientPortalUsers({
                   </Badge>
                 </div>
                 {canManage ? (
-                  <div className="flex flex-wrap items-center gap-2">
+                  <div className="flex items-center gap-2">
                     {!member.isOrgAdmin ? (
                       <select
-                        className="h-9 rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface)] px-2 text-xs text-[var(--foreground)]"
+                        className="h-9 min-w-0 flex-1 rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface)] px-2 text-xs text-[var(--foreground)] lg:max-w-xs lg:flex-none"
                         value={member.accessLevel ?? 'chat_and_orders'}
                         disabled={busyId === member.user.id}
                         onChange={(event) =>
@@ -382,52 +386,96 @@ export function ClientPortalUsers({
                           Chat and Order update
                         </option>
                       </select>
-                    ) : null}
-                    <Button
-                      size="sm"
-                      variant="secondary"
-                      disabled={busyId === member.user.id}
-                      onClick={() => void resend(member)}
-                    >
-                      Resend
-                    </Button>
-                    {member.user.status === 'inactive' ? (
-                      <Button
-                        size="sm"
-                        variant="secondary"
-                        disabled={
-                          busyId === member.user.id || seats.used >= seats.max
-                        }
-                        onClick={() => void setStatus(member, 'active')}
-                      >
-                        Enable
-                      </Button>
                     ) : (
+                      <span className="flex-1" />
+                    )}
+                    <div className="hidden flex-wrap items-center gap-2 lg:flex">
                       <Button
                         size="sm"
                         variant="secondary"
                         disabled={busyId === member.user.id}
-                        onClick={() => void setStatus(member, 'inactive')}
+                        onClick={() => void resend(member)}
                       >
-                        Disable
+                        Resend
                       </Button>
-                    )}
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      disabled={busyId === member.user.id}
-                      onClick={() => void toggleOrgAdmin(member)}
+                      {member.user.status === 'inactive' ? (
+                        <Button
+                          size="sm"
+                          variant="secondary"
+                          disabled={
+                            busyId === member.user.id || seats.used >= seats.max
+                          }
+                          onClick={() => void setStatus(member, 'active')}
+                        >
+                          Enable
+                        </Button>
+                      ) : (
+                        <Button
+                          size="sm"
+                          variant="secondary"
+                          disabled={busyId === member.user.id}
+                          onClick={() => void setStatus(member, 'inactive')}
+                        >
+                          Disable
+                        </Button>
+                      )}
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        disabled={busyId === member.user.id}
+                        onClick={() => void toggleOrgAdmin(member)}
+                      >
+                        {member.isOrgAdmin ? 'Demote' : 'Make admin'}
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="danger"
+                        disabled={busyId === member.user.id}
+                        onClick={() => void remove(member)}
+                      >
+                        Delete
+                      </Button>
+                    </div>
+                    <DropdownMenu
+                      className="lg:hidden"
+                      trigger={
+                        <Button
+                          size="sm"
+                          variant="secondary"
+                          aria-label={`Actions for ${member.user.fullName}`}
+                          disabled={busyId === member.user.id}
+                        >
+                          <MoreHorizontal className="h-4 w-4" />
+                        </Button>
+                      }
                     >
-                      {member.isOrgAdmin ? 'Demote' : 'Make admin'}
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="danger"
-                      disabled={busyId === member.user.id}
-                      onClick={() => void remove(member)}
-                    >
-                      Delete
-                    </Button>
+                      <DropdownMenuItem onClick={() => void resend(member)}>
+                        Resend
+                      </DropdownMenuItem>
+                      {member.user.status === 'inactive' ? (
+                        <DropdownMenuItem
+                          disabled={seats.used >= seats.max}
+                          onClick={() => void setStatus(member, 'active')}
+                        >
+                          Enable
+                        </DropdownMenuItem>
+                      ) : (
+                        <DropdownMenuItem
+                          onClick={() => void setStatus(member, 'inactive')}
+                        >
+                          Disable
+                        </DropdownMenuItem>
+                      )}
+                      <DropdownMenuItem onClick={() => void toggleOrgAdmin(member)}>
+                        {member.isOrgAdmin ? 'Demote' : 'Make admin'}
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        destructive
+                        onClick={() => void remove(member)}
+                      >
+                        Delete
+                      </DropdownMenuItem>
+                    </DropdownMenu>
                   </div>
                 ) : null}
               </li>

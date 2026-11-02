@@ -57,8 +57,6 @@ interface OrderCreateModalProps {
   isExternal: boolean;
   /** Locked client (client detail page). External users also auto-lock. */
   defaultClientId?: string;
-  /** Prefill New Order vs Revision when opening from the dashboard menu. */
-  initialMode?: 'new' | 'revision';
   onClose: () => void;
   onCreated: () => void;
 }
@@ -112,7 +110,6 @@ export function OrderCreateModal({
   canManage,
   isExternal,
   defaultClientId,
-  initialMode = 'new',
   onClose,
   onCreated,
 }: OrderCreateModalProps) {
@@ -134,23 +131,10 @@ export function OrderCreateModal({
   const [inDate, setInDate] = useState(new Date().toISOString().slice(0, 10));
   const [clientNotes, setClientNotes] = useState('');
   const [sourceLink, setSourceLink] = useState('');
-  const [orderMode, setOrderMode] = useState<'new' | 'revision'>('new');
-  const [parentOrderId, setParentOrderId] = useState('');
   const [outputFormat, setOutputFormat] = useState('JPG');
   const [clientPriority, setClientPriority] = useState<'medium' | 'high' | 'urgent'>('medium');
   const [suggestedServices, setSuggestedServices] = useState<
     Array<{ serviceId: string; code: string; name: string; count: number }>
-  >([]);
-  const [previousOrders, setPreviousOrders] = useState<
-    Array<{
-      id: string;
-      code: string;
-      name: string;
-      services?: string | null;
-      outputFormat?: string | null;
-      estimatedTatHours?: number | null;
-      serviceLines?: Array<{ service: { id: string } }>;
-    }>
   >([]);
   const [internalNotes, setInternalNotes] = useState('');
   const [folderStatusId, setFolderStatusId] = useState('');
@@ -172,8 +156,6 @@ export function OrderCreateModal({
     setWorkLines([emptyWorkLine()]);
     setAssignedTeamLeadUserId('');
     setAssignedQaUserId('');
-    setOrderMode(initialMode);
-    setParentOrderId('');
 
     const requests: Promise<void>[] = [
       apiRequest<ApiResponse<MasterDataStatus[]>>(
@@ -214,25 +196,7 @@ export function OrderCreateModal({
     }
 
     void Promise.all(requests);
-  }, [open, canManage, defaultClientId, isExternal, initialMode]);
-
-  useEffect(() => {
-    if (!open || orderMode !== 'revision') return;
-    const params = new URLSearchParams({
-      lifecycleStage: 'delivered',
-      pageSize: '50',
-    });
-    if (!isExternal && clientOrganizationId) {
-      params.set('clientOrganizationId', clientOrganizationId);
-    }
-    apiRequest<
-      ApiResponse<{
-        items: Array<{ id: string; code: string; name: string; services?: string | null }>;
-      }>
-    >(`/orders?${params.toString()}`)
-      .then((response) => setPreviousOrders(response.data.items))
-      .catch(() => setPreviousOrders([]));
-  }, [open, orderMode, isExternal, clientOrganizationId]);
+  }, [open, canManage, defaultClientId, isExternal]);
 
   useEffect(() => {
     if (!open || !clientOrganizationId) {
@@ -273,7 +237,7 @@ export function OrderCreateModal({
   }, [open, clientOrganizationId]);
 
   useEffect(() => {
-    if (!open || !clientOrganizationId || orderMode === 'revision') {
+    if (!open || !clientOrganizationId) {
       setSuggestedServices([]);
       return;
     }
@@ -290,7 +254,7 @@ export function OrderCreateModal({
     return () => {
       cancelled = true;
     };
-  }, [open, clientOrganizationId, orderMode]);
+  }, [open, clientOrganizationId]);
 
   const enabledServiceOptions = useMemo(
     () =>
@@ -328,10 +292,6 @@ export function OrderCreateModal({
     return Math.max(...hours);
   }, [selectedServiceConfig]);
 
-  const selectedParent =
-    previousOrders.find((order) => order.id === parentOrderId) ?? null;
-  const revisionReady = orderMode === 'revision' && Boolean(parentOrderId);
-
   const totalInFiles = useMemo(
     () =>
       workLines.reduce(
@@ -354,15 +314,11 @@ export function OrderCreateModal({
       setFormError('Order name is required.');
       return;
     }
-    if (orderMode === 'revision' && !parentOrderId) {
-      setFormError('Select the previous order to revise.');
-      return;
-    }
-    if (isExternal && orderMode !== 'revision' && !sourceLink.trim()) {
+    if (isExternal && !sourceLink.trim()) {
       setFormError('Add a Drive or file link.');
       return;
     }
-    if (isExternal && orderMode !== 'revision') {
+    if (isExternal) {
       const startedRows = workLines.filter(
         (line) => line.serviceIds.length > 0 || line.inFileCount.trim() !== '',
       );
@@ -449,51 +405,30 @@ export function OrderCreateModal({
           name: name.trim(),
           clientOrganizationId: clientOrganizationId || undefined,
           services:
-            orderMode === 'revision'
-              ? undefined
-              : selectedServiceConfig.map((row) => row.code).join(', ') || undefined,
+            selectedServiceConfig.map((row) => row.code).join(', ') || undefined,
           serviceIds:
-            orderMode === 'revision'
-              ? undefined
-              : allSelectedServiceIds.length > 0
-                ? allSelectedServiceIds
-                : undefined,
-          inDate: orderMode === 'revision' ? undefined : inDate || undefined,
-          inFileCount: orderMode === 'revision' ? undefined : totalInFiles || undefined,
-          priority: isExternal && orderMode !== 'revision' ? clientPriority : undefined,
-          outputFormat: orderMode === 'revision' ? undefined : outputFormat,
-          parentOrderId: orderMode === 'revision' ? parentOrderId : undefined,
+            allSelectedServiceIds.length > 0 ? allSelectedServiceIds : undefined,
+          inDate: inDate || undefined,
+          inFileCount: totalInFiles || undefined,
+          priority: isExternal ? clientPriority : undefined,
+          outputFormat,
           clientNotes: clientNotes || undefined,
-          sourceLink:
-            isExternal && orderMode !== 'revision'
-              ? sourceHref ?? undefined
-              : undefined,
-          internalNotes:
-            canManage && orderMode !== 'revision' ? internalNotes || undefined : undefined,
-          folderStatusId:
-            orderMode === 'revision' ? undefined : folderStatusId || undefined,
-          artistRatePerImage:
-            canViewFinance && orderMode !== 'revision' ? primaryRate : undefined,
+          sourceLink: isExternal ? sourceHref ?? undefined : undefined,
+          internalNotes: canManage ? internalNotes || undefined : undefined,
+          folderStatusId: folderStatusId || undefined,
+          artistRatePerImage: canViewFinance ? primaryRate : undefined,
           price:
-            canViewFinance && orderMode !== 'revision' && orderPriceSum > 0
-              ? orderPriceSum
-              : undefined,
-          assignedArtistUserId:
-            canManage && orderMode !== 'revision' ? primaryArtist : undefined,
-          assignedTeamLeadUserId:
-            canManage && orderMode !== 'revision'
-              ? assignedTeamLeadUserId || undefined
-              : undefined,
-          assignedQaUserId:
-            canManage && orderMode !== 'revision'
-              ? assignedQaUserId || undefined
-              : undefined,
-          extraServiceCount:
-            canManage && orderMode !== 'revision' ? orderExtraSum : undefined,
+            canViewFinance && orderPriceSum > 0 ? orderPriceSum : undefined,
+          assignedArtistUserId: canManage ? primaryArtist : undefined,
+          assignedTeamLeadUserId: canManage
+            ? assignedTeamLeadUserId || undefined
+            : undefined,
+          assignedQaUserId: canManage ? assignedQaUserId || undefined : undefined,
+          extraServiceCount: canManage ? orderExtraSum : undefined,
         }),
       });
 
-      if (orderMode !== 'revision' && allocationPayload.length > 0 && created.data?.id) {
+      if (allocationPayload.length > 0 && created.data?.id) {
         await apiRequest(`/orders/${created.data.id}/work-allocations`, {
           method: 'PUT',
           body: JSON.stringify({ allocations: allocationPayload }),
@@ -503,8 +438,6 @@ export function OrderCreateModal({
       setName('');
       setClientNotes('');
       setSourceLink('');
-      setOrderMode('new');
-      setParentOrderId('');
       setOutputFormat('JPG');
       setClientPriority('medium');
       setInternalNotes('');
@@ -527,7 +460,7 @@ export function OrderCreateModal({
       title={isExternal ? 'Submit an order' : 'Create order'}
       description={
         isExternal
-          ? 'New work or a revision of a delivered order.'
+          ? 'Submit new work. Request revisions from a delivered order.'
           : 'Set client, services, assignment, and pricing.'
       }
       onClose={onClose}
@@ -550,105 +483,6 @@ export function OrderCreateModal({
           </div>
         ) : null}
 
-        <div className="space-y-4">
-            <div className="grid gap-2 sm:grid-cols-2">
-              <button
-                type="button"
-                onClick={() => setOrderMode('new')}
-                className={`rounded-[var(--radius-md)] border px-3 py-3 text-left text-sm ${
-                  orderMode === 'new'
-                    ? 'border-[var(--primary)] bg-[var(--primary-soft)]'
-                    : 'border-[var(--border)]'
-                }`}
-              >
-                <span className="block font-medium">New Order</span>
-                <span className="text-xs text-[var(--muted)]">Submit a new project</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => setOrderMode('revision')}
-                className={`rounded-[var(--radius-md)] border px-3 py-3 text-left text-sm ${
-                  orderMode === 'revision'
-                    ? 'border-[var(--primary)] bg-[var(--primary-soft)]'
-                    : 'border-[var(--border)]'
-                }`}
-              >
-                <span className="block font-medium">Revision Order</span>
-                <span className="text-xs text-[var(--muted)]">Change a delivered project</span>
-              </button>
-            </div>
-            {orderMode === 'revision' ? (
-              <label className="block space-y-1.5">
-                <span className="text-sm font-medium">Previous order</span>
-                <select
-                  value={parentOrderId}
-                  onChange={(event) => {
-                    const nextId = event.target.value;
-                    setParentOrderId(nextId);
-                    const match = previousOrders.find((order) => order.id === nextId);
-                    if (match) {
-                      setName(match.name);
-                      const serviceIds =
-                        match.serviceLines?.map((line) => line.service.id) ?? [];
-                      if (serviceIds.length > 0) {
-                        updateWorkLine(workLines[0]?.key ?? 'line-0', {
-                          serviceIds,
-                          servicesText: match.services ?? '',
-                        });
-                      }
-                    }
-                  }}
-                  className={selectClassName}
-                >
-                  <option value="">Select a delivered order</option>
-                  {previousOrders.map((order) => (
-                    <option key={order.id} value={order.id}>
-                      {order.code} · {order.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            ) : null}
-          </div>
-
-        {orderMode === 'revision' && !revisionReady ? (
-          <p className="text-sm text-[var(--muted)]">
-            Select the delivered order. The revision only needs instructions.
-          </p>
-        ) : null}
-
-        {revisionReady && selectedParent ? (
-          <FormSection
-            title="Instructions"
-            description="Tell the team what to change. Services, format, and turnaround stay with the original order."
-          >
-            <div className="rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface-muted)] px-3 py-2.5 text-sm">
-              <p className="font-medium text-[var(--foreground)]">
-                {selectedParent.code} · {selectedParent.name}
-              </p>
-              <p className="mt-1 text-[var(--muted)]">
-                Output {selectedParent.outputFormat ?? 'JPG'}
-                {selectedParent.estimatedTatHours
-                  ? ` · Turnaround ${selectedParent.estimatedTatHours} hours`
-                  : ' · Turnaround not set'}
-              </p>
-            </div>
-            <label className="block space-y-1.5">
-              <span className="text-sm font-medium text-[var(--foreground)]">
-                Instructions
-              </span>
-              <textarea
-                value={clientNotes}
-                onChange={(event) => setClientNotes(event.target.value)}
-                rows={4}
-                placeholder="What should change on this revision?"
-                className="w-full resize-y rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-base text-[var(--foreground)] placeholder:text-[var(--muted)] focus:border-[var(--primary)] focus:outline-none focus:ring-2 focus:ring-[var(--primary-soft)] sm:text-sm"
-              />
-            </label>
-          </FormSection>
-        ) : null}
-
-        {!revisionReady && orderMode === 'new' ? (
         <FormSection
           title="Order basics"
           description="Who the job is for, the output format, and the turnaround from the client services."
@@ -876,9 +710,8 @@ export function OrderCreateModal({
             />
           </label>
         </FormSection>
-        ) : null}
 
-        {!isExternal && orderMode === 'new' ? (
+        {!isExternal ? (
         <FormSection
           title="Services & files"
           description="Add one or more lines with services and incoming file counts."
@@ -1041,7 +874,7 @@ export function OrderCreateModal({
         </FormSection>
         ) : null}
 
-        {canManage && orderMode === 'new' ? (
+        {canManage ? (
           <FormSection
             title="Assignment & billing"
             description={

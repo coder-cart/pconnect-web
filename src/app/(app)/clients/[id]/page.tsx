@@ -571,7 +571,7 @@ export default function ClientDetailPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <PageHeader
         title={client.name}
         description={
@@ -599,19 +599,19 @@ export default function ClientDetailPage() {
         }
       />
 
-      <Card className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+      <Card padding="sm" className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-3">
           <ClientOrgLogo
             clientId={client.id}
             name={client.name}
             logoUpdatedAt={client.logoUpdatedAt}
-            className="h-14 w-14"
+            className="h-10 w-10 sm:h-14 sm:w-14"
           />
           <div className="min-w-0">
             <p className="text-sm font-medium text-[var(--foreground)]">
               Company logo
             </p>
-            <p className="mt-0.5 text-xs text-[var(--muted)]">
+            <p className="mt-0.5 hidden text-xs text-[var(--muted)] sm:block">
               Shown in this workspace. JPEG, PNG, WebP, or GIF · crop before
               save · 2 MB max.
             </p>
@@ -702,7 +702,7 @@ export default function ClientDetailPage() {
 
       {activeTab === 'overview' && overview ? (
         <div className="space-y-4">
-          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <div className="grid grid-cols-2 gap-2 xl:grid-cols-4">
             <StatCard
               label="Active orders"
               value={String(overview.activeOrders)}
@@ -819,12 +819,14 @@ export default function ClientDetailPage() {
 
       {activeTab === 'orders' ? (
         <Card padding="none" className="overflow-hidden">
-          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--border)] px-4 py-3">
-            <Input
-              placeholder="Search order number or name..."
-              value={orderSearch}
-              onChange={(event) => setOrderSearch(event.target.value)}
-            />
+          <div className="flex flex-col gap-2 border-b border-[var(--border)] px-3 py-2.5 sm:flex-row sm:items-center sm:justify-between sm:px-4">
+            <div className="min-w-0 flex-1">
+              <Input
+                placeholder="Search order number or name..."
+                value={orderSearch}
+                onChange={(event) => setOrderSearch(event.target.value)}
+              />
+            </div>
             <Button size="sm" onClick={() => setCreateOrderOpen(true)}>
               <Plus className="h-4 w-4" />
               Create order
@@ -867,8 +869,32 @@ export default function ClientDetailPage() {
             {contacts.length === 0 ? (
               <p className="text-sm text-[var(--muted)]">No contacts yet.</p>
             ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full min-w-[480px] text-left text-sm sm:min-w-[560px]">
+              <>
+              <ul className="divide-y divide-[var(--border)] md:hidden">
+                {contacts.map((contact) => (
+                  <li key={contact.id} className="py-2.5">
+                    <p className="text-sm font-medium text-[var(--foreground)]">
+                      {contact.name}
+                      {contact.isPrimary ? (
+                        <Badge variant="primary" className="ml-2">
+                          Primary
+                        </Badge>
+                      ) : null}
+                    </p>
+                    <p className="truncate text-xs text-[var(--muted)]">
+                      {contact.designation || 'No designation'}
+                      {' · '}
+                      {contact.email || 'No email'}
+                    </p>
+                    <p className="truncate text-xs text-[var(--muted)]">
+                      {contact.phone || 'No phone'}
+                      {contact.whatsapp ? ` · WhatsApp ${contact.whatsapp}` : ''}
+                    </p>
+                  </li>
+                ))}
+              </ul>
+              <div className="hidden overflow-x-auto md:block">
+                <table className="w-full min-w-[560px] text-left text-sm">
                   <thead>
                     <tr className="border-b border-[var(--border)] text-xs uppercase text-[var(--muted)]">
                       <th className="pb-2 pr-3">Name</th>
@@ -903,6 +929,7 @@ export default function ClientDetailPage() {
                   </tbody>
                 </table>
               </div>
+              </>
             )}
           </Card>
 

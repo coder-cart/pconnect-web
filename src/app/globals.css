@@ -35,8 +35,8 @@
   --space-8: 2rem;
   --space-12: 3rem;
   --touch-min: 2.75rem;
-  --page-pad-x: 1rem;
-  --page-pad-y: 1rem;
+  --page-pad-x: 0.75rem;
+  --page-pad-y: 0.75rem;
   --sidebar-width: 16rem;
   --sidebar-width-collapsed: 4.5rem;
   --safe-top: env(safe-area-inset-top, 0px);
@@ -163,7 +163,16 @@ body {
   --font-marketing-body: var(--font-inter);
 }
 
-@media (min-width: 640px) {
+@media (min-width: 768px) {
+  :root,
+  [data-theme='light'],
+  [data-theme='dark'] {
+    --page-pad-x: 1.25rem;
+    --page-pad-y: 1rem;
+  }
+}
+
+@media (min-width: 1024px) {
   :root,
   [data-theme='light'],
   [data-theme='dark'] {
@@ -330,6 +339,17 @@ header.shell-chrome .shell-overlay-panel textarea::placeholder {
 
 .chat-message-row {
   padding: var(--chat-message-y) var(--chat-message-x);
+}
+
+@media (max-width: 767px) {
+  .app-root :where(.space-y-6) > :not([hidden]) ~ :not([hidden]) {
+    margin-top: 1rem;
+  }
+}
+
+.app-root main > * {
+  min-width: 0;
+  max-width: 100%;
 }
 
 .page-pad {
