@@ -20,11 +20,16 @@ export function isAway(presenceStatus?: string | null) {
 }
 
 export function availabilityLabel(presenceStatus?: string | null) {
-  return isAway(presenceStatus) ? 'Away' : 'Active';
+  return isAway(presenceStatus) ? 'Offline' : 'Online';
 }
 
 export function formatCustomStatus(fields: UserPresenceFields) {
   return [fields.statusEmoji, fields.statusText].filter(Boolean).join(' ').trim();
+}
+
+/** Prefer custom status when set; otherwise Online/Offline. Never joins both. */
+export function presenceSubtitle(fields: UserPresenceFields) {
+  return formatCustomStatus(fields) || availabilityLabel(fields.presenceStatus);
 }
 
 export function applyPresenceUpdate<T extends UserPresenceFields>(

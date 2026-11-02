@@ -113,7 +113,7 @@ const TOUR_STEPS: Record<TourPersona, TourStep[]> = {
     {
       id: 'profile',
       title: 'Status and account',
-      body: 'Set Active/Away and a custom status so teammates know when you are available.',
+      body: 'Set Online/Offline and a custom status so teammates know when you are available.',
       target: '[data-tour="profile-menu"]',
     },
   ],

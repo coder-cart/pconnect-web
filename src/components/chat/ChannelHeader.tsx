@@ -37,9 +37,8 @@ import {
 import { cn } from '@/lib/cn';
 import { CHAT_HUDDLE_ENABLED } from '@/lib/chat-release';
 import {
-  availabilityLabel,
-  formatCustomStatus,
   isAway,
+  presenceSubtitle,
 } from '@/lib/user-presence';
 
 type ChannelTab = 'messages' | 'canvas' | 'pins';
@@ -128,11 +127,8 @@ export function ChannelHeader({
 
   const previewMembers = members.slice(0, 4);
   const extraMembers = Math.max(0, members.length - previewMembers.length);
-  const dmStatusLine = dmPeer ? formatCustomStatus(dmPeer) : '';
-  const dmAvailability =
-    channelType === 'direct' && dmPeer
-      ? availabilityLabel(dmPeer.presenceStatus)
-      : null;
+  const dmSubtitle =
+    channelType === 'direct' && dmPeer ? presenceSubtitle(dmPeer) : null;
 
   return (
     <div className="shrink-0 border-b border-[var(--border)]">
@@ -207,10 +203,9 @@ export function ChannelHeader({
               {showHashPrefix ? '#' : ''}
               {label}
             </h2>
-            {dmAvailability ? (
+            {dmSubtitle ? (
               <p className="mt-0.5 truncate text-xs text-[var(--muted)]">
-                {dmAvailability}
-                {dmStatusLine ? ` · ${dmStatusLine}` : ''}
+                {dmSubtitle}
               </p>
             ) : breadcrumb.length > 0 ? (
               <p className="mt-0.5 truncate text-xs text-[var(--muted)]">
@@ -228,10 +223,7 @@ export function ChannelHeader({
           {previewMembers.length > 0 ? (
             <div className="hidden items-center lg:flex">
               {previewMembers.map((member, index) => {
-                const memberStatus = formatCustomStatus(member);
-                const title = memberStatus
-                  ? `${member.fullName} · ${availabilityLabel(member.presenceStatus)} · ${memberStatus}`
-                  : `${member.fullName} · ${availabilityLabel(member.presenceStatus)}`;
+                const title = `${member.fullName} · ${presenceSubtitle(member)}`;
                 return (
                   <span
                     key={member.id}

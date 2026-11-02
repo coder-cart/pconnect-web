@@ -14,9 +14,9 @@ import {
 } from '@/lib/chat-types';
 import { cn } from '@/lib/cn';
 import {
-  availabilityLabel,
   formatCustomStatus,
   isAway,
+  presenceSubtitle,
 } from '@/lib/user-presence';
 
 interface ChannelSidebarProps {
@@ -69,8 +69,6 @@ function DmPeerAvatar({ peer }: { peer: ChatDmPeer }) {
 }
 
 function DmHoverCard({ peer }: { peer: ChatDmPeer }) {
-  const statusLine = formatCustomStatus(peer);
-
   return (
     <div
       className="pointer-events-none absolute left-0 top-full z-40 mt-1 w-56 max-w-[calc(100vw-2rem)] rounded-[var(--radius-lg)] border border-[var(--border)] bg-[var(--surface)] p-3 shadow-[var(--shadow-md)] lg:left-full lg:top-0 lg:mt-0 lg:ml-2"
@@ -95,11 +93,8 @@ function DmHoverCard({ peer }: { peer: ChatDmPeer }) {
             </p>
           ) : null}
           <p className="mt-1 text-xs font-medium text-[var(--foreground)]">
-            {availabilityLabel(peer.presenceStatus)}
+            {presenceSubtitle(peer)}
           </p>
-          {statusLine ? (
-            <p className="mt-1 truncate text-xs text-[var(--muted)]">{statusLine}</p>
-          ) : null}
         </div>
       </div>
     </div>

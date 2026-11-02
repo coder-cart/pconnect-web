@@ -24,9 +24,8 @@ import {
 } from '@/lib/chat-types';
 import { cn } from '@/lib/cn';
 import {
-  availabilityLabel,
-  formatCustomStatus,
   isAway,
+  presenceSubtitle,
 } from '@/lib/user-presence';
 
 const DETAILS_PANEL_ID = 'channel-details-panel';
@@ -372,9 +371,7 @@ function MemberList({ members }: { members: ChannelMemberOption[] }) {
 
   return (
     <ul className="space-y-1">
-      {members.map((member) => {
-        const statusLine = formatCustomStatus(member);
-        return (
+      {members.map((member) => (
           <li
             key={member.id}
             className="flex items-center gap-2.5 rounded-[var(--radius-md)] px-1 py-1.5"
@@ -401,22 +398,15 @@ function MemberList({ members }: { members: ChannelMemberOption[] }) {
             <div className="min-w-0">
               <p className="truncate text-sm font-medium text-[var(--foreground)]">
                 {member.fullName}
-                {member.statusEmoji ? (
-                  <span className="ml-1 font-normal" aria-hidden>
-                    {member.statusEmoji}
-                  </span>
-                ) : null}
               </p>
               <p className="truncate text-xs text-[var(--muted)]">
-                {availabilityLabel(member.presenceStatus)}
-                {statusLine ? ` · ${statusLine}` : ''}
+                {presenceSubtitle(member)}
                 {' · '}
                 {member.userType === 'external' ? 'Client' : 'Team member'}
               </p>
             </div>
           </li>
-        );
-      })}
+      ))}
     </ul>
   );
 }
