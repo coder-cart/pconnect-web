@@ -48,7 +48,7 @@ export function Logo({
         width={209}
         height={72}
         className={cn(
-          'h-9 w-auto max-w-full object-contain object-left',
+          'w-auto max-w-full object-contain object-left',
           className,
         )}
       />
@@ -73,7 +73,7 @@ export function Logo({
         alt=""
         width={209}
         height={72}
-        className="brand-lockup-dark h-8 w-auto max-w-[180px] object-contain object-left sm:h-9 sm:max-w-[220px]"
+        className="brand-lockup-dark w-auto max-w-[180px] object-contain object-left sm:h-12 sm:max-w-[220px]"
       />
     </div>
   );
