@@ -937,6 +937,7 @@ export default function OrdersPage() {
       <RequestRevisionModal
         open={Boolean(revisionOrder)}
         order={revisionOrder}
+        canSetPriority={canManage}
         onClose={() => setRevisionOrder(null)}
         onCreated={() => {
           notifyRefresh();

@@ -21,7 +21,7 @@ export const BRAND = {
   /** Horizontal lockup for light backgrounds. */
   lockup: '/brand/colabdeck-lockup.png',
   /** Horizontal lockup for dark backgrounds. */
-  lockupDark: '/brand/colabdeck-lockup-dark.png',
+  lockupDark: '/brand/colabdeck-lockup-dark1.png',
   ogImage: '/brand/colabdeck-og.png',
   favicon: '/favicon.png',
   faviconIco: '/favicon.ico',

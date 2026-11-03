@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { apiRequest } from '@/lib/api-client';
 import { ApiResponse } from '@/lib/auth';
 import { Button } from '@/components/ui/Button';
@@ -11,6 +11,8 @@ import { OrderSummary, toExternalHref } from '@/lib/orders';
 interface RequestRevisionModalProps {
   open: boolean;
   order: OrderSummary | null;
+  /** Managers/admins can set priority when opening a revision. */
+  canSetPriority?: boolean;
   onClose: () => void;
   onCreated: () => void;
 }
@@ -18,13 +20,23 @@ interface RequestRevisionModalProps {
 export function RequestRevisionModal({
   open,
   order,
+  canSetPriority = false,
   onClose,
   onCreated,
 }: RequestRevisionModalProps) {
   const [instructions, setInstructions] = useState('');
   const [requestLink, setRequestLink] = useState('');
+  const [priority, setPriority] = useState<'medium' | 'high' | 'urgent'>('medium');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+
+  useEffect(() => {
+    if (!open) return;
+    setInstructions('');
+    setRequestLink('');
+    setPriority('medium');
+    setErrorMessage(null);
+  }, [open, order?.id]);
 
   const previousDeliveryHref = toExternalHref(
     order?.deliveryLink ?? order?.originalDeliveredLink ?? '',
@@ -47,6 +59,7 @@ export function RequestRevisionModal({
           body: JSON.stringify({
             instructions: trimmed,
             requestLink: requestLink.trim() || undefined,
+            ...(canSetPriority ? { priority } : {}),
           }),
         },
       );
@@ -133,9 +146,33 @@ export function RequestRevisionModal({
           placeholder="https://drive.google.com/..."
         />
 
+        {canSetPriority ? (
+          <fieldset className="space-y-2">
+            <legend className="text-sm font-medium">Priority</legend>
+            {(
+              [
+                ['medium', 'Standard turnaround'],
+                ['high', 'High priority'],
+                ['urgent', 'Urgent'],
+              ] as const
+            ).map(([value, label]) => (
+              <label key={value} className="flex items-center gap-2 text-sm">
+                <input
+                  type="radio"
+                  name="revision-priority"
+                  checked={priority === value}
+                  onChange={() => setPriority(value)}
+                />
+                {label}
+              </label>
+            ))}
+          </fieldset>
+        ) : null}
+
         <p className="text-xs text-[var(--muted)]">
-          The team will use the previous delivery link while working on this
-          revision.
+          Previous delivery files stay available for reference. When this
+          revision is delivered, the team must set a new delivery link — the
+          previous link cannot be reused.
         </p>
 
         <div className="flex justify-end sm:hidden">

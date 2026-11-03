@@ -94,7 +94,7 @@ export function OrderRevisionHistory({ order }: { order: OrderSummary }) {
       {openRevision && previousForOpen ? (
         <div className="rounded-[var(--radius-md)] border border-[color-mix(in_srgb,var(--warning)_35%,var(--border))] bg-[color-mix(in_srgb,var(--warning)_8%,transparent)] px-3 py-2.5">
           <p className="text-xs font-medium text-[var(--foreground)]">
-            Previous delivered files (for this revision)
+            Previous delivered files (reference only — re-delivery needs a new link)
           </p>
           <a
             href={previousForOpen}

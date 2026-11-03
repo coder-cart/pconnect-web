@@ -42,6 +42,7 @@ import { cn } from '@/lib/cn';
 import { CHAT_HUDDLE_ENABLED } from '@/lib/chat-release';
 import { ChannelMemberOption, ChannelNotificationPreference } from '@/lib/channelMembers';
 import { applyPresenceUpdate } from '@/lib/user-presence';
+import { isWorkspaceAdmin } from '@/lib/navigation';
 
 interface ChatWorkspaceProps {
   user: AuthenticatedUser;
@@ -131,6 +132,7 @@ export function ChatWorkspace({
   const [isLoadingThread, setIsLoadingThread] = useState(false);
   const [isSending, setIsSending] = useState(false);
   const [isSendingThreadReply, setIsSendingThreadReply] = useState(false);
+  const [isDeletingGroup, setIsDeletingGroup] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [createChannelOpen, setCreateChannelOpen] = useState(false);
   const [channelPreset, setChannelPreset] = useState<{
@@ -373,6 +375,33 @@ export function ChatWorkspace({
             user.id,
           ),
         );
+      }
+
+      if (event === 'annotation.created') {
+        const payload = data as {
+          fileId?: string;
+          annotation?: { fileId?: string };
+        };
+        const fileId = payload.fileId ?? payload.annotation?.fileId;
+        if (!fileId) return;
+
+        const bumpCount = (messages: ChatMessage[]) =>
+          messages.map((message) => ({
+            ...message,
+            attachments: message.attachments?.map((attachment) => {
+              if (attachment.file?.id !== fileId) return attachment;
+              return {
+                ...attachment,
+                file: {
+                  ...attachment.file,
+                  annotationCount: (attachment.file.annotationCount ?? 0) + 1,
+                },
+              };
+            }),
+          }));
+
+        setMessages((current) => bumpCount(current));
+        setThreadReplies((current) => bumpCount(current));
       }
     });
   }, [subscribeChannelEvents, user.id]);
@@ -850,17 +879,46 @@ export function ChatWorkspace({
     setSelectedChannelId(channel.id);
   }
 
+  async function handleDeleteGroup() {
+    if (!selectedChannelId || selectedChannel?.type !== 'group') return;
+    const confirmed = window.confirm(
+      `Delete group “${getChannelLabel(selectedChannel)}”? This cannot be undone.`,
+    );
+    if (!confirmed) return;
+
+    setIsDeletingGroup(true);
+    setErrorMessage(null);
+    try {
+      await apiRequest(`/channels/${selectedChannelId}`, { method: 'DELETE' });
+      setChannels((current) =>
+        current.filter((channel) => channel.id !== selectedChannelId),
+      );
+      setSelectedChannelId(null);
+      setDetailsOpen(false);
+      setMessages([]);
+    } catch (error) {
+      setErrorMessage(
+        error instanceof Error ? error.message : 'Unable to delete group',
+      );
+    } finally {
+      setIsDeletingGroup(false);
+    }
+  }
+
   const selectedChannel = channels.find(
     (channel) => channel.id === selectedChannelId,
   );
   const canManageMembers =
     (canCreateStaffChannel &&
       (selectedChannel?.type === 'private' ||
+        selectedChannel?.type === 'group' ||
         selectedChannel?.type === 'client_shared')) ||
     (isExternalUser &&
       selectedChannel?.type === 'client_shared' &&
       viewerCanInviteClientTeammates);
   const canInvite = canManageMembers;
+  const canDeleteGroup =
+    isWorkspaceAdmin(user.roleCodes) && selectedChannel?.type === 'group';
   const activeThreadMessage = messages.find(
     (message) => message.id === threadMessageId,
   );
@@ -1127,6 +1185,9 @@ export function ChatWorkspace({
             isLoadingPins={isLoadingPins}
             canInvite={canInvite}
             onInvite={() => setManageMembersOpen(true)}
+            canDeleteGroup={canDeleteGroup}
+            onDeleteGroup={() => void handleDeleteGroup()}
+            isDeletingGroup={isDeletingGroup}
             onJumpToPin={handleJumpToPinnedMessage}
             onClose={() => setDetailsOpen(false)}
             className={cn(

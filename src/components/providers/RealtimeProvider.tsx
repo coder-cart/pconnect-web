@@ -82,6 +82,7 @@ const CHANNEL_EVENTS = [
   'reaction.removed',
   'message.pinned',
   'message.unpinned',
+  'annotation.created',
 ] as const;
 
 const RealtimeContext = createContext<RealtimeContextValue | null>(null);

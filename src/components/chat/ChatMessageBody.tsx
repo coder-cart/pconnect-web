@@ -4,7 +4,9 @@ import { useEffect, useState } from 'react';
 import { API_BASE_URL, AUTH_TOKEN_KEY } from '@/lib/config';
 import { renderMarkdownBody } from '@/lib/chatMarkdown';
 import { cn } from '@/lib/cn';
-import { ExternalLink, FileText, ImageIcon } from 'lucide-react';
+import { ExternalLink, FileText, ImageIcon, MessageSquareText } from 'lucide-react';
+import { ImageAnnotationDialog } from '@/components/chat/ImageAnnotationDialog';
+import { isAnnotatableImageMime } from '@/lib/image-annotations';
 
 export interface MessageAttachment {
   id: string;
@@ -18,6 +20,12 @@ export interface MessageAttachment {
     id: string;
     fileName: string;
     mimeType: string;
+    processingStatus?: string;
+    originalWidth?: number | null;
+    originalHeight?: number | null;
+    hasWebp?: boolean;
+    hasThumbnail?: boolean;
+    annotationCount?: number;
   } | null;
 }
 
@@ -36,10 +44,23 @@ function providerClass(provider?: string | null) {
 export function ChatMessageBody({
   body,
   attachments = [],
+  channelId,
+  currentUserId,
 }: {
   body: string;
   attachments?: MessageAttachment[];
+  channelId?: string;
+  currentUserId?: string;
 }) {
+  const [reviewing, setReviewing] = useState<{
+    fileId: string;
+    fileName: string;
+    mimeType: string;
+    hasWebp?: boolean;
+    annotationCount?: number;
+    markerNumber?: number | null;
+  } | null>(null);
+
   return (
     <div className="space-y-1">
       {body !== '(attachment)' ? renderMarkdownBody(body) : null}
@@ -83,12 +104,35 @@ export function ChatMessageBody({
           const isVideo = mimeType.startsWith('video/');
 
           if (isImage && fileId) {
+            const annotationCount = attachment.file?.annotationCount ?? 0;
             return (
-              <AuthenticatedImage
-                key={attachment.id}
-                fileId={fileId}
-                alt={fileName}
-              />
+              <div key={attachment.id} className="relative inline-block max-w-full">
+                <AuthenticatedImage
+                  fileId={fileId}
+                  alt={fileName}
+                  preferThumbnail={Boolean(attachment.file?.hasThumbnail)}
+                  onOpen={() => {
+                    if (!channelId) return;
+                    setReviewing({
+                      fileId,
+                      fileName,
+                      mimeType,
+                      hasWebp: attachment.file?.hasWebp,
+                      annotationCount,
+                    });
+                  }}
+                />
+                {annotationCount > 0 ? (
+                  <span className="pointer-events-none absolute left-2 top-2 inline-flex items-center gap-1 rounded-full bg-black/70 px-2 py-0.5 text-[10px] font-semibold text-white">
+                    <MessageSquareText className="h-3 w-3" />
+                    {annotationCount}
+                  </span>
+                ) : isAnnotatableImageMime(mimeType) && channelId ? (
+                  <span className="pointer-events-none absolute left-2 top-2 inline-flex items-center gap-1 rounded-full bg-black/55 px-2 py-0.5 text-[10px] font-medium text-white">
+                    Feedback
+                  </span>
+                ) : null}
+              </div>
             );
           }
 
@@ -130,38 +174,86 @@ export function ChatMessageBody({
 
         return null;
       })}
+
+      {reviewing && channelId ? (
+        <ImageAnnotationDialog
+          open
+          channelId={channelId}
+          file={{
+            id: reviewing.fileId,
+            fileName: reviewing.fileName,
+            mimeType: reviewing.mimeType,
+            hasWebp: reviewing.hasWebp,
+            annotationCount: reviewing.annotationCount,
+          }}
+          mode="review"
+          currentUserId={currentUserId ?? ''}
+          canAnnotate={Boolean(currentUserId)}
+          initialMarkerNumber={reviewing.markerNumber}
+          onClose={() => setReviewing(null)}
+          onAnnotationsChange={(count) => {
+            setReviewing((current) =>
+              current ? { ...current, annotationCount: count } : current,
+            );
+          }}
+        />
+      ) : null}
     </div>
   );
 }
 
-function AuthenticatedImage({ fileId, alt }: { fileId: string; alt: string }) {
+function AuthenticatedImage({
+  fileId,
+  alt,
+  preferThumbnail = false,
+  onOpen,
+}: {
+  fileId: string;
+  alt: string;
+  preferThumbnail?: boolean;
+  onOpen?: () => void;
+}) {
   const [src, setSrc] = useState<string | null>(null);
 
   useEffect(() => {
     let objectUrl: string | null = null;
+    let cancelled = false;
     const token = window.localStorage.getItem(AUTH_TOKEN_KEY);
+    const variants = preferThumbnail
+      ? (['thumbnail', 'webp', 'original'] as const)
+      : (['webp', 'original'] as const);
 
-    fetch(`${API_BASE_URL}/files/${fileId}/download`, {
-      headers: token ? { Authorization: `Bearer ${token}` } : {},
-    })
-      .then((response) => {
-        if (!response.ok) {
-          throw new Error('Unable to load image');
+    async function loadImage() {
+      for (const variant of variants) {
+        try {
+          const response = await fetch(
+            `${API_BASE_URL}/files/${fileId}/download?variant=${variant}`,
+            {
+              headers: token ? { Authorization: `Bearer ${token}` } : {},
+            },
+          );
+          if (!response.ok) continue;
+          const blob = await response.blob();
+          if (cancelled) return;
+          objectUrl = URL.createObjectURL(blob);
+          setSrc(objectUrl);
+          return;
+        } catch {
+          // try next variant
         }
-        return response.blob();
-      })
-      .then((blob) => {
-        objectUrl = URL.createObjectURL(blob);
-        setSrc(objectUrl);
-      })
-      .catch(() => setSrc(null));
+      }
+      if (!cancelled) setSrc(null);
+    }
+
+    void loadImage();
 
     return () => {
+      cancelled = true;
       if (objectUrl) {
         URL.revokeObjectURL(objectUrl);
       }
     };
-  }, [fileId]);
+  }, [fileId, preferThumbnail]);
 
   if (!src) {
     return (
@@ -173,15 +265,14 @@ function AuthenticatedImage({ fileId, alt }: { fileId: string; alt: string }) {
   }
 
   return (
-    <a
-      href={src}
-      target="_blank"
-      rel="noopener noreferrer"
-      className="block overflow-hidden rounded-[var(--radius-md)] border border-[var(--border)]"
+    <button
+      type="button"
+      onClick={onOpen}
+      className="block max-w-full overflow-hidden rounded-[var(--radius-md)] border border-[var(--border)] text-left"
     >
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img src={src} alt={alt} className="max-h-64 w-full object-cover" />
-    </a>
+    </button>
   );
 }
 

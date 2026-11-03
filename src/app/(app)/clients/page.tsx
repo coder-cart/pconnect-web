@@ -44,6 +44,7 @@ export default function ClientsPage() {
   const router = useRouter();
   const { user, refreshKey, notifyRefresh } = useWorkspace();
   const canManageClients = userHasPermission(user, 'clients.manage');
+  const canManageOnboarding = userHasPermission(user, 'onboarding.manage');
   const [createOpen, setCreateOpen] = useState(false);
   const [onboardingClientId, setOnboardingClientId] = useState<string | undefined>();
   const [linkClient, setLinkClient] = useState<ClientItem | null>(null);
@@ -126,7 +127,7 @@ export default function ClientsPage() {
                 <MessageSquare className="h-4 w-4" />
                 Open messages
               </Button>
-              {canManageClients ? (
+              {canManageOnboarding ? (
                 <Button
                   size="sm"
                   variant="secondary"
@@ -159,7 +160,7 @@ export default function ClientsPage() {
               <DropdownMenuItem onClick={() => void openClientMessages(item.id)}>
                 Open messages
               </DropdownMenuItem>
-              {canManageClients ? (
+              {canManageOnboarding ? (
                 <DropdownMenuItem onClick={() => setOnboardingClientId(item.id)}>
                   Start onboarding
                 </DropdownMenuItem>

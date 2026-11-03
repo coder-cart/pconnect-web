@@ -442,7 +442,11 @@ export function OrderKanbanBoard({
         mode={deliveryModalMode}
         orderCode={deliveryTarget?.code}
         orderName={deliveryTarget?.name}
-        initialLink={deliveryTarget?.deliveryLink}
+        initialLink={
+          deliveryTarget?.hasOpenClientRevision
+            ? ''
+            : deliveryTarget?.deliveryLink
+        }
         isSubmitting={busy}
         onClose={() => {
           if (!busy) setDeliveryTarget(null);

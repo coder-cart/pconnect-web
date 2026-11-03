@@ -130,6 +130,8 @@ export function MessageItem({
             <ChatMessageBody
               body={message.body}
               attachments={message.attachments}
+              channelId={channelId}
+              currentUserId={currentUserId}
             />
           </div>
           <ReactionBar

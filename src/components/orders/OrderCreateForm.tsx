@@ -410,7 +410,7 @@ export function OrderCreateModal({
             allSelectedServiceIds.length > 0 ? allSelectedServiceIds : undefined,
           inDate: inDate || undefined,
           inFileCount: totalInFiles || undefined,
-          priority: isExternal ? clientPriority : undefined,
+          priority: isExternal ? undefined : clientPriority,
           outputFormat,
           clientNotes: clientNotes || undefined,
           sourceLink: isExternal ? sourceHref ?? undefined : undefined,
@@ -485,7 +485,11 @@ export function OrderCreateModal({
 
         <FormSection
           title="Order basics"
-          description="Who the job is for, the output format, and the turnaround from the client services."
+          description={
+            isExternal
+              ? 'Who the job is for and the output format.'
+              : 'Who the job is for, the output format, and turnaround from client services.'
+          }
         >
           {clientLocked ? (
             <div className="rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface-muted)] px-3 py-2.5">
@@ -532,11 +536,13 @@ export function OrderCreateModal({
               onChange={(event) => setInDate(event.target.value)}
             />
           )}
-          <p className="text-sm text-[var(--muted)]">
-            {turnaroundHours
-              ? `Turnaround: ${turnaroundHours} hours`
-              : 'Turnaround not set'}
-          </p>
+          {!isExternal ? (
+            <p className="text-sm text-[var(--muted)]">
+              {turnaroundHours
+                ? `Turnaround: ${turnaroundHours} hours`
+                : 'Turnaround not set'}
+            </p>
+          ) : null}
           {suggestedServices.length > 0 ? (
             <div className="space-y-2">
               <p className="text-sm font-medium text-[var(--foreground)]">
@@ -633,28 +639,29 @@ export function OrderCreateModal({
                   </div>
                 ))}
               </div>
-              <fieldset className="space-y-2">
-                <legend className="text-sm font-medium">Priority</legend>
-                {(
-                  [
-                    ['medium', 'Standard turnaround'],
-                    ['high', 'High priority'],
-                    ['urgent', 'Urgent — subject to confirmation'],
-                  ] as const
-                ).map(([value, label]) => (
-                  <label key={value} className="flex items-center gap-2 text-sm">
-                    <input
-                      type="radio"
-                      name="client-priority"
-                      checked={clientPriority === value}
-                      onChange={() => setClientPriority(value)}
-                    />
-                    {label}
-                  </label>
-                ))}
-              </fieldset>
             </>
-          ) : null}
+          ) : (
+            <fieldset className="space-y-2">
+              <legend className="text-sm font-medium">Priority</legend>
+              {(
+                [
+                  ['medium', 'Standard turnaround'],
+                  ['high', 'High priority'],
+                  ['urgent', 'Urgent'],
+                ] as const
+              ).map(([value, label]) => (
+                <label key={value} className="flex items-center gap-2 text-sm">
+                  <input
+                    type="radio"
+                    name="staff-priority"
+                    checked={clientPriority === value}
+                    onChange={() => setClientPriority(value)}
+                  />
+                  {label}
+                </label>
+              ))}
+            </fieldset>
+          )}
 
           <fieldset className="space-y-2">
             <legend className="text-sm font-medium">Output format</legend>

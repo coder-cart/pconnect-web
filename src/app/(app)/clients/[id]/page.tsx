@@ -174,6 +174,7 @@ export default function ClientDetailPage() {
   const router = useRouter();
   const { user } = useWorkspace();
   const canManage = userHasPermission(user, 'clients.manage');
+  const canManageOnboarding = userHasPermission(user, 'onboarding.manage');
   const canManageLogo = canManage || user.userType === 'external';
 
   const [activeTab, setActiveTab] = useState(() =>
@@ -1270,7 +1271,7 @@ export default function ClientDetailPage() {
                   Onboarding checklists
                 </h3>
               </div>
-              {canManage ? (
+              {canManageOnboarding ? (
                 <Button
                   size="sm"
                   variant="secondary"

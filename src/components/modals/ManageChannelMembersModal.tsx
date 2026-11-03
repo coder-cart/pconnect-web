@@ -251,7 +251,7 @@ export function ManageChannelMembersModal({
   const addLabel =
     selectedCandidate?.userType === 'external' || clientAdminMode
       ? 'Send invite'
-      : 'Add member';
+      : 'Add teammate';
   const clientOrganization =
     channel?.clientOrganization ?? channel?.project?.clientOrganization ?? null;
   const hubLabel =
@@ -275,7 +275,7 @@ export function ManageChannelMembersModal({
             ? `Invite your portal teammates to ${hubLabel}. They must accept before they can message.`
             : showClientUsers
               ? `Add internal teammates or invite client team members to ${hubLabel}.`
-              : `Manage membership for #${channel.name}.`
+              : `Add teammates to #${channel.name}.`
           : 'Load channel members and invite additional people.'
       }
       footer={

@@ -127,6 +127,8 @@ export function ThreadPanel({
             <ChatMessageBody
               body={parentMessage.body}
               attachments={parentMessage.attachments}
+              channelId={channelId}
+              currentUserId={currentUserId}
             />
           </div>
         </div>

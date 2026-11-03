@@ -10,6 +10,7 @@ import {
   List,
   ListOrdered,
   Mic,
+  MessageSquareText,
   Paperclip,
   Plus,
   Quote,
@@ -26,6 +27,7 @@ import {
 } from '@/components/ui/DropdownMenu';
 import { EmojiPicker } from '@/components/chat/EmojiPicker';
 import { MentionPicker } from '@/components/chat/MentionPicker';
+import { ImageAnnotationDialog } from '@/components/chat/ImageAnnotationDialog';
 import { cn } from '@/lib/cn';
 import { CHAT_MEDIA_UPLOADS_ENABLED } from '@/lib/chat-release';
 import {
@@ -40,6 +42,12 @@ import {
   isEditorEmpty,
 } from '@/lib/chatMarkdown';
 import { API_BASE_URL, AUTH_TOKEN_KEY } from '@/lib/config';
+import {
+  AnnotatableFile,
+  IMAGE_ANNOTATION_ACCEPT,
+  isAnnotatableImageMime,
+  validateAnnotatableImageFile,
+} from '@/lib/image-annotations';
 
 interface PendingAttachment {
   kind: 'file' | 'link';
@@ -47,6 +55,12 @@ interface PendingAttachment {
   url?: string;
   title?: string;
   label: string;
+  mimeType?: string;
+  previewUrl?: string | null;
+  annotationCount?: number;
+  hasWebp?: boolean;
+  originalWidth?: number | null;
+  originalHeight?: number | null;
 }
 
 interface ChatComposerProps {
@@ -93,6 +107,7 @@ export function ChatComposer({
   const [linkTitle, setLinkTitle] = useState('');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isUploading, setIsUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState<number | null>(null);
   const [isRecording, setIsRecording] = useState(false);
   const [alsoSendToChannel, setAlsoSendToChannel] = useState(false);
   const [notifyClientTeam, setNotifyClientTeam] = useState(false);
@@ -100,6 +115,9 @@ export function ChatComposer({
   const [mentionQuery, setMentionQuery] = useState('');
   const [mentionActiveIndex, setMentionActiveIndex] = useState(0);
   const [mentionRange, setMentionRange] = useState<Range | null>(null);
+  const [annotatingFile, setAnnotatingFile] = useState<AnnotatableFile | null>(
+    null,
+  );
   const fileInputRef = useRef<HTMLInputElement>(null);
   const editorRef = useRef<HTMLDivElement>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -263,57 +281,127 @@ export function ChatComposer({
     }
   }
 
-  async function uploadBlob(blob: Blob, fileName: string, mimeType: string) {
+  async function uploadBlob(
+    blob: Blob,
+    fileName: string,
+    mimeType: string,
+    previewUrl?: string | null,
+  ) {
     if (!channelId) return;
 
     const token = window.localStorage.getItem(AUTH_TOKEN_KEY);
     const formData = new FormData();
     formData.append('file', new File([blob], fileName, { type: mimeType }));
 
-    const response = await fetch(
-      `${API_BASE_URL}/channels/${channelId}/attachments/upload`,
-      {
-        method: 'POST',
-        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
-        body: formData,
-      },
-    );
+    const payload = await new Promise<{
+      id: string;
+      fileName: string;
+      mimeType: string;
+      processingStatus?: string;
+      originalWidth?: number | null;
+      originalHeight?: number | null;
+      webpStorageKey?: string | null;
+      thumbnailStorageKey?: string | null;
+      _count?: { imageAnnotations: number };
+    }>((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      xhr.open(
+        'POST',
+        `${API_BASE_URL}/channels/${channelId}/attachments/upload`,
+      );
+      if (token) {
+        xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+      }
+      xhr.upload.onprogress = (event) => {
+        if (!event.lengthComputable) return;
+        setUploadProgress(Math.round((event.loaded / event.total) * 100));
+      };
+      xhr.onload = () => {
+        try {
+          const body = JSON.parse(xhr.responseText) as {
+            success?: boolean;
+            data?: {
+              id: string;
+              fileName: string;
+              mimeType: string;
+              processingStatus?: string;
+              originalWidth?: number | null;
+              originalHeight?: number | null;
+              webpStorageKey?: string | null;
+              thumbnailStorageKey?: string | null;
+              _count?: { imageAnnotations: number };
+            };
+            message?: string;
+          };
+          if (xhr.status >= 200 && xhr.status < 300 && body.success && body.data) {
+            resolve(body.data);
+            return;
+          }
+          reject(new Error(body.message ?? 'Upload failed'));
+        } catch {
+          reject(new Error('Upload failed'));
+        }
+      };
+      xhr.onerror = () => reject(new Error('Upload failed'));
+      xhr.send(formData);
+    });
 
-    const payload = (await response.json()) as {
-      success?: boolean;
-      data?: { id: string; fileName: string };
-      message?: string;
+    const nextAttachment: PendingAttachment = {
+      kind: 'file',
+      fileId: payload.id,
+      label: payload.fileName,
+      mimeType: payload.mimeType,
+      previewUrl: previewUrl ?? null,
+      annotationCount: payload._count?.imageAnnotations ?? 0,
+      hasWebp: Boolean(payload.webpStorageKey),
+      originalWidth: payload.originalWidth,
+      originalHeight: payload.originalHeight,
     };
 
-    if (!response.ok || !payload.success || !payload.data) {
-      throw new Error(payload.message ?? 'Upload failed');
-    }
+    setAttachments((current) => [...current, nextAttachment]);
 
-    setAttachments((current) => [
-      ...current,
-      {
-        kind: 'file',
-        fileId: payload.data!.id,
-        label: payload.data!.fileName,
-      },
-    ]);
+    if (isAnnotatableImageMime(payload.mimeType)) {
+      setAnnotatingFile({
+        id: payload.id,
+        fileName: payload.fileName,
+        mimeType: payload.mimeType,
+        processingStatus: payload.processingStatus,
+        originalWidth: payload.originalWidth,
+        originalHeight: payload.originalHeight,
+        hasWebp: Boolean(payload.webpStorageKey),
+        hasThumbnail: Boolean(payload.thumbnailStorageKey),
+        annotationCount: payload._count?.imageAnnotations ?? 0,
+      });
+    }
   }
 
   async function handleFileSelected(fileList: FileList | null) {
-    if (!CHAT_MEDIA_UPLOADS_ENABLED || !channelId || !fileList?.[0]) return;
+    if (!CHAT_MEDIA_UPLOADS_ENABLED || !channelId || !fileList?.length) return;
 
-    const file = fileList[0];
     setIsUploading(true);
+    setUploadProgress(0);
     setErrorMessage(null);
 
     try {
-      await uploadBlob(file, file.name, file.type);
+      for (const file of Array.from(fileList)) {
+        if (isAnnotatableImageMime(file.type)) {
+          const validationError = validateAnnotatableImageFile(file);
+          if (validationError) {
+            throw new Error(validationError);
+          }
+        }
+        const previewUrl = file.type.startsWith('image/')
+          ? URL.createObjectURL(file)
+          : null;
+        await uploadBlob(file, file.name, file.type, previewUrl);
+      }
     } catch (error) {
       setErrorMessage(
         error instanceof Error ? error.message : 'Unable to upload file',
       );
     } finally {
       setIsUploading(false);
+      setUploadProgress(null);
       if (fileInputRef.current) {
         fileInputRef.current.value = '';
       }
@@ -430,23 +518,77 @@ export function ChatComposer({
         <div className="flex flex-wrap gap-2">
           {attachments.map((attachment, index) => (
             <span
-              key={`${attachment.label}-${index}`}
-              className="inline-flex items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--surface-muted)] px-3 py-1 text-xs"
+              key={`${attachment.fileId ?? attachment.url}-${index}`}
+              className="inline-flex max-w-full items-center gap-2 rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface-muted)] px-2 py-1.5 text-xs"
             >
-              {attachment.label}
+              {attachment.previewUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={attachment.previewUrl}
+                  alt=""
+                  className="h-10 w-10 rounded object-cover"
+                />
+              ) : null}
+              <span className="min-w-0">
+                <span className="block truncate font-medium text-[var(--foreground)]">
+                  {attachment.label}
+                </span>
+                {attachment.annotationCount ? (
+                  <span className="text-[11px] text-[var(--muted)]">
+                    {attachment.annotationCount} feedback marker
+                    {attachment.annotationCount === 1 ? '' : 's'}
+                  </span>
+                ) : null}
+              </span>
+              {attachment.fileId &&
+              isAnnotatableImageMime(attachment.mimeType) ? (
+                <button
+                  type="button"
+                  className="rounded p-1 text-[var(--muted)] hover:bg-[var(--surface)] hover:text-[var(--foreground)]"
+                  title="Annotate image"
+                  onClick={() =>
+                    setAnnotatingFile({
+                      id: attachment.fileId!,
+                      fileName: attachment.label,
+                      mimeType: attachment.mimeType ?? 'image/jpeg',
+                      hasWebp: attachment.hasWebp,
+                      originalWidth: attachment.originalWidth,
+                      originalHeight: attachment.originalHeight,
+                      annotationCount: attachment.annotationCount,
+                    })
+                  }
+                >
+                  <MessageSquareText className="h-3.5 w-3.5" />
+                </button>
+              ) : null}
               <button
                 type="button"
                 className="text-[var(--muted)] hover:text-[var(--foreground)]"
                 onClick={() =>
-                  setAttachments((current) =>
-                    current.filter((_, itemIndex) => itemIndex !== index),
-                  )
+                  setAttachments((current) => {
+                    const next = current.filter(
+                      (_, itemIndex) => itemIndex !== index,
+                    );
+                    if (attachment.previewUrl) {
+                      URL.revokeObjectURL(attachment.previewUrl);
+                    }
+                    return next;
+                  })
                 }
               >
                 ×
               </button>
             </span>
           ))}
+        </div>
+      ) : null}
+
+      {isUploading && uploadProgress != null ? (
+        <div className="h-1.5 overflow-hidden rounded-full bg-[var(--surface-muted)]">
+          <div
+            className="h-full bg-[var(--primary)] transition-all"
+            style={{ width: `${uploadProgress}%` }}
+          />
         </div>
       ) : null}
 
@@ -604,7 +746,7 @@ export function ChatComposer({
               {CHAT_MEDIA_UPLOADS_ENABLED ? (
                 <DropdownMenuItem onClick={() => fileInputRef.current?.click()}>
                   <Paperclip className="h-4 w-4" />
-                  Upload file
+                  Upload image / file
                 </DropdownMenuItem>
               ) : null}
               <DropdownMenuItem onClick={() => setLinkOpen(true)}>
@@ -706,6 +848,8 @@ export function ChatComposer({
         <input
           ref={fileInputRef}
           type="file"
+          accept={`${IMAGE_ANNOTATION_ACCEPT},application/pdf,image/*,video/*,audio/*`}
+          multiple
           className="hidden"
           onChange={(event) => void handleFileSelected(event.target.files)}
         />
@@ -717,6 +861,30 @@ export function ChatComposer({
 
       {errorMessage ? (
         <p className="text-sm text-[var(--danger)]">{errorMessage}</p>
+      ) : null}
+
+      {annotatingFile && channelId ? (
+        <ImageAnnotationDialog
+          open
+          channelId={channelId}
+          file={annotatingFile}
+          mode="compose"
+          currentUserId={currentUserId}
+          canAnnotate
+          onClose={() => setAnnotatingFile(null)}
+          onAnnotationsChange={(count) => {
+            setAttachments((current) =>
+              current.map((item) =>
+                item.fileId === annotatingFile.id
+                  ? { ...item, annotationCount: count }
+                  : item,
+              ),
+            );
+            setAnnotatingFile((current) =>
+              current ? { ...current, annotationCount: count } : current,
+            );
+          }}
+        />
       ) : null}
     </form>
   );

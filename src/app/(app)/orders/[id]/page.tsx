@@ -1063,6 +1063,7 @@ export function OrderDetailView({
       <RequestRevisionModal
         open={revisionModalOpen}
         order={order}
+        canSetPriority={canManage}
         onClose={() => setRevisionModalOpen(false)}
         onCreated={() => {
           notifyRefresh();

@@ -8,6 +8,7 @@ import {
   MessageCircle,
   Pin,
   Plus,
+  Trash2,
   Users,
   X,
 } from 'lucide-react';
@@ -41,6 +42,9 @@ interface ChannelDetailsPanelProps {
   isLoadingPins: boolean;
   canInvite: boolean;
   onInvite: () => void;
+  canDeleteGroup?: boolean;
+  onDeleteGroup?: () => void;
+  isDeletingGroup?: boolean;
   onJumpToPin: (messageId: string) => void;
   onClose: () => void;
   className?: string;
@@ -79,6 +83,9 @@ export function ChannelDetailsPanel({
   isLoadingPins,
   canInvite,
   onInvite,
+  canDeleteGroup = false,
+  onDeleteGroup,
+  isDeletingGroup = false,
   onJumpToPin,
   onClose,
   className,
@@ -236,7 +243,20 @@ export function ChannelDetailsPanel({
               onClick={onInvite}
             >
               <Plus className="h-4 w-4" />
-              Add people
+              Add teammates
+            </Button>
+          ) : null}
+          {canDeleteGroup && onDeleteGroup ? (
+            <Button
+              type="button"
+              size="sm"
+              variant="secondary"
+              className="w-full text-[var(--danger)]"
+              disabled={isDeletingGroup}
+              onClick={onDeleteGroup}
+            >
+              <Trash2 className="h-4 w-4" />
+              {isDeletingGroup ? 'Deleting…' : 'Delete group'}
             </Button>
           ) : null}
         </section>
