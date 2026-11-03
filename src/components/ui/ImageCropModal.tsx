@@ -160,7 +160,11 @@ export function ImageCropModal({
     }
 
     let cancelled = false;
-    void getCroppedImageFile(imageSrc, croppedAreaPixels)
+    void getCroppedImageFile(imageSrc, croppedAreaPixels, {
+      fileName: isLogoMode ? 'company-logo.png' : 'profile-photo.jpg',
+      mimeType: isLogoMode ? 'image/png' : 'image/jpeg',
+      backgroundColor: '#ffffff',
+    })
       .then((file) => {
         if (cancelled) return;
         const nextUrl = URL.createObjectURL(file);
@@ -176,7 +180,7 @@ export function ImageCropModal({
     return () => {
       cancelled = true;
     };
-  }, [imageSrc, croppedAreaPixels]);
+  }, [imageSrc, croppedAreaPixels, isLogoMode]);
 
   async function handleSave() {
     if (!imageSrc || !croppedAreaPixels) {
@@ -187,11 +191,11 @@ export function ImageCropModal({
     setIsPreparing(true);
     setErrorMessage(null);
     try {
-      const file = await getCroppedImageFile(
-        imageSrc,
-        croppedAreaPixels,
-        isLogoMode ? 'company-logo.jpg' : 'profile-photo.jpg',
-      );
+      const file = await getCroppedImageFile(imageSrc, croppedAreaPixels, {
+        fileName: isLogoMode ? 'company-logo.png' : 'profile-photo.jpg',
+        mimeType: isLogoMode ? 'image/png' : 'image/jpeg',
+        backgroundColor: '#ffffff',
+      });
       await onSave(file);
     } catch (error) {
       setErrorMessage(
@@ -309,7 +313,7 @@ export function ImageCropModal({
               src={previewUrl}
               alt="Crop preview"
               className={cn(
-                'shrink-0 bg-[var(--surface)] object-contain ring-2 ring-[var(--surface)]',
+                'shrink-0 bg-white object-contain ring-2 ring-white',
                 isLogoMode
                   ? 'h-14 max-w-[12rem] rounded-[var(--radius-md)]'
                   : 'h-14 w-14 rounded-full object-cover',
