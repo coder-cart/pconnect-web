@@ -5,6 +5,10 @@ export type ClientPortalAccessLevel = 'chat_only' | 'chat_and_orders';
 export interface AuthenticatedUser {
   id: string;
   tenantId: string;
+  /** Workspace / company name for this tenant (not product brand). */
+  tenantName?: string;
+  /** ISO timestamp when workspace logo last changed; null = no logo. */
+  tenantLogoUpdatedAt?: string | null;
   email: string;
   fullName: string;
   userType: 'internal' | 'external';

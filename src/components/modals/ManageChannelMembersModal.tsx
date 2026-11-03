@@ -15,10 +15,10 @@ import { MemberCandidate } from '@/components/chat/ChannelMemberPicker';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { ClientOrgLogo } from '@/components/ui/ClientOrgLogo';
-import { Logo } from '@/components/ui/Logo';
+import { TenantLogo } from '@/components/ui/TenantLogo';
 import { apiRequest } from '@/lib/api-client';
 import { ApiResponse } from '@/lib/auth';
-import { BRAND } from '@/lib/branding';
+import { useWorkspace } from '@/components/providers/WorkspaceProvider';
 
 interface ManageChannelMembersModalProps {
   open: boolean;
@@ -492,6 +492,9 @@ function AffiliationBadge({
     logoUpdatedAt?: string | null;
   } | null;
 }) {
+  const { user } = useWorkspace();
+  const workspaceName = user.tenantName?.trim() || 'Workspace';
+
   if (userType === 'external' && clientOrganization) {
     return (
       <span className="inline-flex max-w-[11rem] shrink-0 items-center gap-1.5 rounded-full border border-[var(--border)] bg-[var(--surface-muted)] px-2 py-1">
@@ -510,9 +513,13 @@ function AffiliationBadge({
 
   return (
     <span className="inline-flex max-w-[11rem] shrink-0 items-center gap-1.5 rounded-full border border-[var(--border)] bg-[var(--surface-muted)] px-2 py-1">
-      <Logo compact className="!ml-0 h-5 w-5" />
+      <TenantLogo
+        name={workspaceName}
+        logoUpdatedAt={user.tenantLogoUpdatedAt}
+        className="h-5 w-5 rounded-full border-0"
+      />
       <span className="truncate text-xs font-medium text-[var(--foreground)]">
-        {BRAND.name}
+        {workspaceName}
       </span>
     </span>
   );

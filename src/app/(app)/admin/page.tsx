@@ -12,6 +12,7 @@ import { RolesPermissionsManager } from '@/components/admin/RolesPermissionsMana
 import { MasterDataManager } from '@/components/admin/MasterDataManager';
 import { ServiceMasterManager } from '@/components/admin/ServiceMasterManager';
 import { OrderImportPanel } from '@/components/admin/OrderImportPanel';
+import { WorkspaceBrandingCard } from '@/components/admin/WorkspaceBrandingCard';
 import { useWorkspace } from '@/components/providers/WorkspaceProvider';
 import { RestrictedState } from '@/components/ui/StatePanels';
 
@@ -74,16 +75,19 @@ export default function AdminPage() {
       />
 
       {canManageUsers ? (
-        <p className="text-sm text-[var(--muted)]">
-          Manage internal people in{' '}
-          <Link
-            href="/staff"
-            className="font-medium text-[var(--primary)] hover:underline"
-          >
-            Staff
-          </Link>
-          . Client portal members are managed on each client.
-        </p>
+        <>
+          <WorkspaceBrandingCard />
+          <p className="text-sm text-[var(--muted)]">
+            Manage internal people in{' '}
+            <Link
+              href="/staff"
+              className="font-medium text-[var(--primary)] hover:underline"
+            >
+              Staff
+            </Link>
+            . Client portal members are managed on each client.
+          </p>
+        </>
       ) : null}
 
       <Tabs
