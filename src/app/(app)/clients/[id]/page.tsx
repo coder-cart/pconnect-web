@@ -655,7 +655,8 @@ export default function ClientDetailPage() {
         open={Boolean(logoCropSrc)}
         imageSrc={logoCropSrc}
         title="Adjust company logo"
-        description="Crop, zoom, and reposition. Cancel to discard changes."
+        description="Choose a shape that matches your logo (square or wide), then crop and save."
+        mode="logo"
         isSaving={logoBusy}
         onClose={closeLogoCrop}
         onSave={handleLogoSave}

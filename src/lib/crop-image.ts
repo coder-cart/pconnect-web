@@ -5,6 +5,8 @@ export type CropAreaPixels = {
   height: number;
 };
 
+const MAX_OUTPUT_EDGE = 1600;
+
 function loadImage(src: string): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
     const image = new Image();
@@ -15,8 +17,23 @@ function loadImage(src: string): Promise<HTMLImageElement> {
   });
 }
 
+function outputSize(crop: CropAreaPixels): { width: number; height: number } {
+  const sourceWidth = Math.max(1, Math.round(crop.width));
+  const sourceHeight = Math.max(1, Math.round(crop.height));
+  const longest = Math.max(sourceWidth, sourceHeight);
+  if (longest <= MAX_OUTPUT_EDGE) {
+    return { width: sourceWidth, height: sourceHeight };
+  }
+  const scale = MAX_OUTPUT_EDGE / longest;
+  return {
+    width: Math.max(1, Math.round(sourceWidth * scale)),
+    height: Math.max(1, Math.round(sourceHeight * scale)),
+  };
+}
+
 /**
- * Crops the source image to the given pixel area and returns a JPEG File.
+ * Crops the source image to the given pixel area and returns an image File.
+ * Preserves the crop aspect ratio (square or horizontal).
  */
 export async function getCroppedImageFile(
   imageSrc: string,
@@ -26,10 +43,10 @@ export async function getCroppedImageFile(
   quality = 0.92,
 ): Promise<File> {
   const image = await loadImage(imageSrc);
+  const { width, height } = outputSize(crop);
   const canvas = document.createElement('canvas');
-  const size = Math.max(1, Math.round(Math.min(crop.width, crop.height)));
-  canvas.width = size;
-  canvas.height = size;
+  canvas.width = width;
+  canvas.height = height;
 
   const context = canvas.getContext('2d');
   if (!context) {
@@ -44,8 +61,8 @@ export async function getCroppedImageFile(
     crop.height,
     0,
     0,
-    size,
-    size,
+    width,
+    height,
   );
 
   const blob = await new Promise<Blob>((resolve, reject) => {
