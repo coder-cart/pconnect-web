@@ -10,7 +10,7 @@ import {
 import { ResourceListPage } from '@/components/ui/ResourceListPage';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
-import { getInitials } from '@/lib/navigation';
+import { ClientOrgLogo } from '@/components/ui/ClientOrgLogo';
 import { userHasPermission } from '@/lib/auth';
 import { apiRequest } from '@/lib/api-client';
 import { ApiResponse } from '@/lib/auth';
@@ -25,6 +25,7 @@ interface ClientItem {
   name: string;
   status: string;
   primaryContactEmail?: string | null;
+  logoUpdatedAt?: string | null;
 }
 
 function statusVariant(status: string) {
@@ -96,9 +97,12 @@ export default function ClientsPage() {
               onClick={() => router.push(`/clients/${item.id}`)}
               className="flex min-w-0 flex-1 items-center gap-3 rounded-[var(--radius-md)] text-left transition-colors hover:opacity-80"
             >
-              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[var(--primary-soft)] text-xs font-semibold text-[var(--primary)]">
-                {getInitials(item.name)}
-              </div>
+              <ClientOrgLogo
+                clientId={item.id}
+                name={item.name}
+                logoUpdatedAt={item.logoUpdatedAt}
+                className="h-9 w-9"
+              />
               <div className="min-w-0">
                 <p className="truncate text-sm font-medium text-[var(--foreground)]">
                   {item.name}

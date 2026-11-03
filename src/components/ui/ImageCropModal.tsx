@@ -9,6 +9,7 @@ import { cn } from '@/lib/cn';
 
 type CropMode = 'avatar' | 'logo';
 type LogoShape = 'square' | 'wide' | 'ultrawide' | 'original';
+type LogoBackgroundPreset = 'white' | 'black' | 'navy' | 'gray' | 'custom' | 'none';
 
 interface ImageCropModalProps {
   open: boolean;
@@ -26,6 +27,7 @@ interface ImageCropModalProps {
 
 const DEFAULT_ZOOM = 1;
 const DEFAULT_CROP = { x: 0, y: 0 };
+const DEFAULT_CUSTOM_BG = '#2563eb';
 
 const LOGO_SHAPE_OPTIONS: Array<{ id: LogoShape; label: string }> = [
   { id: 'original', label: 'Fit image' },
@@ -33,6 +35,43 @@ const LOGO_SHAPE_OPTIONS: Array<{ id: LogoShape; label: string }> = [
   { id: 'wide', label: 'Wide' },
   { id: 'ultrawide', label: 'Banner' },
 ];
+
+const LOGO_BG_PRESETS: Array<{
+  id: LogoBackgroundPreset;
+  label: string;
+  color: string | null;
+}> = [
+  { id: 'white', label: 'White', color: '#ffffff' },
+  { id: 'black', label: 'Black', color: '#111827' },
+  { id: 'navy', label: 'Navy', color: '#0f172a' },
+  { id: 'gray', label: 'Gray', color: '#e5e7eb' },
+  { id: 'custom', label: 'Custom', color: null },
+  { id: 'none', label: 'None', color: null },
+];
+
+function resolveLogoBackground(
+  preset: LogoBackgroundPreset,
+  customColor: string,
+): string | null {
+  switch (preset) {
+    case 'white':
+      return '#ffffff';
+    case 'black':
+      return '#111827';
+    case 'navy':
+      return '#0f172a';
+    case 'gray':
+      return '#e5e7eb';
+    case 'custom':
+      return customColor || DEFAULT_CUSTOM_BG;
+    case 'none':
+      return null;
+    default: {
+      const _exhaustive: never = preset;
+      return _exhaustive;
+    }
+  }
+}
 
 function logoAspectValue(
   shape: LogoShape,
@@ -83,6 +122,9 @@ export function ImageCropModal({
   const [isPreparing, setIsPreparing] = useState(false);
   const [naturalAspect, setNaturalAspect] = useState<number | null>(null);
   const [logoShape, setLogoShape] = useState<LogoShape>('original');
+  const [logoBgPreset, setLogoBgPreset] =
+    useState<LogoBackgroundPreset>('white');
+  const [customBgColor, setCustomBgColor] = useState(DEFAULT_CUSTOM_BG);
 
   const activeAspect = useMemo(() => {
     if (isLogoMode) {
@@ -90,6 +132,11 @@ export function ImageCropModal({
     }
     return aspect;
   }, [aspect, isLogoMode, logoShape, naturalAspect]);
+
+  const logoBackgroundColor = useMemo(() => {
+    if (!isLogoMode) return '#ffffff';
+    return resolveLogoBackground(logoBgPreset, customBgColor);
+  }, [customBgColor, isLogoMode, logoBgPreset]);
 
   const resetAdjustments = useCallback(() => {
     setCrop(DEFAULT_CROP);
@@ -113,6 +160,8 @@ export function ImageCropModal({
       setNaturalAspect(ratio);
       if (isLogoMode) {
         setLogoShape(defaultLogoShape(ratio));
+        setLogoBgPreset('white');
+        setCustomBgColor(DEFAULT_CUSTOM_BG);
       }
       resetAdjustments();
       setCroppedAreaPixels(null);
@@ -121,7 +170,11 @@ export function ImageCropModal({
     image.onerror = () => {
       if (cancelled) return;
       setNaturalAspect(null);
-      if (isLogoMode) setLogoShape('wide');
+      if (isLogoMode) {
+        setLogoShape('wide');
+        setLogoBgPreset('white');
+        setCustomBgColor(DEFAULT_CUSTOM_BG);
+      }
       resetAdjustments();
       setCroppedAreaPixels(null);
       setPreviewUrl(null);
@@ -163,7 +216,7 @@ export function ImageCropModal({
     void getCroppedImageFile(imageSrc, croppedAreaPixels, {
       fileName: isLogoMode ? 'company-logo.png' : 'profile-photo.jpg',
       mimeType: isLogoMode ? 'image/png' : 'image/jpeg',
-      backgroundColor: '#ffffff',
+      backgroundColor: logoBackgroundColor,
     })
       .then((file) => {
         if (cancelled) return;
@@ -180,7 +233,7 @@ export function ImageCropModal({
     return () => {
       cancelled = true;
     };
-  }, [imageSrc, croppedAreaPixels, isLogoMode]);
+  }, [imageSrc, croppedAreaPixels, isLogoMode, logoBackgroundColor]);
 
   async function handleSave() {
     if (!imageSrc || !croppedAreaPixels) {
@@ -194,7 +247,7 @@ export function ImageCropModal({
       const file = await getCroppedImageFile(imageSrc, croppedAreaPixels, {
         fileName: isLogoMode ? 'company-logo.png' : 'profile-photo.jpg',
         mimeType: isLogoMode ? 'image/png' : 'image/jpeg',
-        backgroundColor: '#ffffff',
+        backgroundColor: logoBackgroundColor,
       });
       await onSave(file);
     } catch (error) {
@@ -251,30 +304,113 @@ export function ImageCropModal({
     >
       <div className="space-y-4">
         {isLogoMode ? (
-          <div className="flex flex-wrap gap-1.5">
-            {LOGO_SHAPE_OPTIONS.map((option) => (
-              <button
-                key={option.id}
-                type="button"
-                disabled={busy}
-                onClick={() => {
-                  setLogoShape(option.id);
-                  resetAdjustments();
-                }}
-                className={cn(
-                  'rounded-full border px-3 py-1.5 text-xs font-medium transition-colors',
-                  logoShape === option.id
-                    ? 'border-[var(--primary)] bg-[var(--primary-soft)] text-[var(--primary)]'
-                    : 'border-[var(--border)] text-[var(--muted)] hover:bg-[var(--surface-muted)] hover:text-[var(--foreground)]',
-                )}
-              >
-                {option.label}
-              </button>
-            ))}
+          <div className="space-y-3">
+            <div className="flex flex-wrap gap-1.5">
+              {LOGO_SHAPE_OPTIONS.map((option) => (
+                <button
+                  key={option.id}
+                  type="button"
+                  disabled={busy}
+                  onClick={() => {
+                    setLogoShape(option.id);
+                    resetAdjustments();
+                  }}
+                  className={cn(
+                    'rounded-full border px-3 py-1.5 text-xs font-medium transition-colors',
+                    logoShape === option.id
+                      ? 'border-[var(--primary)] bg-[var(--primary-soft)] text-[var(--primary)]'
+                      : 'border-[var(--border)] text-[var(--muted)] hover:bg-[var(--surface-muted)] hover:text-[var(--foreground)]',
+                  )}
+                >
+                  {option.label}
+                </button>
+              ))}
+            </div>
+
+            <div className="space-y-2">
+              <p className="text-sm font-medium text-[var(--foreground)]">
+                Background
+              </p>
+              <p className="text-xs text-[var(--muted)]">
+                Use a dark background for white logos so they stay visible.
+              </p>
+              <div className="flex flex-wrap items-center gap-2">
+                {LOGO_BG_PRESETS.map((preset) => {
+                  const swatch =
+                    preset.id === 'custom'
+                      ? customBgColor
+                      : preset.color;
+                  const selected = logoBgPreset === preset.id;
+                  return (
+                    <button
+                      key={preset.id}
+                      type="button"
+                      disabled={busy}
+                      title={preset.label}
+                      aria-label={`Background ${preset.label}`}
+                      aria-pressed={selected}
+                      onClick={() => setLogoBgPreset(preset.id)}
+                      className={cn(
+                        'inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1.5 text-xs font-medium transition-colors',
+                        selected
+                          ? 'border-[var(--primary)] bg-[var(--primary-soft)] text-[var(--primary)]'
+                          : 'border-[var(--border)] text-[var(--muted)] hover:bg-[var(--surface-muted)] hover:text-[var(--foreground)]',
+                      )}
+                    >
+                      <span
+                        className="h-3.5 w-3.5 shrink-0 rounded-full border border-[var(--border)]"
+                        style={
+                          preset.id === 'none'
+                            ? {
+                                backgroundImage:
+                                  'repeating-conic-gradient(#d1d5db 0% 25%, #ffffff 0% 50%)',
+                                backgroundSize: '8px 8px',
+                              }
+                            : {
+                                backgroundColor:
+                                  swatch ?? customBgColor,
+                              }
+                        }
+                      />
+                      {preset.label}
+                    </button>
+                  );
+                })}
+                {logoBgPreset === 'custom' ? (
+                  <label className="inline-flex items-center gap-2 text-xs text-[var(--muted)]">
+                    <span className="sr-only">Custom background color</span>
+                    <input
+                      type="color"
+                      value={customBgColor}
+                      disabled={busy}
+                      onChange={(event) =>
+                        setCustomBgColor(event.target.value)
+                      }
+                      className="h-8 w-10 cursor-pointer rounded border border-[var(--border)] bg-transparent p-0.5"
+                    />
+                  </label>
+                ) : null}
+              </div>
+            </div>
           </div>
         ) : null}
 
-        <div className="relative h-64 w-full overflow-hidden rounded-[var(--radius-md)] bg-[var(--surface-muted)] sm:h-80">
+        <div
+          className="relative h-64 w-full overflow-hidden rounded-[var(--radius-md)] sm:h-80"
+          style={{
+            backgroundColor:
+              isLogoMode && logoBackgroundColor
+                ? logoBackgroundColor
+                : undefined,
+          }}
+        >
+          <div
+            className={cn(
+              'absolute inset-0',
+              !(isLogoMode && logoBackgroundColor) &&
+                'bg-[var(--surface-muted)]',
+            )}
+          />
           {imageSrc ? (
             <Cropper
               image={imageSrc}
@@ -313,16 +449,23 @@ export function ImageCropModal({
               src={previewUrl}
               alt="Crop preview"
               className={cn(
-                'shrink-0 bg-white object-contain ring-2 ring-white',
+                'shrink-0 object-contain ring-2 ring-[var(--border)]',
                 isLogoMode
                   ? 'h-14 max-w-[12rem] rounded-[var(--radius-md)]'
                   : 'h-14 w-14 rounded-full object-cover',
               )}
-              style={
-                isLogoMode
+              style={{
+                ...(isLogoMode
                   ? { aspectRatio: String(previewAspect) }
-                  : undefined
-              }
+                  : undefined),
+                ...(logoBackgroundColor
+                  ? { backgroundColor: logoBackgroundColor }
+                  : {
+                      backgroundImage:
+                        'repeating-conic-gradient(#d1d5db 0% 25%, #ffffff 0% 50%)',
+                      backgroundSize: '10px 10px',
+                    }),
+              }}
             />
             <p className="text-sm text-[var(--muted)]">
               Preview of the image that will be saved.
