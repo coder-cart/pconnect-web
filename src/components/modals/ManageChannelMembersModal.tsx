@@ -14,8 +14,11 @@ import { Input } from '@/components/ui/Input';
 import { MemberCandidate } from '@/components/chat/ChannelMemberPicker';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
+import { ClientOrgLogo } from '@/components/ui/ClientOrgLogo';
+import { Logo } from '@/components/ui/Logo';
 import { apiRequest } from '@/lib/api-client';
 import { ApiResponse } from '@/lib/auth';
+import { BRAND } from '@/lib/branding';
 
 interface ManageChannelMembersModalProps {
   open: boolean;
@@ -45,12 +48,20 @@ interface ChannelDetails {
   type: string;
   displayName?: string;
   clientOrganizationId?: string | null;
-  clientOrganization?: { id: string; name: string } | null;
+  clientOrganization?: {
+    id: string;
+    name: string;
+    logoUpdatedAt?: string | null;
+  } | null;
   project?: {
     id: string;
     name: string;
     clientOrganizationId: string | null;
-    clientOrganization?: { id: string; name: string } | null;
+    clientOrganization?: {
+      id: string;
+      name: string;
+      logoUpdatedAt?: string | null;
+    } | null;
   } | null;
   members: ChannelMember[];
   invites?: ChannelInvite[];
@@ -241,11 +252,10 @@ export function ManageChannelMembersModal({
     selectedCandidate?.userType === 'external' || clientAdminMode
       ? 'Send invite'
       : 'Add member';
+  const clientOrganization =
+    channel?.clientOrganization ?? channel?.project?.clientOrganization ?? null;
   const hubLabel =
-    channel?.clientOrganization?.name ??
-    channel?.project?.clientOrganization?.name ??
-    channel?.displayName ??
-    channel?.name;
+    clientOrganization?.name ?? channel?.displayName ?? channel?.name;
 
   return (
     <Modal
@@ -294,7 +304,10 @@ export function ManageChannelMembersModal({
                   name={member.user.fullName}
                   email={member.user.email}
                   badge={
-                    <RoleBadge userType={member.user.userType} />
+                    <AffiliationBadge
+                      userType={member.user.userType}
+                      clientOrganization={clientOrganization}
+                    />
                   }
                   action={
                     !clientAdminMode || member.user.userType === 'external' ? (
@@ -390,7 +403,10 @@ export function ManageChannelMembersModal({
                           {user.email}
                         </span>
                       </span>
-                      <RoleBadge userType={user.userType} />
+                      <AffiliationBadge
+                        userType={user.userType}
+                        clientOrganization={clientOrganization}
+                      />
                     </button>
                   );
                 })
@@ -465,11 +481,39 @@ function AccessPersonRow({
   );
 }
 
-function RoleBadge({ userType }: { userType: string }) {
-  const isClient = userType === 'external';
+function AffiliationBadge({
+  userType,
+  clientOrganization,
+}: {
+  userType: string;
+  clientOrganization: {
+    id: string;
+    name: string;
+    logoUpdatedAt?: string | null;
+  } | null;
+}) {
+  if (userType === 'external' && clientOrganization) {
+    return (
+      <span className="inline-flex max-w-[11rem] shrink-0 items-center gap-1.5 rounded-full border border-[var(--border)] bg-[var(--surface-muted)] px-2 py-1">
+        <ClientOrgLogo
+          clientId={clientOrganization.id}
+          name={clientOrganization.name}
+          logoUpdatedAt={clientOrganization.logoUpdatedAt}
+          className="h-5 w-5 rounded-full border-0"
+        />
+        <span className="truncate text-xs font-medium text-[var(--foreground)]">
+          {clientOrganization.name}
+        </span>
+      </span>
+    );
+  }
+
   return (
-    <Badge variant={isClient ? 'primary' : 'neutral'} className="shrink-0">
-      {isClient ? 'Client' : 'Internal'}
-    </Badge>
+    <span className="inline-flex max-w-[11rem] shrink-0 items-center gap-1.5 rounded-full border border-[var(--border)] bg-[var(--surface-muted)] px-2 py-1">
+      <Logo compact className="!ml-0 h-5 w-5" />
+      <span className="truncate text-xs font-medium text-[var(--foreground)]">
+        {BRAND.name}
+      </span>
+    </span>
   );
 }
