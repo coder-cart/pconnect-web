@@ -22,6 +22,8 @@ export interface PortalMember {
     fullName: string;
     email: string;
     status: string;
+    lastLoginAt?: string | null;
+    mustChangePassword?: boolean;
   };
 }
 
@@ -41,6 +43,7 @@ interface ContactRow {
 interface ClientPortalUsersProps {
   clientId: string;
   clientName: string;
+  clientStatus?: string;
   primaryContactName?: string | null;
   primaryContactEmail?: string | null;
   contacts: ContactRow[];
@@ -65,9 +68,23 @@ function statusLabel(status: string) {
   return status.replaceAll('_', ' ');
 }
 
+function isNotOnboarded(member: PortalMember) {
+  return member.user.mustChangePassword === true;
+}
+
+function formatLastLogin(value?: string | null) {
+  if (!value) return 'Never logged in';
+  return `Last login: ${new Date(value).toLocaleString()}`;
+}
+
+function resendLabel(member: PortalMember) {
+  return isNotOnboarded(member) ? 'Resend onboarding' : 'Resend';
+}
+
 export function ClientPortalUsers({
   clientId,
   clientName,
+  clientStatus,
   primaryContactName,
   primaryContactEmail,
   contacts,
@@ -80,6 +97,7 @@ export function ClientPortalUsers({
   onInvite,
 }: ClientPortalUsersProps) {
   const [busyId, setBusyId] = useState<string | null>(null);
+  const orgDisabled = clientStatus === 'inactive';
 
   const savedContacts = buildSavedContacts(
     clientName,
@@ -103,6 +121,12 @@ export function ClientPortalUsers({
   }
 
   async function resend(member: PortalMember) {
+    if (orgDisabled) {
+      onError(
+        'This client organization is disabled. Activate it before resending portal login emails.',
+      );
+      return;
+    }
     const turningOn = member.user.status === 'inactive';
     const confirmed = window.confirm(
       turningOn
@@ -234,6 +258,12 @@ export function ClientPortalUsers({
 
   return (
     <div className="space-y-4">
+      {orgDisabled ? (
+        <p className="rounded-[var(--radius-md)] border border-[var(--danger)]/30 bg-[var(--danger)]/5 px-3 py-2 text-sm text-[var(--danger)]">
+          This client organization is disabled. Portal logins are blocked until
+          you activate the client again.
+        </p>
+      ) : null}
       <Card>
         <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div>
@@ -249,7 +279,7 @@ export function ClientPortalUsers({
             <Button
               size="sm"
               variant="secondary"
-              disabled={seats.used >= seats.max}
+              disabled={seats.used >= seats.max || orgDisabled}
               onClick={() => onInvite()}
             >
               <UserPlus className="h-4 w-4" />
@@ -291,7 +321,7 @@ export function ClientPortalUsers({
                       <Button
                         size="sm"
                         variant="secondary"
-                        disabled={seats.used >= seats.max}
+                        disabled={seats.used >= seats.max || orgDisabled}
                         onClick={() =>
                           onInvite({
                             fullName: contact.name,
@@ -356,6 +386,11 @@ export function ClientPortalUsers({
                         ? 'Only chat (1:1)'
                         : 'Chat and Order update'}
                     </p>
+                    <p className="mt-1 text-xs text-[var(--muted)]">
+                      {isNotOnboarded(member) ? 'Not onboarded' : 'Onboarded'}
+                      {' · '}
+                      {formatLastLogin(member.user.lastLoginAt)}
+                    </p>
                   </div>
                   <Badge
                     variant={statusVariant(member.user.status)}
@@ -393,17 +428,24 @@ export function ClientPortalUsers({
                       <Button
                         size="sm"
                         variant="secondary"
-                        disabled={busyId === member.user.id}
+                        disabled={busyId === member.user.id || orgDisabled}
                         onClick={() => void resend(member)}
+                        title={
+                          orgDisabled
+                            ? 'Activate the client organization before resending'
+                            : undefined
+                        }
                       >
-                        Resend
+                        {resendLabel(member)}
                       </Button>
                       {member.user.status === 'inactive' ? (
                         <Button
                           size="sm"
                           variant="secondary"
                           disabled={
-                            busyId === member.user.id || seats.used >= seats.max
+                            busyId === member.user.id ||
+                            seats.used >= seats.max ||
+                            orgDisabled
                           }
                           onClick={() => void setStatus(member, 'active')}
                         >
@@ -449,8 +491,11 @@ export function ClientPortalUsers({
                         </Button>
                       }
                     >
-                      <DropdownMenuItem onClick={() => void resend(member)}>
-                        Resend
+                      <DropdownMenuItem
+                        disabled={orgDisabled}
+                        onClick={() => void resend(member)}
+                      >
+                        {resendLabel(member)}
                       </DropdownMenuItem>
                       {member.user.status === 'inactive' ? (
                         <DropdownMenuItem
