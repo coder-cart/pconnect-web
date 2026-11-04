@@ -4,35 +4,48 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import {
-  Activity,
+  BarChart3,
   CheckCircle2,
+  ChevronDown,
+  ChevronUp,
   Circle,
   CircleCheck,
+  CircleOff,
   ClipboardList,
   FileText,
+  ImagePlus,
   MessageSquare,
   Plus,
   Settings,
+  Trash2,
   Upload,
   Users,
   Workflow,
 } from 'lucide-react';
 import { apiRequest, apiDownload, apiUpload } from '@/lib/api-client';
 import { ApiResponse, userHasPermission } from '@/lib/auth';
-import { PageHeader } from '@/components/ui/PageHeader';
+import { Breadcrumbs } from '@/components/ui/Breadcrumbs';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { Input } from '@/components/ui/Input';
+import { Select } from '@/components/ui/Select';
 import { Tabs } from '@/components/ui/Tabs';
 import { StatCard } from '@/components/ui/StatCard';
 import { LoadingState, ErrorState, EmptyState } from '@/components/ui/StatePanels';
 import { ClientOrgLogo } from '@/components/ui/ClientOrgLogo';
 import { ImageCropModal } from '@/components/ui/ImageCropModal';
+import { Modal, ModalActions } from '@/components/ui/Modal';
+import { cn } from '@/lib/cn';
 import { CreateOnboardingModal } from '@/components/modals/CreateOnboardingModal';
 import { LinkClientUserModal } from '@/components/modals/LinkClientUserModal';
 import { ClientServiceConfig } from '@/components/clients/ClientServiceConfig';
 import { ClientPortalUsers } from '@/components/clients/ClientPortalUsers';
+import {
+  ClientFinanceBars,
+  ClientOrderMixDonut,
+  ClientPipelineBars,
+} from '@/components/clients/ClientDashboardCharts';
 import { OrdersTable } from '@/components/orders/OrdersTable';
 import { OrderCreateModal } from '@/components/orders/OrderCreateForm';
 import { OrderChannelChat } from '@/components/orders/OrderChannelChat';
@@ -134,11 +147,14 @@ interface ClientMember {
   linkedAt: string;
   isOrgAdmin?: boolean;
   isDefault?: boolean;
+  accessLevel?: 'chat_only' | 'chat_and_orders';
   user: {
     id: string;
     fullName: string;
     email: string;
     status: string;
+    lastLoginAt?: string | null;
+    mustChangePassword?: boolean;
   };
 }
 
@@ -192,6 +208,9 @@ export default function ClientDetailPage() {
   const [activity, setActivity] = useState<ActivityEvent[]>([]);
   const [hubChannelId, setHubChannelId] = useState<string | null>(null);
   const [workflows, setWorkflows] = useState<OnboardingWorkflow[]>([]);
+  const [completingWorkflowId, setCompletingWorkflowId] = useState<string | null>(
+    null,
+  );
   const [members, setMembers] = useState<ClientMember[]>([]);
   const [seatInfo, setSeatInfo] = useState({
     used: 0,
@@ -212,6 +231,10 @@ export default function ClientDetailPage() {
   const [loginNotice, setLoginNotice] = useState<string | null>(null);
   const [loginError, setLoginError] = useState<string | null>(null);
   const [isActivating, setIsActivating] = useState(false);
+  const [isDisabling, setIsDisabling] = useState(false);
+  const [activateOpen, setActivateOpen] = useState(false);
+  const [showOverviewCharts, setShowOverviewCharts] = useState(false);
+  const [sendOnboardingEmail, setSendOnboardingEmail] = useState(true);
   const [contactForm, setContactForm] = useState({
     name: '',
     designation: '',
@@ -223,6 +246,12 @@ export default function ClientDetailPage() {
   const [settingsForm, setSettingsForm] = useState<Record<string, string>>({});
   const [settingsBusy, setSettingsBusy] = useState(false);
   const [orderSearch, setOrderSearch] = useState('');
+  const [managers, setManagers] = useState<
+    Array<{ id: string; fullName: string; email: string }>
+  >([]);
+  const [managerUserId, setManagerUserId] = useState('');
+  const [managerBusy, setManagerBusy] = useState(false);
+  const [managerMessage, setManagerMessage] = useState<string | null>(null);
 
   const loadCore = useCallback(async () => {
     try {
@@ -264,6 +293,7 @@ export default function ClientDetailPage() {
       });
       setAllowTeamInvite(clientResponse.data.allowClientTeamInvite ?? false);
       setMaxPortalUsers(String(clientResponse.data.maxPortalUsers ?? 5));
+      setManagerUserId(clientResponse.data.defaultManager?.id ?? '');
       setErrorMessage(null);
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : 'Failed to load');
@@ -275,6 +305,15 @@ export default function ClientDetailPage() {
   useEffect(() => {
     void loadCore();
   }, [loadCore]);
+
+  useEffect(() => {
+    if (!canManage) return;
+    apiRequest<
+      ApiResponse<Array<{ id: string; fullName: string; email: string }>>
+    >('/users/assignable?role=internal_manager')
+      .then((response) => setManagers(response.data))
+      .catch(() => setManagers([]));
+  }, [canManage]);
 
   useEffect(() => {
     if (searchParams.get('invite') === 'sent') {
@@ -359,13 +398,57 @@ export default function ClientDetailPage() {
     );
   }, [orders, orderSearch]);
 
+  const activationInviteEmail =
+    client?.primaryContactEmail?.trim() ||
+    contacts.find((contact) => contact.email?.trim())?.email?.trim() ||
+    '';
+
+  function openActivateModal() {
+    setSendOnboardingEmail(Boolean(activationInviteEmail));
+    setActivateOpen(true);
+  }
+
   async function activateClient() {
     setIsActivating(true);
+    setErrorMessage(null);
+    setLoginNotice(null);
+    setLoginError(null);
     try {
-      await apiRequest(`/clients/${clientId}`, {
+      const response = await apiRequest<
+        ApiResponse<
+          ClientDetail & {
+            portalInvite?: {
+              sent: boolean;
+              skipped?: boolean;
+              error?: string;
+              email?: string;
+            } | null;
+          }
+        >
+      >(`/clients/${clientId}`, {
         method: 'PATCH',
-        body: JSON.stringify({ status: 'active' }),
+        body: JSON.stringify({
+          status: 'active',
+          sendPortalInvite: sendOnboardingEmail,
+        }),
       });
+      setClient(response.data);
+      setActivateOpen(false);
+      const invite = response.data.portalInvite;
+      if (sendOnboardingEmail) {
+        if (invite?.sent) {
+          setLoginNotice(
+            `Client activated. Onboarding login emailed to ${invite.email ?? 'the primary contact'} (username + temporary password).`,
+          );
+        } else {
+          setLoginError(
+            invite?.error ||
+              'Client activated, but the onboarding login email was not sent.',
+          );
+        }
+      } else {
+        setLoginNotice('Client activated.');
+      }
       await loadCore();
     } catch (error) {
       setErrorMessage(
@@ -373,6 +456,38 @@ export default function ClientDetailPage() {
       );
     } finally {
       setIsActivating(false);
+    }
+  }
+
+  async function disableClient() {
+    const confirmed = window.confirm(
+      `Disable ${client?.name ?? 'this client'}? The client team will lose portal access until you activate the organization again.`,
+    );
+    if (!confirmed) return;
+
+    setIsDisabling(true);
+    setErrorMessage(null);
+    setLoginNotice(null);
+    setLoginError(null);
+    try {
+      const response = await apiRequest<ApiResponse<ClientDetail>>(
+        `/clients/${clientId}`,
+        {
+          method: 'PATCH',
+          body: JSON.stringify({ status: 'inactive' }),
+        },
+      );
+      setClient(response.data);
+      setLoginNotice(
+        'Client disabled. Portal logins for this organization are blocked.',
+      );
+      await loadCore();
+    } catch (error) {
+      setErrorMessage(
+        error instanceof Error ? error.message : 'Failed to disable client',
+      );
+    } finally {
+      setIsDisabling(false);
     }
   }
 
@@ -446,6 +561,35 @@ export default function ClientDetailPage() {
     }
   }
 
+  async function handleMarkWorkflowComplete(workflowId: string) {
+    setCompletingWorkflowId(workflowId);
+    setErrorMessage(null);
+    try {
+      const response = await apiRequest<ApiResponse<OnboardingWorkflow>>(
+        `/onboarding/workflows/${workflowId}`,
+        {
+          method: 'PATCH',
+          body: JSON.stringify({ status: 'completed' }),
+        },
+      );
+      setWorkflows((previous) =>
+        previous.map((workflow) =>
+          workflow.id === workflowId
+            ? { ...workflow, status: response.data.status ?? 'completed' }
+            : workflow,
+        ),
+      );
+    } catch (error) {
+      setErrorMessage(
+        error instanceof Error
+          ? error.message
+          : 'Unable to mark onboarding complete',
+      );
+    } finally {
+      setCompletingWorkflowId(null);
+    }
+  }
+
   async function saveSettings() {
     setSettingsBusy(true);
     try {
@@ -471,6 +615,37 @@ export default function ClientDetailPage() {
       );
     } finally {
       setSettingsBusy(false);
+    }
+  }
+
+  async function saveManager() {
+    if (!canManage) return;
+    setManagerBusy(true);
+    setManagerMessage(null);
+    setErrorMessage(null);
+    try {
+      const response = await apiRequest<ApiResponse<ClientDetail>>(
+        `/clients/${clientId}`,
+        {
+          method: 'PATCH',
+          body: JSON.stringify({
+            defaultManagerUserId: managerUserId || null,
+          }),
+        },
+      );
+      setClient(response.data);
+      setManagerUserId(response.data.defaultManager?.id ?? '');
+      setManagerMessage(
+        response.data.defaultManager
+          ? `${response.data.defaultManager.fullName} is assigned and added to this client's channels.`
+          : 'Manager cleared for this client.',
+      );
+    } catch (error) {
+      setErrorMessage(
+        error instanceof Error ? error.message : 'Failed to update manager',
+      );
+    } finally {
+      setManagerBusy(false);
     }
   }
 
@@ -571,23 +746,142 @@ export default function ClientDetailPage() {
     );
   }
 
+  const hasLogo = Boolean(client.logoUpdatedAt || client.hasLogo);
+  const managerDirty = managerUserId !== (client.defaultManager?.id ?? '');
+
   return (
-    <div className="space-y-4">
-      <PageHeader
-        title={client.name}
-        description={
-          client.clientName
-            ? `${client.clientName} · 360° client profile`
-            : '360° client profile'
-        }
-        breadcrumbs={[
+    <div className="space-y-5">
+      <Breadcrumbs
+        items={[
           { label: 'Clients', href: '/clients' },
           { label: client.name },
         ]}
-        action={
-          <>
+      />
+
+      <Card padding="none" className="overflow-hidden">
+        <div className="flex flex-col gap-5 p-4 sm:p-5 lg:flex-row lg:items-start lg:justify-between lg:gap-8">
+          <div className="flex min-w-0 flex-1 gap-4">
+            <div className="relative shrink-0">
+              <ClientOrgLogo
+                clientId={client.id}
+                name={client.name}
+                logoUpdatedAt={client.logoUpdatedAt}
+                className="h-16 w-16 sm:h-20 sm:w-20"
+              />
+              {canManageLogo ? (
+                <label
+                  className={cn(
+                    'absolute inset-0 flex cursor-pointer flex-col items-center justify-center gap-0.5 rounded-[var(--radius-md)] bg-black/55 text-white opacity-0 transition-opacity hover:opacity-100 focus-within:opacity-100',
+                    logoBusy && 'pointer-events-none opacity-70',
+                  )}
+                  title={hasLogo ? 'Replace logo' : 'Upload logo'}
+                >
+                  <ImagePlus className="h-4 w-4" />
+                  <span className="text-[10px] font-medium">
+                    {logoBusy ? '…' : hasLogo ? 'Replace' : 'Upload'}
+                  </span>
+                  <input
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp,image/gif"
+                    className="sr-only"
+                    disabled={logoBusy}
+                    onChange={(event) => {
+                      const file = event.target.files?.[0];
+                      event.target.value = '';
+                      handleLogoPick(file);
+                    }}
+                  />
+                </label>
+              ) : null}
+            </div>
+
+            <div className="min-w-0 flex-1 space-y-2.5">
+              <div className="space-y-1">
+                <div className="flex flex-wrap items-center gap-2">
+                  <h1 className="truncate text-base font-semibold tracking-tight text-[var(--foreground)] sm:text-lg">
+                    {client.name}
+                  </h1>
+                  <Badge
+                    variant={
+                      client.status === 'active'
+                        ? 'success'
+                        : client.status === 'inactive'
+                          ? 'danger'
+                          : 'warning'
+                    }
+                    className="capitalize"
+                  >
+                    {client.status.replaceAll('_', ' ')}
+                  </Badge>
+                </div>
+                <p className="text-sm text-[var(--muted)]">
+                  {client.clientName
+                    ? `${client.clientName} · Client profile`
+                    : 'Client profile'}
+                </p>
+              </div>
+
+              {canManageLogo ? (
+                <div className="flex flex-wrap items-center gap-2">
+                  <label className="inline-flex h-8 cursor-pointer items-center gap-1.5 rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface)] px-2.5 text-xs font-medium text-[var(--foreground)] hover:bg-[var(--surface-muted)]">
+                    <Upload className="h-3.5 w-3.5" />
+                    {logoBusy
+                      ? 'Working…'
+                      : hasLogo
+                        ? 'Replace logo'
+                        : 'Upload logo'}
+                    <input
+                      type="file"
+                      accept="image/jpeg,image/png,image/webp,image/gif"
+                      className="sr-only"
+                      disabled={logoBusy}
+                      onChange={(event) => {
+                        const file = event.target.files?.[0];
+                        event.target.value = '';
+                        handleLogoPick(file);
+                      }}
+                    />
+                  </label>
+                  {hasLogo ? (
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="ghost"
+                      disabled={logoBusy}
+                      onClick={() => void handleLogoRemove()}
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                      Remove
+                    </Button>
+                  ) : null}
+                  <span className="text-xs text-[var(--muted)]">
+                    JPEG, PNG, WebP, GIF · crop on upload · 2 MB max
+                  </span>
+                </div>
+              ) : null}
+
+              {logoMessage ? (
+                <p className="text-xs text-[var(--success)]">{logoMessage}</p>
+              ) : null}
+            </div>
+          </div>
+
+          <div className="flex shrink-0 flex-wrap gap-2 lg:justify-end">
+            {canManage && client.status === 'active' ? (
+              <Button
+                variant="secondary"
+                onClick={() => void disableClient()}
+                disabled={isDisabling}
+              >
+                <CircleOff className="h-4 w-4" />
+                Disable client
+              </Button>
+            ) : null}
             {canManage && client.status !== 'active' ? (
-              <Button onClick={() => void activateClient()} disabled={isActivating}>
+              <Button
+                onClick={openActivateModal}
+                disabled={isActivating}
+              >
                 <CircleCheck className="h-4 w-4" />
                 Activate client
               </Button>
@@ -596,57 +890,55 @@ export default function ClientDetailPage() {
               <Plus className="h-4 w-4" />
               Create order
             </Button>
-          </>
-        }
-      />
-
-      <Card padding="sm" className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex items-center gap-3">
-          <ClientOrgLogo
-            clientId={client.id}
-            name={client.name}
-            logoUpdatedAt={client.logoUpdatedAt}
-            className="h-10 w-10 sm:h-14 sm:w-14"
-          />
-          <div className="min-w-0">
-            <p className="text-sm font-medium text-[var(--foreground)]">
-              Company logo
-            </p>
-            <p className="mt-0.5 hidden text-xs text-[var(--muted)] sm:block">
-              Shown in this workspace. JPEG, PNG, WebP, or GIF · crop before
-              save · 2 MB max.
-            </p>
-            {logoMessage ? (
-              <p className="mt-1 text-xs text-[var(--success)]">{logoMessage}</p>
-            ) : null}
           </div>
         </div>
-        {canManageLogo ? (
-          <div className="flex flex-wrap gap-2">
-            <label className="inline-flex min-h-touch cursor-pointer items-center rounded-[var(--radius-md)] bg-[var(--primary)] px-4 text-sm text-[var(--primary-foreground)] sm:h-10 sm:min-h-10">
-              {logoBusy ? 'Working…' : client.logoUpdatedAt || client.hasLogo ? 'Replace logo' : 'Upload logo'}
-              <input
-                type="file"
-                accept="image/jpeg,image/png,image/webp,image/gif"
-                className="sr-only"
-                disabled={logoBusy}
-                onChange={(event) => {
-                  const file = event.target.files?.[0];
-                  event.target.value = '';
-                  handleLogoPick(file);
-                }}
-              />
-            </label>
-            {client.logoUpdatedAt || client.hasLogo ? (
+
+        {canManage ? (
+          <div className="border-t border-[var(--border)] bg-[var(--surface-muted)]/50 px-4 py-3 sm:px-5">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
+              <div className="min-w-0 flex-1 sm:max-w-md">
+                <Select
+                  label="Account manager"
+                  value={managerUserId}
+                  disabled={managerBusy}
+                  onChange={(event) => {
+                    setManagerUserId(event.target.value);
+                    setManagerMessage(null);
+                  }}
+                  options={[
+                    { value: '', label: 'No manager assigned' },
+                    ...managers.map((manager) => ({
+                      value: manager.id,
+                      label: `${manager.fullName} · ${manager.email}`,
+                    })),
+                  ]}
+                />
+              </div>
               <Button
                 type="button"
-                variant="secondary"
-                disabled={logoBusy}
-                onClick={() => void handleLogoRemove()}
+                size="sm"
+                onClick={() => void saveManager()}
+                disabled={managerBusy || !managerDirty}
               >
-                Remove
+                {managerBusy ? 'Saving…' : 'Save manager'}
               </Button>
+            </div>
+            <p className="mt-1.5 text-xs text-[var(--muted)]">
+              Manager is added to all current client channels and any new ones
+              created later.
+            </p>
+            {managerMessage ? (
+              <p className="mt-1.5 text-xs text-[var(--success)]">
+                {managerMessage}
+              </p>
             ) : null}
+          </div>
+        ) : client.defaultManager ? (
+          <div className="border-t border-[var(--border)] px-4 py-2.5 text-sm text-[var(--muted)] sm:px-5">
+            Manager:{' '}
+            <span className="font-medium text-[var(--foreground)]">
+              {client.defaultManager.fullName}
+            </span>
           </div>
         ) : null}
       </Card>
@@ -662,19 +954,56 @@ export default function ClientDetailPage() {
         onSave={handleLogoSave}
       />
 
-      <div className="flex flex-wrap items-center gap-2">
-        <Badge
-          variant={client.status === 'active' ? 'success' : 'warning'}
-          className="capitalize"
-        >
-          {client.status.replaceAll('_', ' ')}
-        </Badge>
-        {client.defaultManager ? (
-          <span className="text-sm text-[var(--muted)]">
-            Manager: {client.defaultManager.fullName}
-          </span>
-        ) : null}
-      </div>
+      <Modal
+        open={activateOpen}
+        onClose={isActivating ? () => undefined : () => setActivateOpen(false)}
+        title="Activate client"
+        description="Mark this organization as active once setup details are complete."
+        footer={
+          <ModalActions
+            onCancel={() => setActivateOpen(false)}
+            onSubmit={() => void activateClient()}
+            submitLabel={
+              sendOnboardingEmail ? 'Activate & send login' : 'Activate only'
+            }
+            isSubmitting={isActivating}
+            disabled={
+              sendOnboardingEmail && !activationInviteEmail
+            }
+          />
+        }
+      >
+        <div className="space-y-3">
+          <p className="text-sm text-[var(--muted)]">
+            Activation unlocks the live client workspace. You can optionally
+            email portal login details now.
+          </p>
+          <label className="flex items-start gap-2 rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface-muted)]/60 p-3 text-sm text-[var(--foreground)]">
+            <input
+              type="checkbox"
+              className="mt-0.5"
+              checked={sendOnboardingEmail}
+              disabled={isActivating}
+              onChange={(event) =>
+                setSendOnboardingEmail(event.target.checked)
+              }
+            />
+            <span>
+              Send onboarding email with username + temporary password
+              <span className="mt-0.5 block text-xs text-[var(--muted)]">
+                {activationInviteEmail
+                  ? `Username will be ${activationInviteEmail}. A temporary password is generated and emailed with the sign-in link.`
+                  : 'Add a primary contact email on this client first, then send the onboarding login.'}
+              </span>
+            </span>
+          </label>
+          {sendOnboardingEmail && !activationInviteEmail ? (
+            <p className="text-sm text-[var(--danger)]">
+              Primary contact email is required to send the onboarding email.
+            </p>
+          ) : null}
+        </div>
+      </Modal>
 
       {errorMessage ? (
         <p className="text-sm text-[var(--danger)]">{errorMessage}</p>
@@ -706,43 +1035,15 @@ export default function ClientDetailPage() {
         <div className="space-y-4">
           <div className="grid grid-cols-2 gap-2 xl:grid-cols-4">
             <StatCard
-              label="Active orders"
+              label="Open orders"
               value={String(overview.activeOrders)}
               icon={ClipboardList}
             />
             <StatCard
-              label="Pending orders"
-              value={String(overview.pendingOrders)}
-              icon={ClipboardList}
-            />
-            <StatCard
-              label="Orders in QA"
-              value={String(overview.ordersInQa)}
-              icon={CheckCircle2}
-            />
-            <StatCard
-              label="Completed orders"
+              label="Completed"
               value={String(overview.completedOrders)}
               icon={CheckCircle2}
             />
-            {overview.totalRevenue != null &&
-            overview.outstandingAmount != null ? (
-              <>
-                <StatCard
-                  label="Total revenue"
-                  value={formatMoney(overview.totalRevenue, client?.currency)}
-                  icon={Activity}
-                />
-                <StatCard
-                  label="Outstanding"
-                  value={formatMoney(
-                    overview.outstandingAmount,
-                    client?.currency,
-                  )}
-                  icon={Activity}
-                />
-              </>
-            ) : null}
             <StatCard
               label="Last order"
               value={formatDate(overview.lastOrderDate)}
@@ -759,63 +1060,151 @@ export default function ClientDetailPage() {
             />
           </div>
 
-          <Card>
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <div>
-                <h3 className="text-sm font-medium text-[var(--foreground)]">
-                  Portal login
-                </h3>
-                <p className="mt-0.5 text-xs text-[var(--muted)]">
-                  {members.length === 0
-                    ? 'This client cannot sign in yet. Send login details from their saved contact.'
-                    : `${members.length} portal login${members.length === 1 ? '' : 's'}. Manage resend, disable, and delete on Portal users.`}
-                </p>
-              </div>
-              <Button
-                size="sm"
-                variant="secondary"
-                onClick={() => setActiveTab('portal')}
+          <Card padding="none" className="overflow-hidden">
+            <button
+              type="button"
+              onClick={() => setShowOverviewCharts((open) => !open)}
+              className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left hover:bg-[var(--surface-muted)]/60"
+              aria-expanded={showOverviewCharts}
+            >
+              <span className="inline-flex items-center gap-2">
+                <BarChart3 className="h-4 w-4 text-[var(--primary)]" />
+                <span>
+                  <span className="block text-sm font-semibold text-[var(--foreground)]">
+                    Charts & graphs
+                  </span>
+                  <span className="block text-xs text-[var(--muted)]">
+                    Order mix, pipeline, and finance snapshot
+                  </span>
+                </span>
+              </span>
+              <span className="inline-flex items-center gap-1.5 text-xs font-medium text-[var(--muted)]">
+                {showOverviewCharts ? 'Hide' : 'Show'}
+                {showOverviewCharts ? (
+                  <ChevronUp className="h-4 w-4" />
+                ) : (
+                  <ChevronDown className="h-4 w-4" />
+                )}
+              </span>
+            </button>
+            {showOverviewCharts ? (
+              <div
+                className={cn(
+                  'grid gap-4 border-t border-[var(--border)] p-4',
+                  overview.totalRevenue != null &&
+                    overview.outstandingAmount != null
+                    ? 'xl:grid-cols-3'
+                    : 'xl:grid-cols-2',
+                )}
               >
-                <Users className="h-4 w-4" />
-                Portal users
-              </Button>
-            </div>
+                <ClientOrderMixDonut
+                  activeOrders={overview.activeOrders}
+                  completedOrders={overview.completedOrders}
+                />
+                <ClientPipelineBars
+                  pendingOrders={overview.pendingOrders}
+                  ordersInQa={overview.ordersInQa}
+                  activeOrders={overview.activeOrders}
+                />
+                {overview.totalRevenue != null &&
+                overview.outstandingAmount != null ? (
+                  <ClientFinanceBars
+                    totalRevenue={overview.totalRevenue}
+                    outstandingAmount={overview.outstandingAmount}
+                    currencyLabel={(value) =>
+                      formatMoney(value, client?.currency)
+                    }
+                  />
+                ) : null}
+              </div>
+            ) : null}
           </Card>
 
-          <Card>
-            <h3 className="text-sm font-medium text-[var(--foreground)]">
-              Quick actions
-            </h3>
-            <div className="mt-3 flex flex-wrap gap-2">
-              <Button size="sm" onClick={() => setCreateOrderOpen(true)}>
-                Create order
-              </Button>
-              <Button
-                size="sm"
-                variant="secondary"
-                onClick={() => setActiveTab('files')}
-              >
-                <Upload className="h-4 w-4" />
-                Upload files
-              </Button>
-              <Button
-                size="sm"
-                variant="secondary"
-                onClick={() => setActiveTab('conversation')}
-              >
-                <MessageSquare className="h-4 w-4" />
-                Send message
-              </Button>
-              <Button
-                size="sm"
-                variant="secondary"
-                onClick={() => setActiveTab('settings')}
-              >
-                <Settings className="h-4 w-4" />
-                Edit client
-              </Button>
-            </div>
-          </Card>
+          {overview.nextDueOrder ? (
+            <Card>
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div className="min-w-0">
+                  <h3 className="text-sm font-medium text-[var(--foreground)]">
+                    Next due order
+                  </h3>
+                  <p className="mt-0.5 truncate text-xs text-[var(--muted)]">
+                    {overview.nextDueOrder.code} · {overview.nextDueOrder.name}
+                    {' · '}
+                    {formatDate(overview.nextDueOrder.dueDate)}
+                  </p>
+                </div>
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  onClick={() =>
+                    router.push(`/orders/${overview.nextDueOrder!.id}`)
+                  }
+                >
+                  Open order
+                </Button>
+              </div>
+            </Card>
+          ) : null}
+
+          <div className="grid gap-4 lg:grid-cols-2">
+            <Card>
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <h3 className="text-sm font-medium text-[var(--foreground)]">
+                    Portal login
+                  </h3>
+                  <p className="mt-0.5 text-xs text-[var(--muted)]">
+                    {members.length === 0
+                      ? 'This client cannot sign in yet. Send login details from their saved contact.'
+                      : `${members.length} portal login${members.length === 1 ? '' : 's'}. Manage resend, disable, and delete on Portal users.`}
+                  </p>
+                </div>
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  onClick={() => setActiveTab('portal')}
+                >
+                  <Users className="h-4 w-4" />
+                  Portal users
+                </Button>
+              </div>
+            </Card>
+
+            <Card>
+              <h3 className="text-sm font-medium text-[var(--foreground)]">
+                Quick actions
+              </h3>
+              <div className="mt-3 flex flex-wrap gap-2">
+                <Button size="sm" onClick={() => setCreateOrderOpen(true)}>
+                  Create order
+                </Button>
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  onClick={() => setActiveTab('files')}
+                >
+                  <Upload className="h-4 w-4" />
+                  Upload files
+                </Button>
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  onClick={() => setActiveTab('conversation')}
+                >
+                  <MessageSquare className="h-4 w-4" />
+                  Send message
+                </Button>
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  onClick={() => setActiveTab('settings')}
+                >
+                  <Settings className="h-4 w-4" />
+                  Edit client
+                </Button>
+              </div>
+            </Card>
+          </div>
         </div>
       ) : null}
 
@@ -1020,6 +1409,7 @@ export default function ClientDetailPage() {
         <ClientPortalUsers
           clientId={clientId}
           clientName={client.name}
+          clientStatus={client.status}
           primaryContactName={client.primaryContactName}
           primaryContactEmail={client.primaryContactEmail}
           contacts={contacts}
@@ -1293,16 +1683,45 @@ export default function ClientDetailPage() {
                   const done = workflow.items.filter(
                     (item) => item.status === 'completed',
                   ).length;
+                  const isCompleted = workflow.status === 'completed';
+                  const isCancelled = workflow.status === 'cancelled';
                   return (
                     <li
                       key={workflow.id}
                       className="rounded-[var(--radius-md)] border border-[var(--border)] p-3"
                     >
-                      <div className="mb-2 flex items-center justify-between gap-2">
-                        <span className="text-sm font-medium">{workflow.name}</span>
-                        <span className="text-xs text-[var(--muted)]">
-                          {done}/{workflow.items.length} complete
-                        </span>
+                      <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                        <div className="min-w-0 flex-1 space-y-1">
+                          <span className="block text-sm font-medium">
+                            {workflow.name}
+                          </span>
+                          <span className="flex flex-wrap items-center gap-2 text-xs text-[var(--muted)]">
+                            <span>
+                              {done}/{workflow.items.length} items complete
+                            </span>
+                            {isCompleted ? (
+                              <Badge variant="success">Completed</Badge>
+                            ) : null}
+                            {isCancelled ? (
+                              <Badge variant="neutral">Cancelled</Badge>
+                            ) : null}
+                          </span>
+                        </div>
+                        {canManageOnboarding &&
+                        workflow.status === 'active' ? (
+                          <Button
+                            size="sm"
+                            variant="secondary"
+                            disabled={completingWorkflowId === workflow.id}
+                            onClick={() =>
+                              void handleMarkWorkflowComplete(workflow.id)
+                            }
+                          >
+                            {completingWorkflowId === workflow.id
+                              ? 'Saving…'
+                              : 'Mark complete'}
+                          </Button>
+                        ) : null}
                       </div>
                       <ul className="space-y-1">
                         {workflow.items.map((item) => (
@@ -1346,7 +1765,18 @@ export default function ClientDetailPage() {
         open={createWorkflowOpen}
         defaultClientId={clientId}
         onClose={() => setCreateWorkflowOpen(false)}
-        onCreated={() => setActiveTab('settings')}
+        onCreated={() => {
+          setActiveTab('settings');
+          apiRequest<ApiResponse<OnboardingWorkflow[]>>('/onboarding/workflows')
+            .then((response) =>
+              setWorkflows(
+                response.data.filter(
+                  (workflow) => workflow.clientOrganization?.id === clientId,
+                ),
+              ),
+            )
+            .catch(() => undefined);
+        }}
       />
       <LinkClientUserModal
         open={linkOpen}

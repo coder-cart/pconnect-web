@@ -32,6 +32,13 @@ export function getNotificationIconType(type: string) {
   if (type === 'channel.invite') return 'invite';
   if (type.startsWith('invoice.')) return 'invoice';
   if (type.startsWith('task.')) return 'task';
+  if (
+    type === 'onboarding.completed' ||
+    type === 'client.activated' ||
+    type === 'client.first_login'
+  ) {
+    return 'task';
+  }
   return 'default';
 }
 
