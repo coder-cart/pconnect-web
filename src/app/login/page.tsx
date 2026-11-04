@@ -1,6 +1,6 @@
 'use client';
 
-import { FormEvent, useState } from 'react';
+import { FormEvent, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import {
@@ -21,6 +21,8 @@ import { apiRequest } from '@/lib/api-client';
 import {
   ApiResponse,
   AuthenticatedUser,
+  getStoredToken,
+  reconcileSessionMarker,
   setStoredToken,
 } from '@/lib/auth';
 import { Button } from '@/components/ui/Button';
@@ -47,6 +49,17 @@ export default function LoginPage() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  useEffect(() => {
+    // Drop a stale session cookie when this device has no tokens, then if a
+    // real session exists send the user into the workspace.
+    if (!reconcileSessionMarker()) {
+      return;
+    }
+    if (getStoredToken()) {
+      router.replace('/dashboard');
+    }
+  }, [router]);
 
   async function handlePasswordLogin(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();

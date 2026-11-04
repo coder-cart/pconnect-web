@@ -31,7 +31,7 @@ export const BRAND = {
   maskable192: '/icons/maskable-192.png',
   maskable512: '/icons/maskable-512.png',
   /** Shown on PWA / push notifications. */
-  notificationIcon: '/icons/notification-icon-192.png',
+  notificationIcon: '/icons/icon-192.png',
   /**
    * Browser / PWA chrome (status bar, theme-color).
    * Matches the in-app header and sidebar (`--shell-brand`).

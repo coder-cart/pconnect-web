@@ -222,7 +222,7 @@ export function ProfileMenu({ user, onLogout, tone = 'default' }: ProfileMenuPro
       return;
     }
     const previous = profile;
-    // Online/Offline replaces any custom status so only one label shows.
+    // Active/Away replaces any custom status so only one label shows.
     setProfile((current) => ({
       ...current,
       presenceStatus: next,
@@ -509,9 +509,7 @@ export function ProfileMenu({ user, onLogout, tone = 'default' }: ProfileMenuPro
                   ? 'Resume notifications'
                   : 'Pause notifications'}
               </DropdownMenuItem>
-              <DropdownMenuItem>
-                <Link href="/inbox">Open inbox</Link>
-              </DropdownMenuItem>
+              <DropdownMenuItem href="/inbox">Open inbox</DropdownMenuItem>
             </DropdownMenu>
           </div>
 

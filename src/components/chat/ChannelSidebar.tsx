@@ -1,9 +1,8 @@
 'use client';
 
 import { ReactNode, useState } from 'react';
-import { ChevronDown, Hash, Plus, Search, Users } from 'lucide-react';
+import { ChevronDown, Hash, Lock, Plus, Search, Users } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
-import { ClientOrgLogo } from '@/components/ui/ClientOrgLogo';
 import { UserAvatar } from '@/components/ui/UserAvatar';
 import {
   ChatChannel,
@@ -13,11 +12,7 @@ import {
   PendingChannelInvite,
 } from '@/lib/chat-types';
 import { cn } from '@/lib/cn';
-import {
-  formatCustomStatus,
-  isAway,
-  presenceSubtitle,
-} from '@/lib/user-presence';
+import { isAway, presenceSubtitle } from '@/lib/user-presence';
 
 interface ChannelSidebarProps {
   channels: ChatChannel[];
@@ -37,17 +32,23 @@ interface ChannelSidebarProps {
 }
 
 function ChannelIcon({ type }: { type: string }) {
-  if (type === 'group') {
-    return <Users className="h-4 w-4 shrink-0" />;
+  const className = 'h-4 w-4 shrink-0';
+  switch (type) {
+    case 'private':
+    case 'client_shared':
+      return <Lock className={className} aria-hidden />;
+    case 'group':
+      return <Users className={className} aria-hidden />;
+    case 'public':
+    default:
+      return <Hash className={className} aria-hidden />;
   }
-
-  return <Hash className="h-4 w-4 shrink-0" />;
 }
 
 function DmPeerAvatar({ peer }: { peer: ChatDmPeer }) {
   const away = isAway(peer.presenceStatus);
   return (
-    <span className="relative shrink-0">
+    <span className="relative shrink-0" title={away ? 'Away' : 'Active'}>
       <UserAvatar
         user={{
           id: peer.id,
@@ -57,12 +58,18 @@ function DmPeerAvatar({ peer }: { peer: ChatDmPeer }) {
         size="xs"
         className="ring-1 ring-[var(--shell-border)]"
       />
+      {/* Slack-style: filled green = Active, hollow outline = Away */}
       <span
         className={cn(
-          'absolute -bottom-0.5 -right-0.5 h-2 w-2 rounded-full border border-[var(--chat-sidebar-bg)]',
-          away ? 'bg-[var(--shell-muted)]' : 'bg-[var(--success)]',
+          'absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full border-2 border-[var(--chat-sidebar-bg)]',
+          away ? 'bg-transparent' : 'bg-[var(--success)]',
         )}
-        aria-hidden
+        style={
+          away
+            ? { boxShadow: 'inset 0 0 0 1.5px var(--shell-muted)' }
+            : undefined
+        }
+        aria-label={away ? 'Away' : 'Active'}
       />
     </span>
   );
@@ -117,11 +124,7 @@ function ChannelButton({
   const label = getChannelLabel(channel);
   const isDirect = channel.type === 'direct';
   const peer = channel.dmPeer ?? null;
-  const peerStatusLine = peer ? formatCustomStatus(peer) : '';
-  const showHash =
-    channel.type !== 'direct' &&
-    channel.type !== 'group' &&
-    channel.type !== 'client_shared';
+  const showTypeIcon = !isDirect;
 
   return (
     <div
@@ -135,7 +138,7 @@ function ChannelButton({
         type="button"
         onClick={() => onSelect(channel.id)}
         className={cn(
-          'flex min-h-10 w-full min-w-0 items-start gap-2 rounded-[var(--radius-md)] px-2 py-1.5 text-left text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--shell-focus-ring)] sm:min-h-9',
+          'flex min-h-9 w-full min-w-0 items-center gap-2 rounded-[var(--radius-md)] px-2 py-1.5 text-left text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--shell-focus-ring)]',
           isActive
             ? 'bg-[var(--shell-active)] text-[var(--shell-text)] shadow-[inset_3px_0_0_0_rgba(255,255,255,0.45)]'
             : 'text-[var(--shell-muted)] hover:bg-[var(--shell-hover)] hover:text-[var(--shell-text)]',
@@ -150,28 +153,20 @@ function ChannelButton({
               fullName: label,
             }}
             size="xs"
-            className="mt-0.5 shrink-0"
+            className="shrink-0"
           />
-        ) : channel.type === 'client_shared' && channel.clientOrganizationId ? (
-          <ClientOrgLogo
-            clientId={channel.clientOrganizationId}
-            name={channel.clientOrganizationName ?? label}
-            logoUpdatedAt={channel.clientOrganizationLogoUpdatedAt}
-            className="mt-0.5 h-8 w-8"
-          />
-        ) : (
+        ) : showTypeIcon ? (
           <span
             className={cn(
-              'mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-[var(--radius-md)]',
-              isActive
-                ? 'bg-white/15 text-[var(--shell-text)]'
-                : 'bg-[var(--shell-hover)] text-[var(--shell-muted)]',
+              'flex h-5 w-5 shrink-0 items-center justify-center',
+              isActive ? 'text-[var(--shell-text)]' : 'text-[var(--shell-muted)]',
             )}
+            aria-hidden
           >
             <ChannelIcon type={channel.type} />
           </span>
-        )}
-        <span className="min-w-0 flex-1 pt-0.5">
+        ) : null}
+        <span className="min-w-0 flex-1">
           <span className="flex items-center gap-2">
             <span
               className={cn(
@@ -181,7 +176,6 @@ function ChannelButton({
                   : 'font-medium text-[var(--shell-muted)]',
               )}
             >
-              {showHash ? '#' : ''}
               {label}
               {peer?.statusEmoji ? (
                 <span className="ml-1 font-normal" aria-hidden>
@@ -195,25 +189,6 @@ function ChannelButton({
               </span>
             ) : null}
           </span>
-          {isDirect && peerStatusLine ? (
-            <span className="mt-0.5 block truncate text-[11px] text-[var(--shell-muted)]">
-              {peerStatusLine}
-            </span>
-          ) : isDirect && channel.latestMessage?.body ? (
-            <span className="mt-0.5 block truncate text-[11px] text-[var(--shell-muted)]">
-              {channel.latestMessage.body}
-            </span>
-          ) : channel.clientOrganizationName &&
-            channel.type === 'client_shared' &&
-            channel.clientOrganizationName !== label ? (
-            <span className="mt-0.5 block truncate text-[11px] text-[var(--shell-muted)]">
-              {channel.clientOrganizationName}
-            </span>
-          ) : channel.type === 'public' || channel.type === 'private' ? (
-            <span className="mt-0.5 block truncate text-[11px] capitalize text-[var(--shell-muted)]">
-              {channel.type} channel
-            </span>
-          ) : null}
         </span>
       </button>
       {hovering && isDirect && peer ? <DmHoverCard peer={peer} /> : null}
@@ -471,6 +446,18 @@ export function ChannelSidebar({
             unreadCount={unreadTotal(clientChannels)}
             collapsed={clientsCollapsed}
             onToggle={() => setClientsCollapsed((current) => !current)}
+            action={
+              canAddConnection ? (
+                <button
+                  type="button"
+                  onClick={onAddConnection}
+                  className="rounded-[var(--radius-sm)] p-1 text-[var(--shell-muted)] hover:bg-[var(--shell-hover)] hover:text-[var(--shell-text)]"
+                  aria-label="Add external connection"
+                >
+                  <Plus className="h-4 w-4" />
+                </button>
+              ) : null
+            }
           >
             {clientChannels.length === 0 ? (
               <p className="px-2 py-1.5 text-xs text-[var(--shell-muted)]">
@@ -498,16 +485,7 @@ export function ChannelSidebar({
             collapsed={teamCollapsed}
             onToggle={() => setTeamCollapsed((current) => !current)}
             action={
-              canAddConnection ? (
-                <button
-                  type="button"
-                  onClick={onAddConnection}
-                  className="rounded-[var(--radius-sm)] p-1 text-[var(--shell-muted)] hover:bg-[var(--shell-hover)] hover:text-[var(--shell-text)]"
-                  aria-label="Add connection"
-                >
-                  <Plus className="h-4 w-4" />
-                </button>
-              ) : canCreateChannel ? (
+              canCreateChannel ? (
                 <button
                   type="button"
                   onClick={onCreateChannel}

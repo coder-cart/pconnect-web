@@ -1,5 +1,5 @@
 /* Colabdeck service worker — installable PWA + web push */
-const SW_VERSION = 'push-v6';
+const SW_VERSION = 'push-v7';
 
 self.addEventListener('install', (event) => {
   self.skipWaiting();
@@ -48,8 +48,8 @@ self.addEventListener('push', (event) => {
       try {
         await self.registration.showNotification(title, {
           body,
-          icon: '/icons/notification-icon-192.png',
-          badge: '/icons/notification-icon-96.png',
+          icon: '/icons/icon-192.png',
+          badge: '/icons/icon-96.png',
           tag,
           renotify: true,
           // Keep the Windows toast visible until the user interacts — otherwise

@@ -5,7 +5,7 @@
   "description": "Colabdeck workspace for chat, projects, files, and finance",
   "lang": "en",
   "dir": "ltr",
-  "start_url": "/dashboard",
+  "start_url": "/login",
   "scope": "/",
   "display": "standalone",
   "display_override": ["standalone", "minimal-ui", "browser"],

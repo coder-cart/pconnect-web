@@ -92,6 +92,27 @@ export function clearStoredToken(): void {
   clearSessionCookie();
 }
 
+/**
+ * Keep the middleware session cookie aligned with real tokens.
+ * iOS home-screen apps often keep the cookie after localStorage is empty,
+ * which would otherwise trap users on protected routes behind a boot splash.
+ */
+export function reconcileSessionMarker(): boolean {
+  if (typeof window === 'undefined') {
+    return false;
+  }
+  const hasToken = Boolean(
+    window.localStorage.getItem(AUTH_TOKEN_KEY) ||
+      window.localStorage.getItem(REFRESH_TOKEN_KEY),
+  );
+  if (!hasToken) {
+    clearSessionCookie();
+    return false;
+  }
+  setSessionCookie();
+  return true;
+}
+
 export function userHasPermission(
   user: AuthenticatedUser | null,
   permission: string,

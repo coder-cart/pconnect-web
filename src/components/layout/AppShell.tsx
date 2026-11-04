@@ -16,11 +16,13 @@ import { cn } from '@/lib/cn';
 import { CreateClientModal } from '@/components/modals/CreateClientModal';
 import { CreateUserModal } from '@/components/modals/CreateUserModal';
 import { OrderCreateModal } from '@/components/orders/OrderCreateForm';
+import { RevisionOrderPickerModal } from '@/components/orders/RevisionOrderPickerModal';
 import { WorkspaceProvider } from '@/components/providers/WorkspaceProvider';
 import { RealtimeProvider } from '@/components/providers/RealtimeProvider';
 import { NotificationProvider, useNotifications } from '@/components/providers/NotificationProvider';
 import { UnreadMessagesProvider, useUnreadMessages } from '@/components/providers/UnreadMessagesProvider';
 import { NotificationOptInPrompt } from '@/components/pwa/NotificationOptInPrompt';
+import { PresenceLifecycle } from '@/components/providers/PresenceLifecycle';
 import { ProductTourProvider } from '@/components/tour/ProductTourProvider';
 
 const SIDEBAR_COLLAPSED_KEY = 'pconnect.sidebar.collapsed';
@@ -168,11 +170,18 @@ function AppShellContent({
       ) : null}
 
       <NotificationOptInPrompt />
+      <PresenceLifecycle />
 
       <OrderCreateModal
         open={createAction === 'order'}
         canManage={canManageOrders}
         isExternal={isExternal}
+        onClose={() => setCreateAction(null)}
+        onCreated={onCreated}
+      />
+      <RevisionOrderPickerModal
+        open={createAction === 'revision'}
+        canSetPriority={canManageOrders}
         onClose={() => setCreateAction(null)}
         onCreated={onCreated}
       />
