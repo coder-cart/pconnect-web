@@ -35,7 +35,7 @@ import {
   unlockNotificationSound,
 } from '@/lib/notification-sound';
 
-export type CreateAction = 'order' | 'client' | 'user';
+export type CreateAction = 'order' | 'revision' | 'client' | 'user';
 
 interface TopBarProps {
   user: AuthenticatedUser;
@@ -106,14 +106,22 @@ export function TopBar({
     showToast(pushMessage, tone);
   }, [pushMessage, showToast]);
 
+  const canCreateOrders =
+    user.permissionCodes.includes('orders.create') ||
+    user.permissionCodes.includes('orders.manage');
+
   const createItems = [
     {
       action: 'order' as const,
       label: 'New Order',
       icon: <ClipboardList className="h-4 w-4" />,
-      show:
-        user.permissionCodes.includes('orders.create') ||
-        user.permissionCodes.includes('orders.manage'),
+      show: canCreateOrders,
+    },
+    {
+      action: 'revision' as const,
+      label: 'Revision',
+      icon: <ClipboardList className="h-4 w-4" />,
+      show: canCreateOrders,
     },
     {
       action: 'client' as const,
@@ -238,7 +246,6 @@ export function TopBar({
           ) : null}
 
           {pushStatus === 'unsupported' ? null : (
-            <div className="hidden lg:block">
             <IconButton
               label={
                 pushBusy
@@ -257,7 +264,6 @@ export function TopBar({
             >
               <BellRing className="h-4 w-4" />
             </IconButton>
-            </div>
           )}
           <div className="hidden lg:block">
           <IconButton

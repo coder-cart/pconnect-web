@@ -45,6 +45,7 @@ export default function AccountProfilePage() {
   const { user, refreshUser } = useWorkspace();
   const {
     pushStatus,
+    sendTestPush,
     pushBusy,
     enablePush,
     disablePush,
@@ -587,6 +588,16 @@ export default function AccountProfilePage() {
                     : 'Enable device alerts'}
               </Button>
             )}
+            {pushStatus === 'on' ? (
+              <Button
+                size="sm"
+                variant="secondary"
+                disabled={pushBusy}
+                onClick={() => void sendTestPush()}
+              >
+                Send system push test
+              </Button>
+            ) : null}
             <Button
               size="sm"
               variant="secondary"

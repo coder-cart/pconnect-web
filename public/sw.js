@@ -1,5 +1,5 @@
 /* Colabdeck service worker — installable PWA + web push */
-const SW_VERSION = 'push-v5';
+const SW_VERSION = 'push-v6';
 
 self.addEventListener('install', (event) => {
   self.skipWaiting();
@@ -44,17 +44,31 @@ self.addEventListener('push', (event) => {
   // userVisibleOnly subscriptions. Never skip or instantly close — that drops
   // the browser push subscription (especially on desktop).
   event.waitUntil(
-    self.registration.showNotification(title, {
-      body,
-      icon: '/icons/notification-icon-192.png',
-      badge: '/icons/notification-icon-96.png',
-      tag,
-      renotify: true,
-      // Keep the Windows toast visible until the user interacts — otherwise
-      // banners vanish quickly and it looks like push "isn't working".
-      requireInteraction: true,
-      data: { url: linkUrl, tag, sw: SW_VERSION },
-    }),
+    (async () => {
+      try {
+        await self.registration.showNotification(title, {
+          body,
+          icon: '/icons/notification-icon-192.png',
+          badge: '/icons/notification-icon-96.png',
+          tag,
+          renotify: true,
+          // Keep the Windows toast visible until the user interacts — otherwise
+          // banners vanish quickly and it looks like push "isn't working".
+          requireInteraction: true,
+          data: { url: linkUrl, tag, sw: SW_VERSION },
+        });
+      } catch (error) {
+        // Fallback without icons if asset/options fail — still must be visible.
+        console.error('[sw] showNotification failed', error);
+        await self.registration.showNotification(title || 'Colabdeck', {
+          body: body || 'New update',
+          tag,
+          renotify: true,
+          requireInteraction: true,
+          data: { url: linkUrl, tag, sw: SW_VERSION },
+        });
+      }
+    })(),
   );
 });
 

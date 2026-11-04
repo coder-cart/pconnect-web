@@ -42,6 +42,7 @@ interface NotificationContextValue {
   pushBusy: boolean;
   enablePush: () => Promise<void>;
   disablePush: () => Promise<void>;
+  sendTestPush: () => Promise<void>;
   pushMessage: string | null;
 }
 
@@ -200,6 +201,28 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  const sendTestPush = useCallback(async () => {
+    setPushBusy(true);
+    setPushMessage(null);
+    try {
+      const response = await apiRequest<
+        ApiResponse<{
+          configured: boolean;
+          subscriptionCount: number;
+          message: string;
+        }>
+      >('/notifications/push/test', { method: 'POST' });
+      setPushMessage(response.data.message);
+      setPushStatus(await readDevicePushStatus());
+    } catch (error) {
+      setPushMessage(
+        error instanceof Error ? error.message : 'Could not send a test push',
+      );
+    } finally {
+      setPushBusy(false);
+    }
+  }, []);
+
   useEffect(() => {
     function unlock() {
       unlockNotificationSound();
@@ -249,6 +272,7 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
         pushBusy,
         enablePush,
         disablePush,
+        sendTestPush,
         pushMessage,
       }}
     >
