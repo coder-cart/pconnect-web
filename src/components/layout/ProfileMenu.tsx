@@ -509,7 +509,14 @@ export function ProfileMenu({ user, onLogout, tone = 'default' }: ProfileMenuPro
                   ? 'Resume notifications'
                   : 'Pause notifications'}
               </DropdownMenuItem>
-              <DropdownMenuItem href="/inbox">Open inbox</DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={() => {
+                  setOpen(false);
+                  window.location.assign('/inbox');
+                }}
+              >
+                Open inbox
+              </DropdownMenuItem>
             </DropdownMenu>
           </div>
 
