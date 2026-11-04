@@ -111,7 +111,15 @@ function BarSegment({
   );
 }
 
-export function OrderStatusDonut({ stages }: { stages: StageCount[] }) {
+export function OrderStatusDonut({
+  stages,
+  title = 'Orders by status',
+  description = 'Active pipeline distribution',
+}: {
+  stages: StageCount[];
+  title?: string;
+  description?: string;
+}) {
   const total = stages.reduce((sum, stage) => sum + stage.count, 0);
   const radius = 54;
   const stroke = 16;
@@ -120,8 +128,8 @@ export function OrderStatusDonut({ stages }: { stages: StageCount[] }) {
 
   return (
     <Card className="h-full">
-      <h2 className="text-sm font-semibold text-[var(--foreground)]">Orders by status</h2>
-      <p className="mt-0.5 text-xs text-[var(--muted)]">Active pipeline distribution</p>
+      <h2 className="text-sm font-semibold text-[var(--foreground)]">{title}</h2>
+      <p className="mt-0.5 text-xs text-[var(--muted)]">{description}</p>
       <div className="mt-3 flex flex-col items-center gap-4 sm:flex-row sm:justify-center">
         <div className="relative h-36 w-36">
           <svg viewBox="0 0 140 140" className="h-full w-full -rotate-90" aria-hidden>
