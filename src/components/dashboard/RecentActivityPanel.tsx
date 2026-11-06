@@ -5,6 +5,7 @@ import {
   formatNotificationTitle,
   NotificationRecord,
 } from '@/lib/notifications';
+import { formatMentionPlainText } from '@/lib/chatMarkdown';
 
 export function RecentActivityPanel({
   items,
@@ -53,7 +54,9 @@ export function RecentActivityPanel({
                     {formatNotificationTitle(item)}
                   </p>
                 )}
-                <p className="truncate text-xs text-[var(--muted)]">{item.body}</p>
+                <p className="truncate text-xs text-[var(--muted)]">
+                  {formatMentionPlainText(item.body)}
+                </p>
                 <p className="mt-0.5 text-[0.7rem] text-[var(--muted)]">
                   {formatNotificationRelativeTime(item.createdAt)}
                 </p>

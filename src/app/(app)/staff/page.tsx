@@ -18,7 +18,7 @@ import { CreateUserModal } from '@/components/modals/CreateUserModal';
 import { apiRequest } from '@/lib/api-client';
 import { ApiResponse, userHasPermission } from '@/lib/auth';
 import { useWorkspace } from '@/components/providers/WorkspaceProvider';
-import { getRoleLabel } from '@/lib/navigation';
+import { getRoleLabel, isWorkspaceAdmin } from '@/lib/navigation';
 
 interface StaffUser {
   id: string;
@@ -38,9 +38,34 @@ const ROLE_OPTIONS = [
   { value: 'editor', label: 'Editor' },
 ];
 
+const MANAGER_ROLE_OPTIONS = ROLE_OPTIONS.filter((role) =>
+  ['team_lead', 'qa', 'editor'].includes(role.value),
+);
+
+const MANAGER_VISIBLE_ROLES = new Set(['team_lead', 'qa', 'editor']);
+
+function staffRoleCodes(item: StaffUser): string[] {
+  return item.userRoles?.map((role) => role.role.code) ?? [];
+}
+
+function managerCanEditStaff(item: StaffUser): boolean {
+  const codes = staffRoleCodes(item);
+  return (
+    codes.length > 0 &&
+    codes.every((code) => MANAGER_VISIBLE_ROLES.has(code)) &&
+    !codes.some((code) =>
+      ['company_owner', 'internal_admin', 'internal_manager'].includes(code),
+    )
+  );
+}
+
 export default function StaffPage() {
   const { user, refreshKey, notifyRefresh } = useWorkspace();
   const canManage = userHasPermission(user, 'users.manage');
+  const isAdmin = isWorkspaceAdmin(user.roleCodes);
+  const isManagerOnly =
+    !isAdmin && user.roleCodes.includes('internal_manager');
+  const roleOptions = isAdmin ? ROLE_OPTIONS : MANAGER_ROLE_OPTIONS;
   const [items, setItems] = useState<StaffUser[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -95,10 +120,18 @@ export default function StaffPage() {
   }, [items, searchQuery]);
 
   function openEdit(item: StaffUser) {
+    if (isManagerOnly && !managerCanEditStaff(item)) {
+      return;
+    }
+    const currentRole = item.userRoles?.[0]?.role.code ?? 'editor';
     setEditing(item);
     setEditFullName(item.fullName);
     setEditStatus(item.status);
-    setEditRoleCode(item.userRoles?.[0]?.role.code ?? 'editor');
+    setEditRoleCode(
+      roleOptions.some((role) => role.value === currentRole)
+        ? currentRole
+        : 'editor',
+    );
     setEditPassword('');
     setEditSetPassword(false);
     setEditMustChangePassword(false);
@@ -278,7 +311,11 @@ export default function StaffPage() {
       {!isLoading && !errorMessage && filtered.length === 0 ? (
         <EmptyState
           title="No staff yet"
-          description="Invite editors, QA, and managers from here. Client portal users are managed under Clients."
+          description={
+            isManagerOnly
+              ? 'Invite Team Leads, QA, and Editors from here. Admins and Managers are managed by an Admin.'
+              : 'Invite editors, QA, and managers from here. Client portal users are managed under Clients.'
+          }
         />
       ) : null}
 
@@ -312,9 +349,15 @@ export default function StaffPage() {
                     >
                       {item.status}
                     </Badge>
-                    <Button size="sm" variant="secondary" onClick={() => openEdit(item)}>
-                      Edit
-                    </Button>
+                    {!isManagerOnly || managerCanEditStaff(item) ? (
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        onClick={() => openEdit(item)}
+                      >
+                        Edit
+                      </Button>
+                    ) : null}
                   </div>
                 </li>
               );
@@ -366,13 +409,15 @@ export default function StaffPage() {
                           : '—'}
                       </td>
                       <td className="px-4 py-3 text-right">
-                        <Button
-                          size="sm"
-                          variant="secondary"
-                          onClick={() => openEdit(item)}
-                        >
-                          Edit
-                        </Button>
+                        {!isManagerOnly || managerCanEditStaff(item) ? (
+                          <Button
+                            size="sm"
+                            variant="secondary"
+                            onClick={() => openEdit(item)}
+                          >
+                            Edit
+                          </Button>
+                        ) : null}
                       </td>
                     </tr>
                   );
@@ -421,7 +466,7 @@ export default function StaffPage() {
             label="Role"
             value={editRoleCode}
             onChange={(event) => setEditRoleCode(event.target.value)}
-            options={ROLE_OPTIONS}
+            options={roleOptions}
           />
 
           <div className="flex flex-wrap items-center gap-2 rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface-muted)] px-3 py-2">

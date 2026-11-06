@@ -19,8 +19,10 @@ export function ReactionBar({ reactions, onToggle, className }: ReactionBarProps
           key={reaction.emoji}
           type="button"
           onClick={() => onToggle(reaction.emoji)}
+          aria-label={`${reaction.reactedByMe ? 'Remove' : 'Add'} reaction ${reaction.emoji}, ${reaction.count}`}
+          aria-pressed={reaction.reactedByMe}
           className={cn(
-            'inline-flex h-6 items-center gap-1 rounded-full border px-2 text-xs transition-colors',
+            'inline-flex min-h-touch items-center gap-1 rounded-full border px-2.5 text-xs transition-colors sm:min-h-6 sm:px-2',
             reaction.reactedByMe
               ? 'border-[var(--primary)] bg-[var(--primary-soft)] text-[var(--primary)]'
               : 'border-[var(--border)] bg-[var(--surface-muted)] hover:bg-[var(--surface)]',

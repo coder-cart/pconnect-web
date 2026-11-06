@@ -24,6 +24,7 @@ import {
   isDirectOrGroupChannel,
 } from '@/lib/chat-types';
 import { cn } from '@/lib/cn';
+import { formatMentionPlainText } from '@/lib/chatMarkdown';
 import {
   isAway,
   presenceSubtitle,
@@ -129,6 +130,10 @@ export function ChannelDetailsPanel({
     () => collectAttachments(messages, 'link'),
     [messages],
   );
+  const channelMembers = useMemo(
+    () => members.filter((member) => member.inChannel !== false),
+    [members],
+  );
 
   const description = [
     channelContext?.clientOrganizationName
@@ -151,10 +156,6 @@ export function ChannelDetailsPanel({
   const handle = showHashPrefix
     ? `#${label}`.toLowerCase().replace(/\s+/g, '-')
     : label.toLowerCase().replace(/\s+/g, '-');
-
-  const previewMembers = members.slice(0, 4);
-  const previewFiles = files.slice(0, 4);
-  const previewPins = pins.slice(0, 3);
 
   return (
     <Card
@@ -203,7 +204,7 @@ export function ChannelDetailsPanel({
           <StatCard
             icon={<Users className="h-3.5 w-3.5" />}
             label="Members"
-            value={members.length}
+            value={channelMembers.length}
           />
           <StatCard
             icon={<FileText className="h-3.5 w-3.5" />}
@@ -222,56 +223,59 @@ export function ChannelDetailsPanel({
           />
         </section>
 
+        {canInvite || (canDeleteGroup && onDeleteGroup) ? (
+          <section className="space-y-2">
+            {canInvite ? (
+              <Button
+                type="button"
+                size="sm"
+                variant="secondary"
+                className="w-full"
+                onClick={onInvite}
+              >
+                <Plus className="h-4 w-4" />
+                Add teammates
+              </Button>
+            ) : null}
+            {canDeleteGroup && onDeleteGroup ? (
+              <Button
+                type="button"
+                size="sm"
+                variant="secondary"
+                className="w-full text-[var(--danger)]"
+                disabled={isDeletingGroup}
+                onClick={onDeleteGroup}
+              >
+                <Trash2 className="h-4 w-4" />
+                {isDeletingGroup ? 'Deleting…' : 'Delete channel'}
+              </Button>
+            ) : null}
+          </section>
+        ) : null}
+
         <section className="space-y-2.5">
           <div className="flex items-center justify-between gap-2">
             <p className="text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">
               Members
             </p>
-            {members.length > previewMembers.length ? (
-              <span className="text-xs text-[var(--muted)]">
-                {members.length} total
-              </span>
-            ) : null}
+            <span className="text-xs text-[var(--muted)]">
+              {channelMembers.length} total
+            </span>
           </div>
-          <MemberList members={previewMembers} />
-          {canInvite ? (
-            <Button
-              type="button"
-              size="sm"
-              variant="secondary"
-              className="w-full"
-              onClick={onInvite}
-            >
-              <Plus className="h-4 w-4" />
-              Add teammates
-            </Button>
-          ) : null}
-          {canDeleteGroup && onDeleteGroup ? (
-            <Button
-              type="button"
-              size="sm"
-              variant="secondary"
-              className="w-full text-[var(--danger)]"
-              disabled={isDeletingGroup}
-              onClick={onDeleteGroup}
-            >
-              <Trash2 className="h-4 w-4" />
-              {isDeletingGroup ? 'Deleting…' : 'Delete group'}
-            </Button>
-          ) : null}
+          <MemberList members={channelMembers} />
         </section>
 
         <section className="space-y-2.5">
           <p className="text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">
             Shared files
           </p>
-          {previewFiles.length === 0 ? (
+          {files.length === 0 ? (
             <p className="text-sm text-[var(--muted)]">
               No shared files in loaded messages yet.
             </p>
           ) : (
             <ul className="space-y-2">
-              {previewFiles.map((file) => {
+              {files.map((file) => {
                 const title =
                   file.fileName ?? file.file?.fileName ?? file.title ?? 'File';
                 return (
@@ -319,11 +323,11 @@ export function ChannelDetailsPanel({
           </p>
           {isLoadingPins ? (
             <p className="text-sm text-[var(--muted)]">Loading pins…</p>
-          ) : previewPins.length === 0 ? (
+          ) : pins.length === 0 ? (
             <p className="text-sm text-[var(--muted)]">No pinned messages yet.</p>
           ) : (
             <ul className="space-y-2">
-              {previewPins.map((pin) => (
+              {pins.map((pin) => (
                 <li key={pin.id}>
                   <button
                     type="button"
@@ -345,7 +349,9 @@ export function ChannelDetailsPanel({
                       </span>
                     </div>
                     <p className="mt-1.5 line-clamp-2 text-sm text-[var(--foreground)]">
-                      {pin.message.body || 'Pinned attachment'}
+                      {pin.message.body
+                        ? formatMentionPlainText(pin.message.body)
+                        : 'Pinned attachment'}
                     </p>
                   </button>
                 </li>

@@ -21,6 +21,8 @@ import { ErrorState } from '@/components/ui/StatePanels';
 import { ListSkeleton } from '@/components/ui/Skeleton';
 import { Button } from '@/components/ui/Button';
 import { DeliveryLinkModal } from '@/components/orders/DeliveryLinkModal';
+import { OutputFormatThumb } from '@/components/orders/OutputFormatThumb';
+import { SameDeliveryLinkConfirmModal } from '@/components/orders/SameDeliveryLinkConfirmModal';
 import {
   canEditDeliveryLink,
   clientDashboardTab,
@@ -230,7 +232,25 @@ export function OrderKanbanBoard({
   const [deliveryModalMode, setDeliveryModalMode] = useState<'deliver' | 'save'>(
     'deliver',
   );
+  const [pendingSameLink, setPendingSameLink] = useState<string | null>(null);
+  const [allowSameDeliveryLink, setAllowSameDeliveryLink] = useState(false);
   const hasLoaded = useRef(false);
+
+  function normalizeDeliveryUrl(value: string | null | undefined): string {
+    return (value ?? '').trim().replace(/\/+$/, '').toLowerCase();
+  }
+
+  function previousRevisionDeliveryLink(order: OrderSummary): string | null {
+    const open = order.clientRevisions?.find(
+      (row) => row.status === 'open' || row.status === 'in_progress',
+    );
+    return (
+      open?.previousDeliveryLink?.trim() ||
+      order.deliveryLink?.trim() ||
+      order.originalDeliveredLink?.trim() ||
+      null
+    );
+  }
 
   useEffect(() => {
     let cancelled = false;
@@ -318,6 +338,7 @@ export function OrderKanbanBoard({
     order: OrderSummary,
     stage: ClientLifecycleStage,
     deliveryLink?: string,
+    options?: { allowSameDeliveryLink?: boolean },
   ): Promise<boolean> {
     const current = managerBoardColumn(order.workflowStatus?.code);
     if (current === stage && !deliveryLink) return true;
@@ -351,6 +372,9 @@ export function OrderKanbanBoard({
         body: JSON.stringify({
           stage,
           ...(deliveryLink ? { deliveryLink } : {}),
+          ...(options?.allowSameDeliveryLink
+            ? { allowSameDeliveryLink: true }
+            : {}),
         }),
       });
       onMoved?.();
@@ -391,11 +415,38 @@ export function OrderKanbanBoard({
     setDeliveryTarget(order);
   }
 
-  async function confirmDeliveryLink(deliveryLink: string) {
+  async function confirmDeliveryLink(
+    deliveryLink: string,
+    options?: { allowSameDeliveryLink?: boolean },
+  ) {
     if (!deliveryTarget) return;
+    const allowSame =
+      options?.allowSameDeliveryLink ?? allowSameDeliveryLink;
+
+    if (
+      deliveryModalMode === 'deliver' &&
+      deliveryTarget.hasOpenClientRevision &&
+      !allowSame
+    ) {
+      const previous = previousRevisionDeliveryLink(deliveryTarget);
+      if (
+        previous &&
+        normalizeDeliveryUrl(previous) === normalizeDeliveryUrl(deliveryLink)
+      ) {
+        setPendingSameLink(deliveryLink);
+        return;
+      }
+    }
+
     if (deliveryModalMode === 'deliver') {
-      const ok = await moveOrder(deliveryTarget, 'delivered', deliveryLink);
-      if (ok) setDeliveryTarget(null);
+      const ok = await moveOrder(deliveryTarget, 'delivered', deliveryLink, {
+        allowSameDeliveryLink: allowSame,
+      });
+      if (ok) {
+        setDeliveryTarget(null);
+        setAllowSameDeliveryLink(false);
+        setPendingSameLink(null);
+      }
       return;
     }
 
@@ -404,7 +455,10 @@ export function OrderKanbanBoard({
     try {
       await apiRequest(`/orders/${deliveryTarget.id}`, {
         method: 'PATCH',
-        body: JSON.stringify({ deliveryLink }),
+        body: JSON.stringify({
+          deliveryLink,
+          ...(allowSame ? { allowSameDeliveryLink: true } : {}),
+        }),
       });
       setOrders((currentOrders) =>
         currentOrders.map((item) =>
@@ -412,6 +466,8 @@ export function OrderKanbanBoard({
         ),
       );
       setDeliveryTarget(null);
+      setAllowSameDeliveryLink(false);
+      setPendingSameLink(null);
       onMoved?.();
       setBoardRefresh((value) => value + 1);
     } catch (error) {
@@ -438,7 +494,7 @@ export function OrderKanbanBoard({
   return (
     <div className="space-y-4">
       <DeliveryLinkModal
-        open={Boolean(deliveryTarget)}
+        open={Boolean(deliveryTarget) && !pendingSameLink}
         mode={deliveryModalMode}
         orderCode={deliveryTarget?.code}
         orderName={deliveryTarget?.name}
@@ -449,9 +505,32 @@ export function OrderKanbanBoard({
         }
         isSubmitting={busy}
         onClose={() => {
-          if (!busy) setDeliveryTarget(null);
+          if (!busy) {
+            setDeliveryTarget(null);
+            setAllowSameDeliveryLink(false);
+          }
         }}
         onConfirm={confirmDeliveryLink}
+      />
+      <SameDeliveryLinkConfirmModal
+        open={Boolean(pendingSameLink)}
+        isSubmitting={busy}
+        onCancel={() => {
+          if (busy) return;
+          setPendingSameLink(null);
+          setAllowSameDeliveryLink(false);
+          setDeliveryTarget(null);
+        }}
+        onChangeLink={() => {
+          setPendingSameLink(null);
+          setAllowSameDeliveryLink(false);
+        }}
+        onYes={() => {
+          const link = pendingSameLink;
+          if (!link) return;
+          setPendingSameLink(null);
+          void confirmDeliveryLink(link, { allowSameDeliveryLink: true });
+        }}
       />
       {moveError ? (
         <ErrorState title="Order stayed in its column" description={moveError} />
@@ -727,9 +806,7 @@ function OrderCard({
         <p className="mb-2 text-xs font-medium text-[var(--primary)]">Dragging</p>
       ) : null}
       <div className="flex gap-3">
-        <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-[var(--radius-md)] bg-[var(--surface-muted)] text-sm font-semibold text-[var(--muted)]">
-          {initials(order.name || order.code)}
-        </div>
+        <OutputFormatThumb outputFormat={order.outputFormat} />
         <div className="min-w-0 flex-1">
           <div className="flex items-start justify-between gap-2">
             <p className="text-[11px] font-medium text-[var(--primary)]">

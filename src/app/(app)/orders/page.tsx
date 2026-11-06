@@ -41,6 +41,7 @@ import { isWorkspaceAdmin } from '@/lib/navigation';
 import { OrderKanbanBoard } from '@/components/orders/OrderKanbanBoard';
 import { OrderCreateModal } from '@/components/orders/OrderCreateForm';
 import { RequestRevisionModal } from '@/components/orders/RequestRevisionModal';
+import { RevisionOrderPickerModal } from '@/components/orders/RevisionOrderPickerModal';
 import { OrdersTable } from '@/components/orders/OrdersTable';
 import { OrderDetailDrawer } from '@/components/orders/OrderDetailDrawer';
 import { cn } from '@/lib/cn';
@@ -148,6 +149,7 @@ export default function OrdersPage() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [accessRestricted, setAccessRestricted] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
+  const [revisionPickerOpen, setRevisionPickerOpen] = useState(false);
   const [revisionOrder, setRevisionOrder] = useState<OrderSummary | null>(null);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
@@ -532,10 +534,18 @@ export default function OrdersPage() {
               </Button>
             )}
             {canCreate ? (
-              <Button onClick={() => setCreateOpen(true)}>
-                <Plus className="h-4 w-4" />
-                New order
-              </Button>
+              <>
+                <Button
+                  variant="secondary"
+                  onClick={() => setRevisionPickerOpen(true)}
+                >
+                  Revision
+                </Button>
+                <Button onClick={() => setCreateOpen(true)}>
+                  <Plus className="h-4 w-4" />
+                  New order
+                </Button>
+              </>
             ) : null}
           </div>
         }
@@ -926,6 +936,18 @@ export default function OrdersPage() {
         canManage={canManage}
         isExternal={isExternal}
         onClose={() => setCreateOpen(false)}
+        onCreated={() => {
+          notifyRefresh();
+          if (isExternal) setClientTab('orders');
+          else setManagerTab('order_received');
+          load();
+          loadTabCounts();
+        }}
+      />
+      <RevisionOrderPickerModal
+        open={revisionPickerOpen}
+        canSetPriority={canManage}
+        onClose={() => setRevisionPickerOpen(false)}
         onCreated={() => {
           notifyRefresh();
           if (isExternal) setClientTab('orders');

@@ -8,17 +8,11 @@ import {
   Info,
   MessageCircle,
   MessagesSquare,
-  MoreVertical,
   PanelLeftClose,
   PanelLeftOpen,
   UserPlus,
   Users,
 } from 'lucide-react';
-import { Button } from '@/components/ui/Button';
-import {
-  DropdownMenu,
-  DropdownMenuItem,
-} from '@/components/ui/DropdownMenu';
 import { ClientOrgLogo } from '@/components/ui/ClientOrgLogo';
 import { UserAvatar } from '@/components/ui/UserAvatar';
 import { ChannelNotificationMenu } from '@/components/chat/ChannelNotificationMenu';
@@ -125,8 +119,9 @@ export function ChannelHeader({
     channelContext?.projectName ?? null,
   ].filter(Boolean);
 
-  const previewMembers = members.slice(0, 4);
-  const extraMembers = Math.max(0, members.length - previewMembers.length);
+  const channelMembers = members.filter((member) => member.inChannel !== false);
+  const previewMembers = channelMembers.slice(0, 4);
+  const extraMembers = Math.max(0, channelMembers.length - previewMembers.length);
   const dmSubtitle =
     channelType === 'direct' && dmPeer ? presenceSubtitle(dmPeer) : null;
 
@@ -285,40 +280,27 @@ export function ChannelHeader({
             </HeaderIconButton>
           ) : null}
 
-          <DropdownMenu
-            trigger={
-              <Button type="button" variant="ghost" size="sm" aria-label="More actions">
-                <MoreVertical className="h-4 w-4" />
-              </Button>
-            }
-          >
-            {CHAT_HUDDLE_ENABLED ? (
-              <>
-                <DropdownMenuItem onClick={onStartHuddle}>
-                  <Headphones className="h-4 w-4" />
-                  Start huddle
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={onCopyHuddleLink} disabled={!huddleLink}>
-                  <Copy className="h-4 w-4" />
-                  Copy huddle link
-                </DropdownMenuItem>
-              </>
-            ) : null}
-            {onNotificationChange ? (
-              <div
-                className={cn(
-                  'px-2 py-1',
-                  CHAT_HUDDLE_ENABLED && 'border-t border-[var(--border)]',
-                )}
+          {CHAT_HUDDLE_ENABLED ? (
+            <>
+              <HeaderIconButton label="Start huddle" onClick={onStartHuddle}>
+                <Headphones className="h-4 w-4" />
+              </HeaderIconButton>
+              <HeaderIconButton
+                label="Copy huddle link"
+                onClick={onCopyHuddleLink}
               >
-                <ChannelNotificationMenu
-                  preference={notificationPreference}
-                  isUpdating={isUpdatingNotification}
-                  onChange={onNotificationChange}
-                />
-              </div>
-            ) : null}
-          </DropdownMenu>
+                <Copy className="h-4 w-4" />
+              </HeaderIconButton>
+            </>
+          ) : null}
+
+          {onNotificationChange ? (
+            <ChannelNotificationMenu
+              preference={notificationPreference}
+              isUpdating={isUpdatingNotification}
+              onChange={onNotificationChange}
+            />
+          ) : null}
         </div>
       </div>
 

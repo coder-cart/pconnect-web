@@ -13,6 +13,7 @@ import {
 } from '@/lib/auth';
 import {
   appendUniqueById,
+  insertMessageChronologically,
   ChatChannel,
   ChatMessage,
   ChannelContext,
@@ -39,6 +40,7 @@ import { ChatScrollArea } from '@/components/chat/ChatScrollArea';
 import { useRealtime } from '@/components/providers/RealtimeProvider';
 import { useUnreadMessages } from '@/components/providers/UnreadMessagesProvider';
 import { cn } from '@/lib/cn';
+import { formatMentionPlainText } from '@/lib/chatMarkdown';
 import { CHAT_HUDDLE_ENABLED } from '@/lib/chat-release';
 import { ChannelMemberOption, ChannelNotificationPreference } from '@/lib/channelMembers';
 import { applyPresenceUpdate } from '@/lib/user-presence';
@@ -299,7 +301,7 @@ export function ChatWorkspace({
           channelId === activeChannelId
         ) {
           setThreadReplies((current) =>
-            appendUniqueById(current, typedMessage),
+            insertMessageChronologically(current, typedMessage),
           );
         }
 
@@ -314,7 +316,9 @@ export function ChatWorkspace({
       }
 
       if (channelId === activeChannelId) {
-        setMessages((current) => appendUniqueById(current, typedMessage));
+        setMessages((current) =>
+          insertMessageChronologically(current, typedMessage),
+        );
       }
 
       setChannels((current) =>
@@ -587,9 +591,18 @@ export function ChatWorkspace({
       .finally(() => setIsLoadingThread(false));
   }, [selectedChannelId, threadMessageId]);
 
+  // Soft-nav from notifications while already on /chat must update selection.
+  useEffect(() => {
+    if (initialChannelId) {
+      setSelectedChannelId(initialChannelId);
+    }
+  }, [initialChannelId]);
+
   useEffect(() => {
     if (!initialMessageId) return;
-    window.setTimeout(() => setHighlightMessageId(null), 3000);
+    setHighlightMessageId(initialMessageId);
+    const timer = window.setTimeout(() => setHighlightMessageId(null), 3000);
+    return () => window.clearTimeout(timer);
   }, [initialMessageId, messages]);
 
   async function handleNotificationChange(payload: {
@@ -666,7 +679,7 @@ export function ChatWorkspace({
       );
 
       setMessages((currentMessages) =>
-        appendUniqueById(currentMessages, response.data),
+        insertMessageChronologically(currentMessages, response.data),
       );
     } catch (error) {
       setErrorMessage(
@@ -705,7 +718,9 @@ export function ChatWorkspace({
         },
       );
 
-      setThreadReplies((current) => appendUniqueById(current, response.data));
+      setThreadReplies((current) =>
+        insertMessageChronologically(current, response.data),
+      );
     } catch (error) {
       setErrorMessage(
         error instanceof Error ? error.message : 'Unable to send reply',
@@ -802,6 +817,11 @@ export function ChatWorkspace({
     setHighlightMessageId(messageId);
     setThreadMessageId(null);
     setDetailsOpen(false);
+    window.setTimeout(() => {
+      setHighlightMessageId((current) =>
+        current === messageId ? null : current,
+      );
+    }, 3000);
   }
 
   function handleOpenThread(messageId: string) {
@@ -841,7 +861,7 @@ export function ChatWorkspace({
   }
 
   function handleCopyMessage(body: string) {
-    void navigator.clipboard.writeText(body);
+    void navigator.clipboard.writeText(formatMentionPlainText(body));
   }
 
   function handleCopyLink(channelId: string, messageId: string) {
@@ -882,7 +902,7 @@ export function ChatWorkspace({
   async function handleDeleteGroup() {
     if (!selectedChannelId || selectedChannel?.type !== 'group') return;
     const confirmed = window.confirm(
-      `Delete group “${getChannelLabel(selectedChannel)}”? This cannot be undone.`,
+      `Delete channel “${getChannelLabel(selectedChannel)}”? This cannot be undone.`,
     );
     if (!confirmed) return;
 
@@ -898,7 +918,7 @@ export function ChatWorkspace({
       setMessages([]);
     } catch (error) {
       setErrorMessage(
-        error instanceof Error ? error.message : 'Unable to delete group',
+        error instanceof Error ? error.message : 'Unable to delete channel',
       );
     } finally {
       setIsDeletingGroup(false);
@@ -918,7 +938,9 @@ export function ChatWorkspace({
       viewerCanInviteClientTeammates);
   const canInvite = canManageMembers;
   const canDeleteGroup =
-    isWorkspaceAdmin(user.roleCodes) && selectedChannel?.type === 'group';
+    isWorkspaceAdmin(user.roleCodes) &&
+    Boolean(selectedChannel) &&
+    selectedChannel?.type !== 'public';
   const activeThreadMessage = messages.find(
     (message) => message.id === threadMessageId,
   );
@@ -1128,7 +1150,7 @@ export function ChatWorkspace({
               {selectedChannelId ? (
                 <ChatScrollArea
                   scrollKey={selectedChannelId}
-                  anchorMessageId={initialMessageId}
+                  anchorMessageId={highlightMessageId}
                   containerClassName="chat-inset-x py-[var(--chat-inset-y)]"
                   contentClassName="space-y-0"
                 >

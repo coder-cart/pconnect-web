@@ -22,6 +22,7 @@ const COLUMNS: Array<{ id: string; label: string }> = [
   { id: 'todo', label: 'To do' },
   { id: 'in_progress', label: 'In progress' },
   { id: 'in_review', label: 'In review' },
+  { id: 'on_hold', label: 'On hold' },
   { id: 'done', label: 'Done' },
 ];
 
@@ -51,7 +52,7 @@ export function TaskKanban({
   }
 
   return (
-    <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+    <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
       {COLUMNS.map((column) => {
         const columnTasks = tasks.filter((task) => task.status === column.id);
         return (

@@ -88,14 +88,14 @@ export function CreateClientWizard({
   const [serviceEdits, setServiceEdits] = useState<ServiceEdit[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [sendPortalLogin, setSendPortalLogin] = useState(true);
+  const [sendPortalLogin, setSendPortalLogin] = useState(false);
 
   useEffect(() => {
     if (!open) return;
     setStep(0);
     setGeneral(EMPTY_GENERAL);
     setProduction(EMPTY_PRODUCTION);
-    setSendPortalLogin(true);
+    setSendPortalLogin(false);
     setErrorMessage(null);
 
     apiRequest<ApiResponse<ManagerOption[]>>('/orders/assignable-users')
@@ -147,93 +147,96 @@ export function CreateClientWizard({
       return;
     }
     if (sendPortalLogin && !general.primaryContactEmail.trim()) {
-      setErrorMessage('Email is required to send portal login details.');
+      setErrorMessage(
+        'Contact email is required to create the portal account and send username/password.',
+      );
       setStep(0);
       return;
     }
     setIsSubmitting(true);
     setErrorMessage(null);
     try {
-      const response = await apiRequest<ApiResponse<{ id: string }>>(
-        '/clients',
-        {
-          method: 'POST',
-          body: JSON.stringify({
-            ...general,
-            name: general.name.trim(),
-            clientName: general.clientName.trim() || undefined,
-            primaryContactName: general.primaryContactName.trim() || undefined,
-            primaryContactEmail:
-              general.primaryContactEmail.trim() || undefined,
-            phone: general.phone.trim() || undefined,
-            whatsapp: general.whatsapp.trim() || undefined,
-            country: general.country.trim() || undefined,
-            timeZone: general.timeZone.trim() || undefined,
-            currency: general.currency.trim() || undefined,
-            paymentTerms: general.paymentTerms.trim() || undefined,
-            defaultManagerUserId: general.defaultManagerUserId || undefined,
-            notes: general.notes.trim() || undefined,
-            ...production,
-            defaultPriority: production.defaultPriority || undefined,
-            preferredDeliveryMethod:
-              production.preferredDeliveryMethod.trim() || undefined,
-            preferredUploadMethod:
-              production.preferredUploadMethod.trim() || undefined,
-            folderStructure: production.folderStructure.trim() || undefined,
-            fileNamingConvention:
-              production.fileNamingConvention.trim() || undefined,
-            workingDays: production.workingDays.trim() || undefined,
-            specialNotes: production.specialNotes.trim() || undefined,
-            services: serviceEdits.map((row) => ({
-              serviceId: row.serviceId,
-              enabled: row.enabled,
-              ...(canViewFinance
-                ? {
-                    clientPrice: row.clientPrice
-                      ? Number(row.clientPrice)
-                      : null,
-                  }
-                : {}),
-              clientEtaHours: row.clientEtaHours
-                ? Number(row.clientEtaHours)
-                : null,
-              defaultInstructions: row.defaultInstructions.trim() || null,
-            })),
-            contacts:
-              general.primaryContactName || general.primaryContactEmail
-                ? [
-                    {
-                      name:
-                        general.primaryContactName.trim() ||
-                        general.name.trim(),
-                      email: general.primaryContactEmail.trim() || undefined,
-                      phone: general.phone.trim() || undefined,
-                      whatsapp: general.whatsapp.trim() || undefined,
-                      isPrimary: true,
-                    },
-                  ]
-                : undefined,
-          }),
-        },
-      );
+      const response = await apiRequest<
+        ApiResponse<{
+          id: string;
+          portalInvite?: {
+            sent: boolean;
+            skipped?: boolean;
+            error?: string;
+            email?: string;
+          } | null;
+        }>
+      >('/clients', {
+        method: 'POST',
+        body: JSON.stringify({
+          ...general,
+          name: general.name.trim(),
+          clientName: general.clientName.trim() || undefined,
+          primaryContactName: general.primaryContactName.trim() || undefined,
+          primaryContactEmail: general.primaryContactEmail.trim() || undefined,
+          phone: general.phone.trim() || undefined,
+          whatsapp: general.whatsapp.trim() || undefined,
+          country: general.country.trim() || undefined,
+          timeZone: general.timeZone.trim() || undefined,
+          currency: general.currency.trim() || undefined,
+          paymentTerms: general.paymentTerms.trim() || undefined,
+          defaultManagerUserId: general.defaultManagerUserId || undefined,
+          notes: general.notes.trim() || undefined,
+          ...production,
+          defaultPriority: production.defaultPriority || undefined,
+          preferredDeliveryMethod:
+            production.preferredDeliveryMethod.trim() || undefined,
+          preferredUploadMethod:
+            production.preferredUploadMethod.trim() || undefined,
+          folderStructure: production.folderStructure.trim() || undefined,
+          fileNamingConvention:
+            production.fileNamingConvention.trim() || undefined,
+          workingDays: production.workingDays.trim() || undefined,
+          specialNotes: production.specialNotes.trim() || undefined,
+          sendPortalInvite: sendPortalLogin,
+          services: serviceEdits.map((row) => ({
+            serviceId: row.serviceId,
+            enabled: row.enabled,
+            ...(canViewFinance
+              ? {
+                  clientPrice: row.clientPrice
+                    ? Number(row.clientPrice)
+                    : null,
+                }
+              : {}),
+            clientEtaHours: row.clientEtaHours
+              ? Number(row.clientEtaHours)
+              : null,
+            defaultInstructions: row.defaultInstructions.trim() || null,
+          })),
+          contacts:
+            general.primaryContactName || general.primaryContactEmail
+              ? [
+                  {
+                    name:
+                      general.primaryContactName.trim() || general.name.trim(),
+                    email: general.primaryContactEmail.trim() || undefined,
+                    phone: general.phone.trim() || undefined,
+                    whatsapp: general.whatsapp.trim() || undefined,
+                    isPrimary: true,
+                  },
+                ]
+              : undefined,
+        }),
+      });
       const query = new URLSearchParams({ tab: 'portal' });
-      if (sendPortalLogin && general.primaryContactEmail.trim()) {
-        try {
-          await apiRequest(`/clients/${response.data.id}/users`, {
-            method: 'POST',
-            body: JSON.stringify({
-              fullName:
-                general.primaryContactName.trim() || general.name.trim(),
-              email: general.primaryContactEmail.trim(),
-            }),
-          });
+      const invite = response.data.portalInvite;
+      if (sendPortalLogin) {
+        if (invite?.sent) {
           query.set('invite', 'sent');
-        } catch (inviteError) {
-          const message =
-            inviteError instanceof Error
-              ? inviteError.message
-              : 'Login email was not sent';
-          query.set('inviteError', message);
+        } else {
+          query.set(
+            'inviteError',
+            invite?.error ||
+              (invite?.skipped
+                ? 'Portal account created, but email is not configured on the server.'
+                : 'Portal login email was not sent.'),
+          );
         }
       }
       onCreated?.();
@@ -303,7 +306,13 @@ export function CreateClientWizard({
                 onClick={() => void handleSave()}
                 disabled={isSubmitting || !canContinue()}
               >
-                {isSubmitting ? 'Saving…' : 'Save client'}
+                {isSubmitting
+                  ? sendPortalLogin
+                    ? 'Creating & sending…'
+                    : 'Saving…'
+                  : sendPortalLogin
+                    ? 'Save & send login'
+                    : 'Save client'}
               </Button>
             )}
           </div>
@@ -356,7 +365,7 @@ export function CreateClientWizard({
                 }))
               }
             />
-            <label className="flex items-start gap-2 text-sm text-[var(--foreground)] md:col-span-2">
+            <label className="flex items-start gap-2 rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface-muted)]/60 p-3 text-sm text-[var(--foreground)] md:col-span-2">
               <input
                 type="checkbox"
                 className="mt-0.5"
@@ -364,10 +373,10 @@ export function CreateClientWizard({
                 onChange={(event) => setSendPortalLogin(event.target.checked)}
               />
               <span>
-                Email portal login details
+                Also create portal account and email username + password now
                 <span className="mt-0.5 block text-xs text-[var(--muted)]">
-                  Uses the contact name and email above. The message includes
-                  a unique temporary password.
+                  Optional. Usually you fill client details first, then send the
+                  onboarding login when you activate the organization.
                 </span>
               </span>
             </label>
@@ -685,9 +694,30 @@ export function CreateClientWizard({
               {serviceEdits.filter((row) => row.enabled).length} of{' '}
               {serviceEdits.length}
             </p>
-            <p className="text-[var(--muted)]">
-              After save you will land on the client detail page. A general
-              conversation channel is created automatically.
+            {sendPortalLogin ? (
+              <div className="rounded-[var(--radius-md)] border border-[var(--primary)]/20 bg-[var(--primary-soft)]/40 px-3 py-2.5 text-sm">
+                <p className="font-medium text-[var(--foreground)]">
+                  Portal invite will be sent
+                </p>
+                <p className="mt-1 text-xs text-[var(--muted)]">
+                  Username:{' '}
+                  <span className="font-medium text-[var(--foreground)]">
+                    {general.primaryContactEmail.trim() || '—'}
+                  </span>
+                  <br />
+                  A temporary password is generated and emailed with the sign-in
+                  link. The client should change it on first login.
+                </p>
+              </div>
+            ) : (
+              <p className="text-xs text-[var(--muted)]">
+                Portal login email is off. You can invite users later from the
+                client Portal users tab.
+              </p>
+            )}
+            <p className="text-xs text-[var(--muted)]">
+              After save you open the client profile. A shared conversation
+              channel is created automatically.
             </p>
           </div>
         ) : null}

@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="112" height="112" viewBox="0 0 112 112" role="img" aria-label="TIFF">
+  <rect width="112" height="112" rx="16" fill="#FFF7ED"/>
+  <rect x="18" y="22" width="76" height="68" rx="10" fill="#fff" stroke="#FED7AA" stroke-width="2"/>
+  <rect x="30" y="34" width="52" height="36" rx="4" fill="#FFEDD5"/>
+  <path d="M36 62l10-12 9 10 7-7 14 9H36z" fill="#FDBA74"/>
+  <rect x="48" y="78" width="46" height="18" rx="6" fill="#EA580C"/>
+  <text x="71" y="91" text-anchor="middle" font-family="ui-sans-serif,system-ui,sans-serif" font-size="10" font-weight="700" fill="#fff">TIFF</text>
+</svg>

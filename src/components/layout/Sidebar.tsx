@@ -20,6 +20,7 @@ import {
   isAway,
   presenceSubtitle,
 } from '@/lib/user-presence';
+import { formatMentionPlainText } from '@/lib/chatMarkdown';
 
 interface SidebarProps {
   user: AuthenticatedUser;
@@ -45,9 +46,6 @@ function personForConversation(conversation: UnreadConversation): UnreadPerson {
   };
 }
 
-function previewText(body: string) {
-  return body.replace(/@\[([^\]]+)\]\([^)]+\)/g, '@$1');
-}
 
 function UnreadPersonHoverCard({ person }: { person: UnreadPerson }) {
   return (
@@ -96,7 +94,7 @@ function UnreadConversationLink({
   const away = isAway(person.presenceStatus);
   const statusLine = formatCustomStatus(person);
   const preview = conversation.latestMessage?.body
-    ? previewText(conversation.latestMessage.body)
+    ? formatMentionPlainText(conversation.latestMessage.body)
     : conversation.name;
 
   return (
@@ -327,7 +325,11 @@ export function Sidebar({
               <Settings className="h-4 w-4" />
             </Link>
           ) : (
-            <AdminToolsMenu showSettings={showSettings} showStaff={showStaff} />
+            <AdminToolsMenu
+              showSettings={showSettings}
+              showStaff={showStaff}
+              onNavigate={onNavigate}
+            />
           )
         ) : null}
         <Link
