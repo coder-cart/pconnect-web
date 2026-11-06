@@ -30,6 +30,18 @@ interface MessageListProps {
   onMarkUnread: (messageId: string) => Promise<void>;
 }
 
+function isUnreadMessage(
+  message: ChatMessage,
+  cutoffMs: number,
+  currentUserId: string,
+) {
+  return (
+    !Number.isNaN(cutoffMs) &&
+    new Date(message.createdAt).getTime() > cutoffMs &&
+    message.sender.id !== currentUserId
+  );
+}
+
 export function MessageList({
   messages,
   channelId,
@@ -63,30 +75,32 @@ export function MessageList({
     );
   }
 
-  const cutoff = unreadSince ? new Date(unreadSince).getTime() : Number.NaN;
-  const unreadMessages = Number.isNaN(cutoff)
-    ? []
-    : messages.filter(
-        (message) =>
-          new Date(message.createdAt).getTime() > cutoff &&
-          message.sender.id !== currentUserId,
-      );
-  const earlierMessages = Number.isNaN(cutoff)
-    ? messages
-    : messages.filter(
-        (message) => !unreadMessages.some((unread) => unread.id === message.id),
-      );
+  // Keep chronological order in the chat body. Mark unread with a divider
+  // above the first unread — never move unread messages to the top.
+  const cutoffMs = unreadSince ? new Date(unreadSince).getTime() : Number.NaN;
+  const firstUnreadId = messages.find((message) =>
+    isUnreadMessage(message, cutoffMs, currentUserId),
+  )?.id;
+  const entries = groupMessagesByDate(messages, timeZone);
 
-  function renderEntries(
-    entries: MessageListEntry<ChatMessage>[],
-    unread: boolean,
-  ) {
-    return entries.map((entry) =>
-      entry.type === 'separator' ? (
-        <DateSeparator key={`${unread ? 'new' : 'old'}-${entry.key}`} label={entry.label} />
-      ) : (
+  function renderEntry(entry: MessageListEntry<ChatMessage>) {
+    if (entry.type === 'separator') {
+      return <DateSeparator key={entry.key} label={entry.label} />;
+    }
+
+    const unread = isUnreadMessage(entry.message, cutoffMs, currentUserId);
+    const showNewDivider = firstUnreadId === entry.message.id;
+
+    return (
+      <div key={entry.key}>
+        {showNewDivider ? (
+          <div className="my-2 flex items-center gap-2 px-2 text-[11px] font-medium uppercase tracking-wide text-[var(--danger)] sm:gap-3 sm:px-3 sm:text-xs">
+            <span className="h-px flex-1 bg-[var(--danger)]/40" />
+            New messages
+            <span className="h-px flex-1 bg-[var(--danger)]/40" />
+          </div>
+        ) : null}
         <MessageItem
-          key={entry.key}
           message={entry.message}
           channelId={channelId}
           currentUserId={currentUserId}
@@ -103,23 +117,9 @@ export function MessageList({
           onCopyLink={onCopyLink}
           onMarkUnread={onMarkUnread}
         />
-      ),
+      </div>
     );
   }
 
-  return (
-    <div className="space-y-0">
-      {unreadMessages.length > 0 ? (
-        <>
-          {renderEntries(groupMessagesByDate(unreadMessages, timeZone), true)}
-          <div className="my-2 flex items-center gap-2 px-2 text-[11px] font-medium uppercase tracking-wide text-[var(--muted)] sm:gap-3 sm:px-3 sm:text-xs">
-            <span className="h-px flex-1 bg-[var(--border)]" />
-            Earlier
-            <span className="h-px flex-1 bg-[var(--border)]" />
-          </div>
-        </>
-      ) : null}
-      {renderEntries(groupMessagesByDate(earlierMessages, timeZone), false)}
-    </div>
-  );
+  return <div className="space-y-0">{entries.map(renderEntry)}</div>;
 }

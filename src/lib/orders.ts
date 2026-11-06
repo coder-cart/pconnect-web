@@ -26,6 +26,7 @@ export interface OrderSummary {
   name: string;
   status: string;
   priority: string;
+  createdAt?: string;
   dueDate?: string | null;
   inDate?: string | null;
   outDate?: string | null;

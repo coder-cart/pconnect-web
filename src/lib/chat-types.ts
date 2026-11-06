@@ -103,3 +103,33 @@ export function appendUniqueById<T extends { id: string }>(
 
   return [...items, item];
 }
+
+/** Insert (or no-op if id exists) keeping createdAt ascending order. */
+export function insertMessageChronologically<
+  T extends { id: string; createdAt: string },
+>(items: T[], item: T): T[] {
+  if (items.some((existing) => existing.id === item.id)) {
+    return items;
+  }
+
+  const itemTime = new Date(item.createdAt).getTime();
+  const next = [...items];
+  let insertAt = next.length;
+
+  for (let index = next.length - 1; index >= 0; index -= 1) {
+    const existingTime = new Date(next[index].createdAt).getTime();
+    if (
+      existingTime < itemTime ||
+      (existingTime === itemTime && next[index].id < item.id)
+    ) {
+      insertAt = index + 1;
+      break;
+    }
+    if (index === 0) {
+      insertAt = 0;
+    }
+  }
+
+  next.splice(insertAt, 0, item);
+  return next;
+}

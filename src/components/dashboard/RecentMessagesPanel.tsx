@@ -5,6 +5,7 @@ import {
   formatNotificationTitle,
   NotificationRecord,
 } from '@/lib/notifications';
+import { formatMentionPlainText } from '@/lib/chatMarkdown';
 
 function initials(value: string) {
   return value
@@ -62,7 +63,7 @@ export function RecentMessagesPanel({
                       </span>
                     </span>
                     <span className="mt-0.5 line-clamp-2 text-xs text-[var(--muted)]">
-                      {item.body}
+                      {formatMentionPlainText(item.body)}
                     </span>
                   </span>
                 </Link>

@@ -10,6 +10,7 @@ import {
   userHasPermission,
   userIsExternal,
 } from '@/lib/auth';
+import { isWorkspaceAdmin } from '@/lib/navigation';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
@@ -87,6 +88,7 @@ export function OrderDetailView({
   const router = useRouter();
   const { user, refreshKey, notifyRefresh } = useWorkspace();
   const canManage = userHasPermission(user, 'orders.manage');
+  const canDeleteOrder = isWorkspaceAdmin(user.roleCodes);
   const canView = userHasPermission(user, 'orders.view');
   const canCreate = userHasPermission(user, 'orders.create');
   const canViewFinance = userHasAnyPermission(user, [
@@ -491,7 +493,7 @@ export function OrderDetailView({
                   Mark order as received
                 </Button>
               ) : null}
-              {canManage ? (
+              {canDeleteOrder ? (
                 <Button
                   variant="danger"
                   onClick={handleDeleteOrder}
@@ -535,12 +537,12 @@ export function OrderDetailView({
                 />
               ) : null}
               <Badge variant="primary">{order.outputFormat ?? 'JPG'}</Badge>
-              <span className="text-[var(--muted)]">
-                {order.estimatedTatHours != null
-                  ? `Turnaround ${order.estimatedTatHours} hours`
-                  : 'Turnaround not set'}
-              </span>
-              {order.dueDate ? (
+              {!isExternal && order.estimatedTatHours != null ? (
+                <span className="text-[var(--muted)]">
+                  Turnaround {order.estimatedTatHours} hours
+                </span>
+              ) : null}
+              {!isExternal && order.dueDate ? (
                 <span className="text-[var(--muted)]">
                   Due {new Date(order.dueDate).toLocaleDateString()}
                 </span>
@@ -1116,11 +1118,6 @@ function ClientDeliveryActions({
         </p>
       )}
       <Badge variant="primary">{order.outputFormat ?? 'JPG'}</Badge>
-      <p className="text-sm text-[var(--muted)]">
-        {order.estimatedTatHours != null
-          ? `Turnaround ${order.estimatedTatHours} hours`
-          : 'Turnaround not set'}
-      </p>
       {isCompleted ? (
         <p className="text-sm text-[var(--muted)]">
           Receipt confirmed — this order is completed.

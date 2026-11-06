@@ -2,8 +2,6 @@
 
 import { useState } from 'react';
 import {
-  BellOff,
-  Clock,
   Copy,
   Link2,
   Pin,
@@ -80,14 +78,6 @@ export function MessageContextMenu({
         <Square className="h-4 w-4" />
         Mark unread
       </MenuItemWrapper>
-      <MenuItemWrapper mode={mode} disabled shortcut="">
-        <Clock className="h-4 w-4" />
-        Remind me
-      </MenuItemWrapper>
-      <MenuItemWrapper mode={mode} disabled>
-        <BellOff className="h-4 w-4" />
-        Turn off notifications for replies
-      </MenuItemWrapper>
       <MenuSeparator mode={mode} />
       <MenuItemWrapper
         mode={mode}
@@ -105,16 +95,18 @@ export function MessageContextMenu({
         <Copy className="h-4 w-4" />
         Copy message
       </MenuItemWrapper>
-      <MenuSeparator mode={mode} />
       {canManageChannel ? (
-        <MenuItemWrapper
-          mode={mode}
-          onClick={() => void onPin(message.id)}
-          shortcut="P"
-        >
-          <Pin className="h-4 w-4" />
-          Pin to channel
-        </MenuItemWrapper>
+        <>
+          <MenuSeparator mode={mode} />
+          <MenuItemWrapper
+            mode={mode}
+            onClick={() => void onPin(message.id)}
+            shortcut="P"
+          >
+            <Pin className="h-4 w-4" />
+            Pin to channel
+          </MenuItemWrapper>
+        </>
       ) : null}
       {canDelete ? (
         <>
@@ -280,14 +272,6 @@ export function MessageContextMenuWrapper({
         <Square className="h-4 w-4" />
         Mark unread
       </ContextMenuItem>
-      <ContextMenuItem disabled shortcut="">
-        <Clock className="h-4 w-4" />
-        Remind me
-      </ContextMenuItem>
-      <ContextMenuItem disabled>
-        <BellOff className="h-4 w-4" />
-        Turn off notifications for replies
-      </ContextMenuItem>
       <ContextMenuSeparator />
       <ContextMenuItem
         shortcut="L"
@@ -303,15 +287,17 @@ export function MessageContextMenuWrapper({
         <Copy className="h-4 w-4" />
         Copy message
       </ContextMenuItem>
-      <ContextMenuSeparator />
       {props.canManageChannel ? (
-        <ContextMenuItem
-          shortcut="P"
-          onClick={() => void props.onPin(props.message.id)}
-        >
-          <Pin className="h-4 w-4" />
-          Pin to channel
-        </ContextMenuItem>
+        <>
+          <ContextMenuSeparator />
+          <ContextMenuItem
+            shortcut="P"
+            onClick={() => void props.onPin(props.message.id)}
+          >
+            <Pin className="h-4 w-4" />
+            Pin to channel
+          </ContextMenuItem>
+        </>
       ) : null}
       {canDelete ? (
         <>

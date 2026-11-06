@@ -1,6 +1,7 @@
 'use client';
 
-import { FormEvent, useRef, useState } from 'react';
+import { FormEvent, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import {
   AtSign,
   Bold,
@@ -29,6 +30,7 @@ import { EmojiPicker } from '@/components/chat/EmojiPicker';
 import { MentionPicker } from '@/components/chat/MentionPicker';
 import { ImageAnnotationDialog } from '@/components/chat/ImageAnnotationDialog';
 import { cn } from '@/lib/cn';
+import { positionPanelAboveAnchor } from '@/lib/viewport-menu';
 import { CHAT_MEDIA_UPLOADS_ENABLED } from '@/lib/chat-release';
 import {
   ChannelMemberOption,
@@ -120,8 +122,13 @@ export function ChatComposer({
   );
   const fileInputRef = useRef<HTMLInputElement>(null);
   const editorRef = useRef<HTMLDivElement>(null);
+  const composerShellRef = useRef<HTMLDivElement>(null);
+  const emojiButtonRef = useRef<HTMLButtonElement>(null);
+  const emojiPanelRef = useRef<HTMLDivElement>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const mediaChunksRef = useRef<Blob[]>([]);
+  const [emojiPos, setEmojiPos] = useState({ left: 0, top: 0 });
+  const [emojiReady, setEmojiReady] = useState(false);
 
   const isThread = variant === 'thread';
   const mentionCandidates = filterMentionCandidates(
@@ -474,6 +481,54 @@ export function ChatComposer({
     setLinkTitle('');
   }
 
+  useLayoutEffect(() => {
+    if (!emojiOpen) {
+      setEmojiReady(false);
+      return;
+    }
+
+    function place() {
+      const anchor = emojiButtonRef.current?.getBoundingClientRect();
+      const panel = emojiPanelRef.current?.getBoundingClientRect();
+      if (!anchor || !panel) return;
+      setEmojiPos(positionPanelAboveAnchor(anchor, panel.width, panel.height));
+      setEmojiReady(true);
+    }
+
+    place();
+    const vv = window.visualViewport;
+    vv?.addEventListener('resize', place);
+    vv?.addEventListener('scroll', place);
+    window.addEventListener('resize', place);
+    return () => {
+      vv?.removeEventListener('resize', place);
+      vv?.removeEventListener('scroll', place);
+      window.removeEventListener('resize', place);
+    };
+  }, [emojiOpen]);
+
+  useEffect(() => {
+    if (!emojiOpen) return;
+    function handlePointerDown(event: MouseEvent | TouchEvent) {
+      const target = event.target as Node;
+      if (
+        emojiButtonRef.current?.contains(target) ||
+        emojiPanelRef.current?.contains(target)
+      ) {
+        return;
+      }
+      setEmojiOpen(false);
+    }
+    document.addEventListener('mousedown', handlePointerDown);
+    document.addEventListener('touchstart', handlePointerDown, {
+      passive: true,
+    });
+    return () => {
+      document.removeEventListener('mousedown', handlePointerDown);
+      document.removeEventListener('touchstart', handlePointerDown);
+    };
+  }, [emojiOpen]);
+
   function handleEditorKeyDown(event: React.KeyboardEvent<HTMLDivElement>) {
     if (mentionOpen && mentionCandidates.length > 0) {
       if (event.key === 'ArrowDown') {
@@ -506,7 +561,9 @@ export function ChatComposer({
       }
     }
 
-    if (event.key === 'Enter' && !event.shiftKey) {
+    // Enter / Shift+Enter insert a new line in the contentEditable.
+    // Only Ctrl/Cmd+Enter (or the Send button) submits the message.
+    if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) {
       event.preventDefault();
       event.currentTarget.closest('form')?.requestSubmit();
     }
@@ -627,7 +684,10 @@ export function ChatComposer({
         </div>
       ) : null}
 
-      <div className="relative overflow-visible rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface)]">
+      <div
+        ref={composerShellRef}
+        className="relative overflow-visible rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface)]"
+      >
         {formatOpen ? (
           <div className="flex flex-wrap items-center gap-0.5 border-b border-[var(--border)] px-2 py-1.5">
             {[
@@ -668,7 +728,7 @@ export function ChatComposer({
                 key={label}
                 type="button"
                 aria-label={label}
-                className="rounded-[var(--radius-sm)] p-1.5 text-[var(--muted)] hover:bg-[var(--surface-muted)] hover:text-[var(--foreground)]"
+                className="min-h-touch min-w-touch rounded-[var(--radius-sm)] p-1.5 text-[var(--muted)] hover:bg-[var(--surface-muted)] hover:text-[var(--foreground)] sm:min-h-0 sm:min-w-0"
                 onMouseDown={(event) => event.preventDefault()}
                 onClick={action}
               >
@@ -690,8 +750,9 @@ export function ChatComposer({
           suppressContentEditableWarning
           onInput={syncEditorState}
           className={cn(
-            'min-h-[52px] w-full bg-transparent px-2.5 py-2 text-sm outline-none sm:min-h-[60px] sm:px-3',
-            'empty:before:text-[var(--muted)] empty:before:content-[attr(data-placeholder)]',
+            'max-h-[240px] min-h-[52px] w-full overflow-y-auto bg-transparent px-2.5 py-2 text-sm outline-none sm:min-h-[60px] sm:px-3',
+            'whitespace-pre-wrap break-words',
+            'empty:before:pointer-events-none empty:before:text-[var(--muted)] empty:before:content-[attr(data-placeholder)]',
             '[&_a]:text-[var(--primary)] [&_a]:underline',
             '[&_[data-mention-id]]:rounded [&_[data-mention-id]]:bg-[var(--primary-soft)] [&_[data-mention-id]]:px-1 [&_[data-mention-id]]:font-medium [&_[data-mention-id]]:text-[var(--primary)]',
             '[&_blockquote]:border-l-2 [&_blockquote]:border-[var(--border)] [&_blockquote]:pl-3 [&_blockquote]:text-[var(--muted-foreground)]',
@@ -734,7 +795,7 @@ export function ChatComposer({
               trigger={
                 <button
                   type="button"
-                  className="rounded-[var(--radius-sm)] p-1.5 text-[var(--muted)] hover:bg-[var(--surface-muted)] hover:text-[var(--foreground)]"
+                  className="min-h-touch min-w-touch rounded-[var(--radius-sm)] p-1.5 text-[var(--muted)] hover:bg-[var(--surface-muted)] hover:text-[var(--foreground)] sm:min-h-0 sm:min-w-0"
                   aria-label={
                     CHAT_MEDIA_UPLOADS_ENABLED ? 'Add attachment' : 'Add link'
                   }
@@ -757,7 +818,7 @@ export function ChatComposer({
             <button
               type="button"
               className={cn(
-                'rounded-[var(--radius-sm)] p-1.5 hover:bg-[var(--surface-muted)]',
+                'min-h-touch min-w-touch rounded-[var(--radius-sm)] p-1.5 hover:bg-[var(--surface-muted)] sm:min-h-0 sm:min-w-0',
                 formatOpen
                   ? 'text-[var(--primary)]'
                   : 'text-[var(--muted)] hover:text-[var(--foreground)]',
@@ -767,29 +828,40 @@ export function ChatComposer({
             >
               <Type className="h-4 w-4" />
             </button>
-            <div className="relative">
-              <button
-                type="button"
-                className="rounded-[var(--radius-sm)] p-1.5 text-[var(--muted)] hover:bg-[var(--surface-muted)] hover:text-[var(--foreground)]"
-                aria-label="Add emoji"
-                onClick={() => setEmojiOpen((open) => !open)}
-              >
-                <Smile className="h-4 w-4" />
-              </button>
-              {emojiOpen ? (
-                <div className="absolute bottom-full left-0 z-30 mb-1">
-                  <EmojiPicker
-                    onSelect={(emoji) => {
-                      insertAtCursor(emoji);
-                      setEmojiOpen(false);
+            <button
+              ref={emojiButtonRef}
+              type="button"
+              className="min-h-touch min-w-touch rounded-[var(--radius-sm)] p-1.5 text-[var(--muted)] hover:bg-[var(--surface-muted)] hover:text-[var(--foreground)] sm:min-h-0 sm:min-w-0"
+              aria-label="Add emoji"
+              aria-expanded={emojiOpen}
+              onClick={() => setEmojiOpen((open) => !open)}
+            >
+              <Smile className="h-4 w-4" />
+            </button>
+            {emojiOpen
+              ? createPortal(
+                  <div
+                    ref={emojiPanelRef}
+                    className="fixed z-[90]"
+                    style={{
+                      left: emojiPos.left,
+                      top: emojiPos.top,
+                      visibility: emojiReady ? 'visible' : 'hidden',
                     }}
-                  />
-                </div>
-              ) : null}
-            </div>
+                  >
+                    <EmojiPicker
+                      onSelect={(emoji) => {
+                        insertAtCursor(emoji);
+                        setEmojiOpen(false);
+                      }}
+                    />
+                  </div>,
+                  document.body,
+                )
+              : null}
             <button
               type="button"
-              className="rounded-[var(--radius-sm)] p-1.5 text-[var(--muted)] hover:bg-[var(--surface-muted)] hover:text-[var(--foreground)]"
+              className="min-h-touch min-w-touch rounded-[var(--radius-sm)] p-1.5 text-[var(--muted)] hover:bg-[var(--surface-muted)] hover:text-[var(--foreground)] sm:min-h-0 sm:min-w-0"
               aria-label="Mention someone"
               onClick={triggerMentionPicker}
             >
@@ -799,7 +871,7 @@ export function ChatComposer({
               <>
                 <button
                   type="button"
-                  className="rounded-[var(--radius-sm)] p-1.5 text-[var(--muted)] hover:bg-[var(--surface-muted)] hover:text-[var(--foreground)]"
+                  className="min-h-touch min-w-touch rounded-[var(--radius-sm)] p-1.5 text-[var(--muted)] hover:bg-[var(--surface-muted)] hover:text-[var(--foreground)] sm:min-h-0 sm:min-w-0"
                   aria-label="Record video clip"
                   disabled={isRecording || !channelId}
                   onClick={() => void startRecording('video')}
@@ -808,7 +880,7 @@ export function ChatComposer({
                 </button>
                 <button
                   type="button"
-                  className="rounded-[var(--radius-sm)] p-1.5 text-[var(--muted)] hover:bg-[var(--surface-muted)] hover:text-[var(--foreground)]"
+                  className="min-h-touch min-w-touch rounded-[var(--radius-sm)] p-1.5 text-[var(--muted)] hover:bg-[var(--surface-muted)] hover:text-[var(--foreground)] sm:min-h-0 sm:min-w-0"
                   aria-label="Record audio clip"
                   disabled={isRecording || !channelId}
                   onClick={() => void startRecording('audio')}
@@ -818,20 +890,31 @@ export function ChatComposer({
               </>
             ) : null}
           </div>
-          <Button
-            type="submit"
-            size="sm"
-            disabled={
-              isSubmitting ||
-              isUploading ||
-              isRecording ||
-              !channelId ||
-              (isEmpty && attachments.length === 0)
-            }
-          >
-            <Send className="h-4 w-4" />
-            Send
-          </Button>
+          <div className="flex flex-col items-end gap-1 sm:flex-row sm:items-center sm:gap-2">
+            <span className="hidden text-[11px] text-[var(--muted)] [@media(hover:hover)_and_(pointer:fine)]:inline">
+              Enter for new line · Ctrl/⌘+Enter to send
+            </span>
+            <span className="text-[11px] text-[var(--muted)] [@media(hover:hover)_and_(pointer:fine)]:hidden">
+              Enter for new line · Tap Send to post
+            </span>
+            <Button
+              type="submit"
+              size="sm"
+              className="min-h-touch sm:min-h-0"
+              title="Send message (Ctrl/⌘+Enter)"
+              aria-label="Send message"
+              disabled={
+                isSubmitting ||
+                isUploading ||
+                isRecording ||
+                !channelId ||
+                (isEmpty && attachments.length === 0)
+              }
+            >
+              <Send className="h-4 w-4" />
+              Send
+            </Button>
+          </div>
         </div>
 
         <MentionPicker
@@ -839,6 +922,7 @@ export function ChatComposer({
           members={mentionCandidates}
           activeIndex={mentionActiveIndex}
           currentUserId={currentUserId}
+          anchorRef={composerShellRef}
           onSelect={selectMention}
           onActiveIndexChange={setMentionActiveIndex}
         />

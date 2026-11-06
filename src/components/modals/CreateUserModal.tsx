@@ -6,6 +6,8 @@ import { Input } from '@/components/ui/Input';
 import { Select } from '@/components/ui/Select';
 import { apiRequest } from '@/lib/api-client';
 import { ApiResponse } from '@/lib/auth';
+import { useWorkspace } from '@/components/providers/WorkspaceProvider';
+import { isWorkspaceAdmin } from '@/lib/navigation';
 
 interface CreateUserModalProps {
   open: boolean;
@@ -22,6 +24,10 @@ const STAFF_ROLES = [
   { value: 'qa', label: 'QA Reviewer' },
   { value: 'editor', label: 'Editor' },
 ];
+
+const MANAGER_STAFF_ROLES = STAFF_ROLES.filter((role) =>
+  ['team_lead', 'qa', 'editor'].includes(role.value),
+);
 
 const INVITE_METHODS: Array<{ value: InviteMethod; label: string; hint: string }> = [
   {
@@ -42,6 +48,9 @@ const INVITE_METHODS: Array<{ value: InviteMethod; label: string; hint: string }
 ];
 
 export function CreateUserModal({ open, onClose, onCreated }: CreateUserModalProps) {
+  const { user } = useWorkspace();
+  const canAssignElevatedRoles = isWorkspaceAdmin(user.roleCodes);
+  const roleOptions = canAssignElevatedRoles ? STAFF_ROLES : MANAGER_STAFF_ROLES;
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
   const [roleCode, setRoleCode] = useState('editor');
@@ -62,8 +71,10 @@ export function CreateUserModal({ open, onClose, onCreated }: CreateUserModalPro
       setErrorMessage(null);
       setResultMessage(null);
       setMagicLoginUrl(null);
+      return;
     }
-  }, [open]);
+    setRoleCode(canAssignElevatedRoles ? 'editor' : 'editor');
+  }, [open, canAssignElevatedRoles]);
 
   async function handleSubmit(event?: FormEvent) {
     event?.preventDefault();
@@ -178,7 +189,7 @@ export function CreateUserModal({ open, onClose, onCreated }: CreateUserModalPro
           label="Role"
           value={roleCode}
           onChange={(event) => setRoleCode(event.target.value)}
-          options={STAFF_ROLES}
+          options={roleOptions}
         />
 
         <fieldset className="space-y-2">

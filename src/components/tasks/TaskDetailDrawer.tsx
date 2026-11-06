@@ -325,7 +325,7 @@ export function TaskDetailDrawer({
               ) : null}
 
               <div className="flex flex-wrap gap-2">
-                {['todo', 'in_progress', 'in_review', 'done'].map((status) => (
+                {['todo', 'in_progress', 'in_review', 'on_hold', 'done'].map((status) => (
                   <Button
                     key={status}
                     size="sm"

@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="112" height="112" viewBox="0 0 112 112" role="img" aria-label="PSD">
+  <rect width="112" height="112" rx="16" fill="#F5F3FF"/>
+  <rect x="18" y="22" width="76" height="68" rx="10" fill="#fff" stroke="#DDD6FE" stroke-width="2"/>
+  <rect x="28" y="32" width="40" height="28" rx="4" fill="#C4B5FD" opacity=".9"/>
+  <rect x="40" y="42" width="40" height="28" rx="4" fill="#A78BFA" opacity=".85"/>
+  <rect x="52" y="52" width="28" height="18" rx="4" fill="#7C3AED"/>
+  <rect x="52" y="78" width="42" height="18" rx="6" fill="#6D28D9"/>
+  <text x="73" y="91" text-anchor="middle" font-family="ui-sans-serif,system-ui,sans-serif" font-size="11" font-weight="700" fill="#fff">PSD</text>
+</svg>

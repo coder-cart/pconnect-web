@@ -128,6 +128,11 @@ function renderPlainTextWithLinks(text: string, keyPrefix: string): ReactNode[] 
   );
 }
 
+/** Plain-text surfaces: `@[Name](id)` → `@Name` (notifications, activity, previews). */
+export function formatMentionPlainText(text: string): string {
+  return text.replace(/@\[([^\]]+)\]\([^)]+\)/g, '@$1');
+}
+
 export function renderMarkdownBody(text: string): ReactNode {
   const lines = text.replace(/\r\n/g, '\n').split('\n');
   const blocks: ReactNode[] = [];
@@ -222,18 +227,53 @@ export function renderMarkdownBody(text: string): ReactNode {
     }
 
     if (line.trim().length === 0) {
+      // Preserve intentional blank lines between paragraphs.
+      blocks.push(
+        createElement('div', {
+          key: `gap-${index}`,
+          className: 'h-2',
+          'aria-hidden': true,
+        }),
+      );
       index += 1;
       continue;
+    }
+
+    // Collect consecutive soft-wrapped lines into one pre-wrap block so
+    // single Enter breaks render as line breaks, not huge paragraph gaps.
+    const paragraphLines: string[] = [line];
+    index += 1;
+    while (
+      index < lines.length &&
+      lines[index].trim().length > 0 &&
+      !lines[index].startsWith('```') &&
+      !lines[index].startsWith('> ') &&
+      !/^\d+\.\s/.test(lines[index]) &&
+      !lines[index].startsWith('- ')
+    ) {
+      paragraphLines.push(lines[index]);
+      index += 1;
     }
 
     blocks.push(
       createElement(
         'p',
-        { key: `p-${index}`, className: 'whitespace-pre-wrap break-words' },
-        renderInlineMarkdown(line, `p-${index}`),
+        {
+          key: `p-${index}`,
+          className: 'whitespace-pre-wrap break-words',
+        },
+        paragraphLines.flatMap((paragraphLine, paragraphIndex) => {
+          const nodes = renderInlineMarkdown(
+            paragraphLine,
+            `p-${index}-${paragraphIndex}`,
+          );
+          if (paragraphIndex < paragraphLines.length - 1) {
+            return [...nodes, createElement('br', { key: `br-${index}-${paragraphIndex}` })];
+          }
+          return nodes;
+        }),
       ),
     );
-    index += 1;
   }
 
   return createElement('div', { className: 'space-y-1 text-sm' }, blocks);
