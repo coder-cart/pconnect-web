@@ -341,13 +341,15 @@ export function ImageAnnotationDialog({
         <div className="flex items-center justify-between gap-3 border-b border-[var(--border)] px-4 py-3">
           <div className="min-w-0">
             <p className="truncate text-sm font-semibold text-[var(--foreground)]">
-              Image feedback
+              {mode === 'compose' ? 'Annotate image' : 'Image feedback'}
             </p>
             <p className="truncate text-xs text-[var(--muted)]">
               {file.fileName}
               {annotations.length > 0
                 ? ` · ${annotations.length} annotation${annotations.length === 1 ? '' : 's'}`
-                : ''}
+                : mode === 'compose'
+                  ? ' · Click the image to add markers'
+                  : ''}
             </p>
           </div>
           <div className="flex items-center gap-1">
@@ -614,10 +616,15 @@ export function ImageAnnotationDialog({
             ) : null}
 
             {mode === 'compose' ? (
-              <div className="border-t border-[var(--border)] p-3">
+              <div className="space-y-2 border-t border-[var(--border)] p-3">
                 <Button type="button" className="w-full" onClick={onClose}>
-                  Done
+                  {annotations.length > 0
+                    ? 'Add annotated image to message'
+                    : 'Add image to message'}
                 </Button>
+                <p className="text-center text-[11px] text-[var(--muted)]">
+                  Markers save as you add them. Send from the composer when ready.
+                </p>
               </div>
             ) : null}
           </aside>

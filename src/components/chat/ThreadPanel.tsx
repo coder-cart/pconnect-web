@@ -166,7 +166,7 @@ export function ThreadPanel({
           : null}
       </ChatScrollArea>
 
-      <div className="chat-inset safe-pb shrink-0 border-t border-[var(--border)] bg-[var(--surface)]">
+      <div className="chat-inset safe-pb sticky bottom-0 z-10 shrink-0 border-t border-[var(--border)] bg-[var(--surface)]">
         <ChatComposer
           channelId={channelId}
           channelName={channelName}

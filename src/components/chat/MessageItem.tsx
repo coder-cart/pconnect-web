@@ -313,9 +313,7 @@ export function MessageItem({
                 >
                   Cancel
                 </Button>
-                <span className="text-[11px] text-[var(--muted)]">
-                  Enter for new line · Ctrl/⌘+Enter to save
-                </span>
+             
               </div>
             </div>
           ) : (

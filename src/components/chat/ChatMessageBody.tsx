@@ -6,7 +6,6 @@ import { renderMarkdownBody } from '@/lib/chatMarkdown';
 import { cn } from '@/lib/cn';
 import { ExternalLink, FileText, ImageIcon, MessageSquareText } from 'lucide-react';
 import { ImageAnnotationDialog } from '@/components/chat/ImageAnnotationDialog';
-import { isAnnotatableImageMime } from '@/lib/image-annotations';
 
 export interface MessageAttachment {
   id: string;
@@ -126,10 +125,6 @@ export function ChatMessageBody({
                   <span className="pointer-events-none absolute left-2 top-2 inline-flex items-center gap-1 rounded-full bg-black/70 px-2 py-0.5 text-[10px] font-semibold text-white">
                     <MessageSquareText className="h-3 w-3" />
                     {annotationCount}
-                  </span>
-                ) : isAnnotatableImageMime(mimeType) && channelId ? (
-                  <span className="pointer-events-none absolute left-2 top-2 inline-flex items-center gap-1 rounded-full bg-black/55 px-2 py-0.5 text-[10px] font-medium text-white">
-                    Feedback
                   </span>
                 ) : null}
               </div>
