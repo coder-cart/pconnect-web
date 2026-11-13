@@ -26,35 +26,58 @@ export interface GuestBookingRequest {
   rejectionReason?: string | null;
 }
 
+const PUBLIC_FETCH_TIMEOUT_MS = 15000;
+
 async function publicFetch<T>(
   path: string,
   init?: RequestInit,
 ): Promise<T> {
-  const response = await fetch(`${API_BASE_URL}${path}`, {
-    ...init,
-    headers: {
-      'Content-Type': 'application/json',
-      ...(init?.headers ?? {}),
-    },
-  });
-  const payload = (await response.json().catch(() => null)) as {
-    success?: boolean;
-    data?: T;
-    message?: string;
-  } | null;
-  if (!response.ok || !payload?.success) {
-    throw new Error(payload?.message ?? 'Request failed');
+  const controller = new AbortController();
+  const timeoutId = setTimeout(
+    () => controller.abort(),
+    PUBLIC_FETCH_TIMEOUT_MS,
+  );
+  try {
+    const response = await fetch(`${API_BASE_URL}${path}`, {
+      ...init,
+      signal: controller.signal,
+      headers: {
+        'Content-Type': 'application/json',
+        ...(init?.headers ?? {}),
+      },
+    });
+    const payload = (await response.json().catch(() => null)) as {
+      success?: boolean;
+      data?: T;
+      message?: string;
+    } | null;
+    if (!response.ok || !payload?.success) {
+      throw new Error(payload?.message ?? 'Request failed');
+    }
+    return payload.data as T;
+  } catch (error) {
+    if (error instanceof DOMException && error.name === 'AbortError') {
+      throw new Error('Request timed out. Please try again.');
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeoutId);
   }
-  return payload.data as T;
 }
 
 export function fetchPublicStudio(slug: string) {
+  if (!slug?.trim()) {
+    return Promise.reject(new Error('Booking page not found'));
+  }
   return publicFetch<PublicStudioProfile>(
     `/public/booking/${encodeURIComponent(slug)}`,
   );
 }
 
 export function fetchPublicSlots(slug: string, from: string, to: string) {
+  if (!slug?.trim()) {
+    return Promise.reject(new Error('Booking page not found'));
+  }
   const params = new URLSearchParams({ from, to });
   return publicFetch<{ slotDurationMinutes: number; slots: string[] }>(
     `/public/booking/${encodeURIComponent(slug)}/slots?${params}`,
@@ -72,6 +95,9 @@ export function createPublicBookingRequest(
     website?: string;
   },
 ) {
+  if (!slug?.trim()) {
+    return Promise.reject(new Error('Booking page not found'));
+  }
   return publicFetch<{
     received: true;
     requestId: string | null;
@@ -83,12 +109,18 @@ export function createPublicBookingRequest(
 }
 
 export function fetchManagedBooking(token: string) {
+  if (!token?.trim()) {
+    return Promise.reject(new Error('Booking request not found'));
+  }
   return publicFetch<GuestBookingRequest>(
     `/public/booking/manage/${encodeURIComponent(token)}`,
   );
 }
 
 export function cancelManagedBooking(token: string) {
+  if (!token?.trim()) {
+    return Promise.reject(new Error('Booking request not found'));
+  }
   return publicFetch<GuestBookingRequest>(
     `/public/booking/manage/${encodeURIComponent(token)}/cancel`,
     { method: 'POST', body: '{}' },
@@ -99,6 +131,9 @@ export function rescheduleManagedBooking(
   token: string,
   body: { startsAt?: string; acceptProposal?: boolean },
 ) {
+  if (!token?.trim()) {
+    return Promise.reject(new Error('Booking request not found'));
+  }
   return publicFetch<GuestBookingRequest>(
     `/public/booking/manage/${encodeURIComponent(token)}/reschedule`,
     { method: 'POST', body: JSON.stringify(body) },

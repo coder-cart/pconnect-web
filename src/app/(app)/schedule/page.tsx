@@ -132,6 +132,7 @@ export default function SchedulePage() {
   const canManage = userHasPermission(user, 'schedule.manage');
   const isExternal = userIsExternal(user);
   const [bookingClientId, setBookingClientId] = useState<string | null>(null);
+  const [bookingClients, setBookingClients] = useState<ClientOption[]>([]);
   const [bookingRequestId, setBookingRequestId] = useState<string | null>(null);
   const [events, setEvents] = useState<CalendarEvent[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -191,9 +192,11 @@ export default function SchedulePage() {
         setView(nextView);
       }
       setAssigneeFilter(nextAssignee);
-      if (bookingRequest) {
+      if (bookingRequest && canManage) {
         setBookingRequestId(bookingRequest);
         setSection('booking');
+      } else if (!canManage) {
+        setSection('calendar');
       }
       if (eventId && events.length > 0) {
         const match = events.find((event) => event.id === eventId);
@@ -201,22 +204,32 @@ export default function SchedulePage() {
       }
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [searchParams, events]);
+  }, [searchParams, events, canManage]);
 
   useEffect(() => {
+    if (!canManage) return;
     let cancelled = false;
     apiRequest<ApiResponse<ClientOption[]>>('/clients')
       .then((response) => {
         if (cancelled) return;
-        setBookingClientId(response.data[0]?.id ?? null);
+        setBookingClients(response.data);
+        setBookingClientId((current) => {
+          if (current && response.data.some((client) => client.id === current)) {
+            return current;
+          }
+          return response.data[0]?.id ?? null;
+        });
       })
       .catch(() => {
-        if (!cancelled) setBookingClientId(null);
+        if (!cancelled) {
+          setBookingClients([]);
+          setBookingClientId(null);
+        }
       });
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [canManage]);
 
   useEffect(() => {
     if (!modalOpen) return;
@@ -297,10 +310,19 @@ export default function SchedulePage() {
       assigneeUserId: event.assignees[0]?.user.id ?? '',
       clientOrganizationId: event.clientOrganization?.id ?? '',
       orderId: event.order?.id ?? '',
-      description: '',
+      description: event.description ?? '',
     });
     setWarnings([]);
     setModalOpen(true);
+  }
+
+  function clearAssigneeFilter() {
+    setAssigneeFilter('');
+    if (typeof window !== 'undefined') {
+      const url = new URL(window.location.href);
+      url.searchParams.delete('assigneeUserId');
+      window.history.replaceState({}, '', `${url.pathname}${url.search}`);
+    }
   }
 
   async function handleSubmit(event?: FormEvent) {
@@ -413,7 +435,7 @@ export default function SchedulePage() {
         }
       />
 
-      {(canManage || isExternal) ? (
+      {canManage ? (
         <Tabs
           activeId={section}
           onChange={(id) => setSection(id as 'calendar' | 'booking')}
@@ -424,7 +446,7 @@ export default function SchedulePage() {
         />
       ) : null}
 
-      {section === 'calendar' ? (
+      {section === 'calendar' || !canManage ? (
         <>
           <div className="flex flex-wrap items-center justify-between gap-3">
             <Tabs
@@ -465,6 +487,17 @@ export default function SchedulePage() {
               </p>
             </div>
           </div>
+
+          {assigneeFilter ? (
+            <Card padding="sm" className="flex flex-wrap items-center justify-between gap-2">
+              <p className="text-sm text-[var(--muted)]">
+                Showing events for one assignee from Workload.
+              </p>
+              <Button size="sm" variant="secondary" onClick={clearAssigneeFilter}>
+                Clear filter
+              </Button>
+            </Card>
+          ) : null}
 
           {warnings.length > 0 ? (
             <Card
@@ -566,6 +599,19 @@ export default function SchedulePage() {
         </>
       ) : (
         <div className="space-y-4">
+          {bookingClients.length > 1 ? (
+            <Card padding="sm">
+              <Select
+                label="Studio / client"
+                value={bookingClientId ?? ''}
+                onChange={(event) => setBookingClientId(event.target.value || null)}
+                options={bookingClients.map((client) => ({
+                  value: client.id,
+                  label: client.name,
+                }))}
+              />
+            </Card>
+          ) : null}
           {bookingClientId ? (
             <BookingSettingsPanel clientOrganizationId={bookingClientId} />
           ) : (
@@ -697,6 +743,25 @@ export default function SchedulePage() {
             readOnly={!canManage}
             disabled={!canManage}
           />
+          <label className="block space-y-1.5">
+            <span className="text-sm font-medium text-[var(--foreground)]">
+              Notes
+            </span>
+            <textarea
+              className="w-full rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm disabled:opacity-70"
+              rows={3}
+              value={form.description}
+              readOnly={!canManage}
+              disabled={!canManage}
+              onChange={(event) =>
+                setForm((current) => ({
+                  ...current,
+                  description: event.target.value,
+                }))
+              }
+              placeholder="Internal session notes"
+            />
+          </label>
           {!isExternal ? (
             <Select
               label="Client studio"

@@ -39,9 +39,14 @@ function formatSlotTime(iso: string, timeZone: string) {
   });
 }
 
+function paramValue(value: string | string[] | undefined) {
+  if (Array.isArray(value)) return value[0] ?? '';
+  return value ?? '';
+}
+
 export default function PublicBookPage() {
   const params = useParams<{ slug: string }>();
-  const slug = params.slug;
+  const slug = paramValue(params.slug);
   const [profile, setProfile] = useState<PublicStudioProfile | null>(null);
   const [slots, setSlots] = useState<string[]>([]);
   const [selectedDay, setSelectedDay] = useState<string | null>(null);
@@ -63,22 +68,23 @@ export default function PublicBookPage() {
 
   useEffect(() => {
     let cancelled = false;
-    void Promise.resolve().then(async () => {
-      setIsLoading(true);
-      setErrorMessage(null);
-      try {
-        const data = await fetchPublicStudio(slug);
+    setIsLoading(true);
+    setErrorMessage(null);
+    setProfile(null);
+    void fetchPublicStudio(slug)
+      .then((data) => {
         if (!cancelled) setProfile(data);
-      } catch (error) {
+      })
+      .catch((error: unknown) => {
         if (!cancelled) {
           setErrorMessage(
             error instanceof Error ? error.message : 'Booking page not found',
           );
         }
-      } finally {
+      })
+      .finally(() => {
         if (!cancelled) setIsLoading(false);
-      }
-    });
+      });
     return () => {
       cancelled = true;
     };
