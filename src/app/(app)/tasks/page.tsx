@@ -68,11 +68,41 @@ function isOverdue(task: TaskItem) {
   );
 }
 
+function tabFromSearchParams(params: URLSearchParams): string {
+  const tab = params.get('tab');
+  if (
+    tab &&
+    [
+      'my-tasks',
+      'team-tasks',
+      'overdue',
+      'board',
+      'calendar',
+      'completed',
+      'templates',
+    ].includes(tab)
+  ) {
+    return tab;
+  }
+  const scope = params.get('scope');
+  if (scope === 'team') return 'team-tasks';
+  if (scope === 'completed') return 'completed';
+  if (scope === 'mine') return 'my-tasks';
+  if (params.get('overdue') === '1') return 'overdue';
+  return 'my-tasks';
+}
+
 export default function TasksPage() {
   const { user, refreshKey, notifyRefresh } = useWorkspace();
   const searchParams = useSearchParams();
+  const canCreate = userHasPermission(user, 'tasks.create');
   const canManageTemplates = userHasPermission(user, 'templates.manage');
-  const [activeTab, setActiveTab] = useState('my-tasks');
+  const [activeTab, setActiveTab] = useState(() =>
+    tabFromSearchParams(searchParams),
+  );
+  const [assigneeFilter, setAssigneeFilter] = useState(
+    () => searchParams.get('assigneeUserId') ?? '',
+  );
   const [tasks, setTasks] = useState<TaskItem[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
@@ -88,13 +118,18 @@ export default function TasksPage() {
         ? 'mine'
         : activeTab === 'completed'
           ? 'completed'
-          : 'all';
+          : activeTab === 'team-tasks'
+            ? 'team'
+            : 'all';
     const params = new URLSearchParams({
       pageSize: '100',
       scope,
     });
     if (searchQuery.trim()) {
       params.set('q', searchQuery.trim());
+    }
+    if (assigneeFilter) {
+      params.set('assigneeUserId', assigneeFilter);
     }
 
     apiRequest<ApiResponse<{ items: TaskItem[] }>>(`/tasks?${params}`)
@@ -106,12 +141,17 @@ export default function TasksPage() {
   useEffect(() => {
     void Promise.resolve().then(() => loadTasks());
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [refreshKey, activeTab]);
+  }, [refreshKey, activeTab, assigneeFilter]);
 
   useEffect(() => {
+    const nextTab = tabFromSearchParams(searchParams);
+    const nextAssignee = searchParams.get('assigneeUserId') ?? '';
     const taskId = searchParams.get('task');
-    if (!taskId) return;
-    void Promise.resolve().then(() => setSelectedTaskId(taskId));
+    void Promise.resolve().then(() => {
+      setActiveTab(nextTab);
+      setAssigneeFilter(nextAssignee);
+      if (taskId) setSelectedTaskId(taskId);
+    });
   }, [searchParams]);
 
   async function handleStatusChange(taskId: string, status: string) {
@@ -158,10 +198,12 @@ export default function TasksPage() {
           { label: 'Tasks' },
         ]}
         action={
-          <Button onClick={() => setCreateOpen(true)}>
-            <Plus className="h-4 w-4" />
-            New Task
-          </Button>
+          canCreate ? (
+            <Button onClick={() => setCreateOpen(true)}>
+              <Plus className="h-4 w-4" />
+              New Task
+            </Button>
+          ) : null
         }
       />
 

@@ -95,20 +95,39 @@ export default function WorkloadPage() {
                   </td>
                   <td className="px-4 py-3">
                     <Link
-                      href={`/tasks?scope=team`}
+                      href={`/tasks?scope=team&tab=team-tasks&assigneeUserId=${item.user.id}`}
                       className="text-[var(--primary)] hover:underline"
                     >
                       {item.pending}
                     </Link>
                   </td>
-                  <td className="px-4 py-3">{item.inProgress}</td>
-                  <td className="px-4 py-3 text-[var(--danger)]">
-                    {item.overdue}
-                  </td>
-                  <td className="px-4 py-3">{item.completed}</td>
                   <td className="px-4 py-3">
                     <Link
-                      href="/schedule"
+                      href={`/tasks?scope=team&tab=team-tasks&assigneeUserId=${item.user.id}`}
+                      className="text-[var(--primary)] hover:underline"
+                    >
+                      {item.inProgress}
+                    </Link>
+                  </td>
+                  <td className="px-4 py-3 text-[var(--danger)]">
+                    <Link
+                      href={`/tasks?tab=overdue&overdue=1&assigneeUserId=${item.user.id}`}
+                      className="hover:underline"
+                    >
+                      {item.overdue}
+                    </Link>
+                  </td>
+                  <td className="px-4 py-3">
+                    <Link
+                      href={`/tasks?scope=completed&tab=completed&assigneeUserId=${item.user.id}`}
+                      className="text-[var(--primary)] hover:underline"
+                    >
+                      {item.completed}
+                    </Link>
+                  </td>
+                  <td className="px-4 py-3">
+                    <Link
+                      href={`/schedule?view=week&assigneeUserId=${item.user.id}`}
                       className="text-[var(--primary)] hover:underline"
                     >
                       {item.upcomingEvents}

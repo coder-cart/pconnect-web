@@ -20,6 +20,13 @@ interface CandidateUser {
   userType: string;
 }
 
+interface StudioEventOption {
+  id: string;
+  title: string;
+  startsAt: string;
+  status: string;
+}
+
 interface CreateTaskModalProps {
   open: boolean;
   onClose: () => void;
@@ -40,9 +47,11 @@ export function CreateTaskModal({
   const [description, setDescription] = useState('');
   const [priority, setPriority] = useState('medium');
   const [assigneeUserId, setAssigneeUserId] = useState('');
+  const [studioEventId, setStudioEventId] = useState('');
   const [dueDate, setDueDate] = useState('');
   const [startDate, setStartDate] = useState('');
   const [candidates, setCandidates] = useState<CandidateUser[]>([]);
+  const [studioEvents, setStudioEvents] = useState<StudioEventOption[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
@@ -50,6 +59,10 @@ export function CreateTaskModal({
     if (!open) return;
 
     let cancelled = false;
+    const from = new Date();
+    from.setMonth(from.getMonth() - 1);
+    const to = new Date();
+    to.setMonth(to.getMonth() + 3);
     Promise.all([
       apiRequest<ApiResponse<ProjectOption[] | { items: ProjectOption[] }>>(
         '/projects',
@@ -66,31 +79,44 @@ export function CreateTaskModal({
             body: JSON.stringify({}),
           }).catch(() => null)
         : Promise.resolve(null),
-    ]).then(([projectsResponse, candidatesResponse, studioProject]) => {
-      if (cancelled) return;
+      apiRequest<ApiResponse<StudioEventOption[]>>(
+        `/schedule/events?from=${encodeURIComponent(from.toISOString())}&to=${encodeURIComponent(to.toISOString())}`,
+      ).catch(() => null),
+    ]).then(
+      ([projectsResponse, candidatesResponse, studioProject, eventsResponse]) => {
+        if (cancelled) return;
 
-      const projectList = Array.isArray(projectsResponse?.data)
-        ? projectsResponse.data
-        : projectsResponse?.data &&
-            'items' in projectsResponse.data &&
-            Array.isArray(projectsResponse.data.items)
-          ? projectsResponse.data.items
-          : [];
+        const projectList = Array.isArray(projectsResponse?.data)
+          ? projectsResponse.data
+          : projectsResponse?.data &&
+              'items' in projectsResponse.data &&
+              Array.isArray(projectsResponse.data.items)
+            ? projectsResponse.data.items
+            : [];
 
-      const merged = [...projectList];
-      if (studioProject?.data && !merged.some((p) => p.id === studioProject.data.id)) {
-        merged.unshift(studioProject.data);
-      }
-      setProjects(merged);
-      setProjectId(studioProject?.data?.id ?? merged[0]?.id ?? '');
+        const merged = [...projectList];
+        if (
+          studioProject?.data &&
+          !merged.some((p) => p.id === studioProject.data.id)
+        ) {
+          merged.unshift(studioProject.data);
+        }
+        setProjects(merged);
+        setProjectId(studioProject?.data?.id ?? merged[0]?.id ?? '');
 
-      const people = [
-        ...(candidatesResponse?.data.portalUsers ?? []),
-        ...(candidatesResponse?.data.internalUsers ?? []),
-      ];
-      const unique = new Map(people.map((person) => [person.id, person]));
-      setCandidates(Array.from(unique.values()));
-    });
+        const people = [
+          ...(candidatesResponse?.data.portalUsers ?? []),
+          ...(candidatesResponse?.data.internalUsers ?? []),
+        ];
+        const unique = new Map(people.map((person) => [person.id, person]));
+        setCandidates(Array.from(unique.values()));
+        setStudioEvents(
+          (eventsResponse?.data ?? []).filter(
+            (event) => event.status !== 'cancelled',
+          ),
+        );
+      },
+    );
 
     return () => {
       cancelled = true;
@@ -102,6 +128,7 @@ export function CreateTaskModal({
     setDescription('');
     setPriority('medium');
     setAssigneeUserId('');
+    setStudioEventId('');
     setDueDate('');
     setStartDate('');
     setErrorMessage(null);
@@ -123,6 +150,7 @@ export function CreateTaskModal({
           description: description.trim() || undefined,
           priority,
           assigneeUserId: assigneeUserId || undefined,
+          studioEventId: studioEventId || undefined,
           startDate: startDate || undefined,
           dueDate: dueDate || undefined,
           visibilityScope: isExternal ? 'shared_with_client' : undefined,
@@ -213,6 +241,18 @@ export function CreateTaskModal({
             ...candidates.map((person) => ({
               value: person.id,
               label: `${person.fullName} (${person.userType})`,
+            })),
+          ]}
+        />
+        <Select
+          label="Linked shoot"
+          value={studioEventId}
+          onChange={(event) => setStudioEventId(event.target.value)}
+          options={[
+            { value: '', label: 'No linked shoot' },
+            ...studioEvents.map((event) => ({
+              value: event.id,
+              label: `${event.title} · ${new Date(event.startsAt).toLocaleDateString()}`,
             })),
           ]}
         />

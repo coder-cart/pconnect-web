@@ -43,6 +43,14 @@ interface TaskDetail {
   actualHours?: string | number | null;
   orderId?: string | null;
   order?: { id: string; code: string; name: string } | null;
+  studioEventId?: string | null;
+  studioEvent?: {
+    id: string;
+    title: string;
+    startsAt: string;
+    status: string;
+    type: string;
+  } | null;
   project?: { id: string; name: string; code: string };
   assigneeUserId?: string | null;
   assignee?: { id: string; fullName: string } | null;
@@ -59,6 +67,13 @@ interface TaskDetail {
 interface TaskOption {
   id: string;
   title: string;
+}
+
+interface StudioEventOption {
+  id: string;
+  title: string;
+  startsAt: string;
+  status: string;
 }
 
 interface TaskDetailDrawerProps {
@@ -84,9 +99,11 @@ export function TaskDetailDrawer({
   const [estimatedHours, setEstimatedHours] = useState('');
   const [actualHours, setActualHours] = useState('');
   const [assigneeUserId, setAssigneeUserId] = useState('');
+  const [studioEventId, setStudioEventId] = useState('');
   const [startDate, setStartDate] = useState('');
   const [dueDate, setDueDate] = useState('');
   const [candidates, setCandidates] = useState<CandidateUser[]>([]);
+  const [studioEvents, setStudioEvents] = useState<StudioEventOption[]>([]);
   const [allTasks, setAllTasks] = useState<TaskOption[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -101,6 +118,7 @@ export function TaskDetailDrawer({
       detail.actualHours != null ? String(detail.actualHours) : '',
     );
     setAssigneeUserId(detail.assigneeUserId ?? detail.assignee?.id ?? '');
+    setStudioEventId(detail.studioEventId ?? detail.studioEvent?.id ?? '');
     setStartDate(toDateInputValue(detail.startDate));
     setDueDate(toDateInputValue(detail.dueDate));
   }
@@ -122,18 +140,26 @@ export function TaskDetailDrawer({
       setIsLoading(true);
       setErrorMessage(null);
       try {
-        const [detail, list, candidatesResponse] = await Promise.all([
-          apiRequest<ApiResponse<TaskDetail>>(`/tasks/${taskId}`),
-          apiRequest<ApiResponse<{ items: TaskOption[] }>>(
-            '/tasks?pageSize=100',
-          ),
-          apiRequest<
-            ApiResponse<{
-              portalUsers: CandidateUser[];
-              internalUsers: CandidateUser[];
-            }>
-          >('/tasks/assignee-candidates').catch(() => null),
-        ]);
+        const from = new Date();
+        from.setMonth(from.getMonth() - 1);
+        const to = new Date();
+        to.setMonth(to.getMonth() + 3);
+        const [detail, list, candidatesResponse, eventsResponse] =
+          await Promise.all([
+            apiRequest<ApiResponse<TaskDetail>>(`/tasks/${taskId}`),
+            apiRequest<ApiResponse<{ items: TaskOption[] }>>(
+              '/tasks?pageSize=100',
+            ),
+            apiRequest<
+              ApiResponse<{
+                portalUsers: CandidateUser[];
+                internalUsers: CandidateUser[];
+              }>
+            >('/tasks/assignee-candidates').catch(() => null),
+            apiRequest<ApiResponse<StudioEventOption[]>>(
+              `/schedule/events?from=${encodeURIComponent(from.toISOString())}&to=${encodeURIComponent(to.toISOString())}`,
+            ).catch(() => null),
+          ]);
         if (cancelled) return;
         applyTaskFields(detail.data);
         setAllTasks(
@@ -145,6 +171,11 @@ export function TaskDetailDrawer({
         ];
         const unique = new Map(people.map((person) => [person.id, person]));
         setCandidates(Array.from(unique.values()));
+        setStudioEvents(
+          (eventsResponse?.data ?? []).filter(
+            (event) => event.status !== 'cancelled',
+          ),
+        );
       } finally {
         if (!cancelled) setIsLoading(false);
       }
@@ -198,6 +229,7 @@ export function TaskDetailDrawer({
           estimatedHours: estimatedHours ? Number(estimatedHours) : undefined,
           actualHours: actualHours ? Number(actualHours) : undefined,
           assigneeUserId: assigneeUserId || null,
+          studioEventId: studioEventId || null,
           startDate: startDate || null,
           dueDate: dueDate || null,
         }),
@@ -368,8 +400,20 @@ export function TaskDetailDrawer({
                 </p>
               ) : null}
 
+              {task.studioEvent ? (
+                <p className="text-sm text-[var(--muted)]">
+                  Linked shoot:{' '}
+                  <Link
+                    href={`/schedule?event=${task.studioEvent.id}`}
+                    className="font-medium text-[var(--primary)] hover:underline"
+                  >
+                    {task.studioEvent.title}
+                  </Link>
+                </p>
+              ) : null}
+
               <div className="flex flex-wrap gap-2">
-                {['todo', 'in_progress', 'in_review', 'on_hold', 'done'].map((status) => (
+                {['todo', 'in_progress', 'on_hold', 'done'].map((status) => (
                   <Button
                     key={status}
                     size="sm"
@@ -406,6 +450,18 @@ export function TaskDetailDrawer({
                     ...candidates.map((person) => ({
                       value: person.id,
                       label: `${person.fullName} (${person.userType})`,
+                    })),
+                  ]}
+                />
+                <Select
+                  label="Linked shoot"
+                  value={studioEventId}
+                  onChange={(event) => setStudioEventId(event.target.value)}
+                  options={[
+                    { value: '', label: 'No linked shoot' },
+                    ...studioEvents.map((event) => ({
+                      value: event.id,
+                      label: `${event.title} · ${new Date(event.startsAt).toLocaleDateString()}`,
                     })),
                   ]}
                 />

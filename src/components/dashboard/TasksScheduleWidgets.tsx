@@ -75,7 +75,7 @@ export function TasksScheduleWidgets({ enabled }: { enabled: boolean }) {
 
   return (
     <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-      <Link href="/tasks">
+      <Link href="/tasks?scope=mine&tab=my-tasks">
         <DashboardMetricCard
           label="My pending tasks"
           value={pending}
@@ -83,7 +83,7 @@ export function TasksScheduleWidgets({ enabled }: { enabled: boolean }) {
           tone="blue"
         />
       </Link>
-      <Link href="/tasks">
+      <Link href="/tasks?scope=mine&tab=my-tasks">
         <DashboardMetricCard
           label="Due soon"
           value={dueSoon}
@@ -91,7 +91,7 @@ export function TasksScheduleWidgets({ enabled }: { enabled: boolean }) {
           tone="orange"
         />
       </Link>
-      <Link href="/tasks">
+      <Link href="/tasks?tab=overdue&overdue=1">
         <DashboardMetricCard
           label="Overdue tasks"
           value={overdue}
@@ -99,7 +99,7 @@ export function TasksScheduleWidgets({ enabled }: { enabled: boolean }) {
           tone="pink"
         />
       </Link>
-      <Link href="/schedule">
+      <Link href="/schedule?view=week">
         <DashboardMetricCard
           label="Upcoming events"
           value={upcomingEvents}

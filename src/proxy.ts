@@ -18,6 +18,7 @@ const PUBLIC_PATHS = [
   '/about',
   '/contact',
   '/book-a-demo',
+  '/book',
   '/security',
   '/privacy',
   '/terms',
