@@ -9,6 +9,7 @@ import { getRoleLabel, getNavItemLabel, getVisibleNavItems, NavItem } from '@/li
 import { UserAvatar } from '@/components/ui/UserAvatar';
 import { Logo } from '@/components/ui/Logo';
 import { AdminToolsMenu } from '@/components/layout/AdminToolsMenu';
+import { StagingBadge } from '@/components/layout/StagingBadge';
 import {
   UnreadConversation,
   UnreadPerson,
@@ -253,7 +254,11 @@ export function Sidebar({
         {isCollapsed ? (
           <Logo compact className=" " />
         ) : (
-          <Logo className=" " />
+          <div className="flex min-w-0 items-center gap-2">
+            <Logo className=" " />
+            {/* Client component; safe inside client Sidebar */}
+            <StagingBadge />
+          </div>
         )}
         <div className="flex shrink-0 items-center gap-1">
           {!mobile && onToggleCollapsed ? (

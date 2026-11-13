@@ -3,8 +3,20 @@ import { Inter } from 'next/font/google';
 import { ThemeProvider } from '@/components/providers/ThemeProvider';
 import { RegisterServiceWorker } from '@/components/pwa/RegisterServiceWorker';
 import { BRAND } from '@/lib/branding';
+import { isStagingApp } from '@/lib/app-env';
 import { SITE_URL } from '@/lib/marketing/site';
 import './globals.css';
+
+const stagingRobots = isStagingApp()
+  ? ({
+      index: false,
+      follow: false,
+      googleBot: {
+        index: false,
+        follow: false,
+      },
+    } as const)
+  : undefined;
 
 const inter = Inter({
   subsets: ['latin'],
@@ -16,10 +28,11 @@ export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
   applicationName: BRAND.name,
   title: {
-    default: BRAND.name,
+    default: isStagingApp() ? `${BRAND.name} (Staging)` : BRAND.name,
     template: `%s · ${BRAND.name}`,
   },
   description: BRAND.description,
+  robots: stagingRobots,
   manifest: '/manifest.webmanifest',
   appleWebApp: {
     capable: true,
