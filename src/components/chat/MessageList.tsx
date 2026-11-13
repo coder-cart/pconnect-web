@@ -2,6 +2,7 @@
 
 import { DateSeparator } from '@/components/chat/DateSeparator';
 import { MessageItem } from '@/components/chat/MessageItem';
+import type { ReactionMemberDirectory } from '@/components/chat/ReactionBar';
 import { EmptyState } from '@/components/ui/StatePanels';
 import { ListSkeleton } from '@/components/ui/Skeleton';
 import { ChatMessage } from '@/lib/chat-types';
@@ -17,6 +18,7 @@ interface MessageListProps {
   currentUserId: string;
   unreadSince?: string | null;
   canManageChannel: boolean;
+  memberNames?: ReactionMemberDirectory;
   isLoading: boolean;
   activeThreadMessageId: string | null;
   highlightMessageId?: string | null;
@@ -48,6 +50,7 @@ export function MessageList({
   currentUserId,
   unreadSince = null,
   canManageChannel,
+  memberNames,
   isLoading,
   activeThreadMessageId,
   highlightMessageId,
@@ -105,6 +108,7 @@ export function MessageList({
           channelId={channelId}
           currentUserId={currentUserId}
           canManageChannel={canManageChannel}
+          memberNames={memberNames}
           unread={unread}
           isActive={activeThreadMessageId === entry.message.id}
           highlighted={highlightMessageId === entry.message.id}

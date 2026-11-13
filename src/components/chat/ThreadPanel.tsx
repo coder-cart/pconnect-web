@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useMemo } from 'react';
 import { X } from 'lucide-react';
 import { UserAvatar } from '@/components/ui/UserAvatar';
 import { ChatComposer } from '@/components/chat/ChatComposer';
@@ -73,6 +73,13 @@ export function ThreadPanel({
   className,
 }: ThreadPanelProps) {
   const timeZone = useViewerTimeZone();
+  const memberNames = useMemo(() => {
+    const directory: Record<string, string> = {};
+    for (const member of members) {
+      directory[member.id] = member.fullName;
+    }
+    return directory;
+  }, [members]);
 
   useEffect(() => {
     function handleKeyDown(event: KeyboardEvent) {
@@ -153,6 +160,7 @@ export function ThreadPanel({
                 channelId={channelId}
                 currentUserId={currentUserId}
                 canManageChannel={canManageChannel}
+                memberNames={memberNames}
                 onReply={() => {}}
                 onReact={onReact}
                 onEdit={onEdit}

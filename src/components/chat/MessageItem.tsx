@@ -15,7 +15,10 @@ import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { ChatMessageBody } from '@/components/chat/ChatMessageBody';
 import { MessageHoverToolbar } from '@/components/chat/MessageHoverToolbar';
-import { ReactionBar } from '@/components/chat/ReactionBar';
+import {
+  ReactionBar,
+  type ReactionMemberDirectory,
+} from '@/components/chat/ReactionBar';
 import {
   ContextMenu,
   ContextMenuItem,
@@ -31,6 +34,7 @@ interface MessageItemProps {
   channelId: string;
   currentUserId: string;
   canManageChannel: boolean;
+  memberNames?: ReactionMemberDirectory;
   isActive?: boolean;
   unread?: boolean;
   highlighted?: boolean;
@@ -49,6 +53,7 @@ export function MessageItem({
   channelId,
   currentUserId,
   canManageChannel,
+  memberNames,
   isActive,
   unread = false,
   highlighted,
@@ -335,6 +340,8 @@ export function MessageItem({
           {!editing ? (
             <ReactionBar
               reactions={message.reactions ?? []}
+              memberNames={memberNames}
+              currentUserId={currentUserId}
               onToggle={(emoji) => void onReact(message.id, emoji)}
             />
           ) : null}

@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Plus } from 'lucide-react';
 import { apiRequest } from '@/lib/api-client';
 import {
@@ -61,6 +61,30 @@ function updateMessageInList(
   );
 }
 
+function resolveReactorName(
+  userId: string,
+  currentUserId: string,
+  reactor?: { fullName?: string | null },
+  memberNames?: Record<string, string>,
+) {
+  const fromPayload = reactor?.fullName?.trim();
+  if (
+    fromPayload &&
+    fromPayload.toLowerCase() !== 'team member' &&
+    fromPayload.toLowerCase() !== 'someone' &&
+    fromPayload.toLowerCase() !== 'unknown user'
+  ) {
+    return fromPayload;
+  }
+  if (memberNames?.[userId]) {
+    return memberNames[userId];
+  }
+  if (userId === currentUserId) {
+    return 'You';
+  }
+  return 'Someone';
+}
+
 function applyReactionToggle(
   messages: ChatMessage[],
   messageId: string,
@@ -68,29 +92,65 @@ function applyReactionToggle(
   userId: string,
   added: boolean,
   currentUserId: string,
+  reactor?: { id: string; fullName: string; avatarUpdatedAt?: string | null },
+  memberNames?: Record<string, string>,
 ): ChatMessage[] {
   return messages.map((message) => {
     if (message.id !== messageId) return message;
 
-    const reactions = [...(message.reactions ?? [])];
+    const reactions = [...(message.reactions ?? [])].map((reaction) => ({
+      ...reaction,
+      userIds: [...reaction.userIds],
+      users: reaction.users ? [...reaction.users] : undefined,
+    }));
     const existing = reactions.find((reaction) => reaction.emoji === emoji);
+    const reactorProfile = {
+      id: reactor?.id ?? userId,
+      fullName: resolveReactorName(
+        userId,
+        currentUserId,
+        reactor,
+        memberNames,
+      ),
+      avatarUpdatedAt: reactor?.avatarUpdatedAt ?? null,
+    };
 
     if (added) {
       if (existing) {
-        existing.count += 1;
-        existing.userIds.push(userId);
+        if (!existing.userIds.includes(userId)) {
+          existing.count += 1;
+          existing.userIds.push(userId);
+          existing.users = [
+            ...(existing.users ?? []),
+            {
+              id: reactorProfile.id,
+              fullName: reactorProfile.fullName,
+              avatarUpdatedAt: reactorProfile.avatarUpdatedAt ?? null,
+            },
+          ];
+        }
         if (userId === currentUserId) existing.reactedByMe = true;
       } else {
         reactions.push({
           emoji,
           count: 1,
           userIds: [userId],
+          users: [
+            {
+              id: reactorProfile.id,
+              fullName: reactorProfile.fullName,
+              avatarUpdatedAt: reactorProfile.avatarUpdatedAt ?? null,
+            },
+          ],
           reactedByMe: userId === currentUserId,
         });
       }
     } else if (existing) {
       existing.count -= 1;
       existing.userIds = existing.userIds.filter((id) => id !== userId);
+      existing.users = (existing.users ?? []).filter(
+        (user) => user.id !== userId,
+      );
       if (userId === currentUserId) existing.reactedByMe = false;
       if (existing.count <= 0) {
         return {
@@ -153,6 +213,17 @@ export function ChatWorkspace({
   const [pendingInvites, setPendingInvites] = useState<PendingChannelInvite[]>([]);
   const [channelContext, setChannelContext] = useState<ChannelContext | null>(null);
   const [channelMembers, setChannelMembers] = useState<ChannelMemberOption[]>([]);
+  const memberNames = useMemo(() => {
+    const directory: Record<string, string> = {
+      [user.id]: user.fullName,
+    };
+    for (const member of channelMembers) {
+      directory[member.id] = member.fullName;
+    }
+    return directory;
+  }, [channelMembers, user.fullName, user.id]);
+  const memberNamesRef = useRef(memberNames);
+  memberNamesRef.current = memberNames;
   const [notificationPreference, setNotificationPreference] =
     useState<ChannelNotificationPreference | null>(null);
   const [isUpdatingNotification, setIsUpdatingNotification] = useState(false);
@@ -357,8 +428,14 @@ export function ChatWorkspace({
           messageId: string;
           emoji: string;
           userId: string;
+          user?: {
+            id: string;
+            fullName: string;
+            avatarUpdatedAt?: string | null;
+          };
         };
         const added = event === 'reaction.added';
+        const names = memberNamesRef.current;
         setMessages((current) =>
           applyReactionToggle(
             current,
@@ -367,6 +444,8 @@ export function ChatWorkspace({
             payload.userId,
             added,
             user.id,
+            payload.user,
+            names,
           ),
         );
         setThreadReplies((current) =>
@@ -377,6 +456,8 @@ export function ChatWorkspace({
             payload.userId,
             added,
             user.id,
+            payload.user,
+            names,
           ),
         );
       }
@@ -1160,6 +1241,7 @@ export function ChatWorkspace({
                     currentUserId={user.id}
                     unreadSince={unreadSince}
                     canManageChannel={canManageMembers}
+                    memberNames={memberNames}
                     isLoading={isLoadingMessages}
                     activeThreadMessageId={threadMessageId}
                     highlightMessageId={highlightMessageId}

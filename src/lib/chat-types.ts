@@ -54,10 +54,18 @@ export interface MessageUser {
   avatarUpdatedAt?: string | null;
 }
 
+export interface MessageReactionUser {
+  id: string;
+  fullName: string;
+  avatarUpdatedAt?: string | null;
+}
+
 export interface MessageReactionSummary {
   emoji: string;
   count: number;
   userIds: string[];
+  /** Present on newer API responses; used for who-reacted UI. */
+  users?: MessageReactionUser[];
   reactedByMe: boolean;
 }
 
