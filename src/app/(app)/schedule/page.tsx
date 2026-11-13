@@ -149,6 +149,11 @@ export default function SchedulePage() {
     if (param === 'week' || param === 'day' || param === 'month') return param;
     return 'month';
   });
+  const [section, setSection] = useState<'calendar' | 'booking'>(() =>
+    searchParams.get('bookingRequest') || searchParams.get('section') === 'booking'
+      ? 'booking'
+      : 'calendar',
+  );
   const [anchor, setAnchor] = useState(() => new Date());
   const [assigneeFilter, setAssigneeFilter] = useState(
     () => searchParams.get('assigneeUserId') ?? '',
@@ -186,7 +191,10 @@ export default function SchedulePage() {
         setView(nextView);
       }
       setAssigneeFilter(nextAssignee);
-      if (bookingRequest) setBookingRequestId(bookingRequest);
+      if (bookingRequest) {
+        setBookingRequestId(bookingRequest);
+        setSection('booking');
+      }
       if (eventId && events.length > 0) {
         const match = events.find((event) => event.id === eventId);
         if (match) openEdit(match);
@@ -396,7 +404,7 @@ export default function SchedulePage() {
           { label: 'Schedule' },
         ]}
         action={
-          canManage ? (
+          canManage && section === 'calendar' ? (
             <Button onClick={() => openCreate()}>
               <Plus className="h-4 w-4" />
               New event
@@ -405,182 +413,226 @@ export default function SchedulePage() {
         }
       />
 
-      <div className="flex flex-wrap items-center justify-between gap-3">
+      {(canManage || isExternal) ? (
         <Tabs
-          activeId={view}
-          onChange={(id) => setView(id as ScheduleView)}
+          activeId={section}
+          onChange={(id) => setSection(id as 'calendar' | 'booking')}
           items={[
-            { id: 'month', label: 'Month' },
-            { id: 'week', label: 'Week' },
-            { id: 'day', label: 'Day' },
+            { id: 'calendar', label: 'Calendar' },
+            { id: 'booking', label: 'Public booking' },
           ]}
         />
-        <div className="flex items-center gap-2">
-          <Button
-            variant="secondary"
-            onClick={() => setAnchor(shiftAnchor(view, anchor, -1))}
-            aria-label="Previous"
-          >
-            <ChevronLeft className="h-4 w-4" />
-          </Button>
-          <Button variant="secondary" onClick={() => setAnchor(new Date())}>
-            Today
-          </Button>
-          <Button
-            variant="secondary"
-            onClick={() => setAnchor(shiftAnchor(view, anchor, 1))}
-            aria-label="Next"
-          >
-            <ChevronRight className="h-4 w-4" />
-          </Button>
-          <p className="min-w-[10rem] text-sm font-medium text-[var(--foreground)]">
-            {rangeLabel}
-          </p>
-        </div>
-      </div>
-
-      {warnings.length > 0 ? (
-        <Card
-          padding="sm"
-          className="border-[var(--warning)] bg-[var(--warning-soft)]"
-        >
-          <p className="text-sm font-medium text-[var(--foreground)]">
-            Scheduling warnings
-          </p>
-          <ul className="mt-1 list-disc pl-5 text-xs text-[var(--muted)]">
-            {warnings.map((warning) => (
-              <li key={warning}>{warning}</li>
-            ))}
-          </ul>
-        </Card>
       ) : null}
 
-      {isLoading ? <ListSkeleton rows={5} /> : null}
-      {!isLoading && errorMessage ? (
-        <ErrorState title="Unable to load schedule" description={errorMessage} />
-      ) : null}
-
-      {!isLoading && !errorMessage ? (
-        <StudioCalendar
-          view={view}
-          anchor={anchor}
-          events={events}
-          onSelectEvent={(event) => {
-            if (canManage) openEdit(event);
-          }}
-          onSelectSlot={
-            canManage
-              ? (day) => {
-                  setAnchor(day);
-                  openCreate(day);
-                }
-              : undefined
-          }
-        />
-      ) : null}
-
-      {(canManage || isExternal) && bookingClientId ? (
-        <BookingSettingsPanel clientOrganizationId={bookingClientId} />
-      ) : null}
-      {canManage || isExternal ? (
-        <BookingRequestsPanel
-          highlightId={bookingRequestId}
-          onChanged={() => loadEvents()}
-        />
-      ) : null}
-
-      {!isLoading && !errorMessage && upcoming.length === 0 ? (
-        <EmptyState
-          title={`No events this ${view}`}
-          description={
-            canManage
-              ? 'Create a shoot or meeting to populate the schedule.'
-              : 'No scheduled events in this range.'
-          }
-        />
-      ) : null}
-
-      {!isLoading && !errorMessage && upcoming.length > 0 ? (
-        <Card padding="none" className="overflow-hidden">
-          <div className="border-b border-[var(--border)] px-4 py-3">
-            <p className="text-sm font-semibold text-[var(--foreground)]">
-              Agenda
-            </p>
+      {section === 'calendar' ? (
+        <>
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <Tabs
+              activeId={view}
+              onChange={(id) => setView(id as ScheduleView)}
+              items={[
+                { id: 'month', label: 'Month' },
+                { id: 'week', label: 'Week' },
+                { id: 'day', label: 'Day' },
+              ]}
+            />
+            <div className="flex flex-wrap items-center gap-2">
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => setAnchor(shiftAnchor(view, anchor, -1))}
+                aria-label="Previous"
+              >
+                <ChevronLeft className="h-4 w-4" />
+              </Button>
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => setAnchor(new Date())}
+              >
+                Today
+              </Button>
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => setAnchor(shiftAnchor(view, anchor, 1))}
+                aria-label="Next"
+              >
+                <ChevronRight className="h-4 w-4" />
+              </Button>
+              <p className="min-w-[8rem] text-sm font-medium text-[var(--foreground)]">
+                {rangeLabel}
+              </p>
+            </div>
           </div>
-          <ul className="divide-y divide-[var(--border)]">
-            {upcoming.map((event) => (
-              <li key={event.id}>
-                <button
-                  type="button"
-                  onClick={() => canManage && openEdit(event)}
-                  className="flex w-full items-start justify-between gap-3 px-4 py-3 text-left hover:bg-[var(--surface-muted)]"
-                  disabled={!canManage}
-                >
-                  <div className="min-w-0">
-                    <p className="truncate text-sm font-medium text-[var(--foreground)]">
-                      {event.title}
-                    </p>
-                    <p className="mt-0.5 text-xs text-[var(--muted)]">
-                      {new Date(event.startsAt).toLocaleString()} –{' '}
-                      {new Date(event.endsAt).toLocaleTimeString()}
-                      {event.location ? ` · ${event.location}` : ''}
-                      {event.clientOrganization?.name
-                        ? ` · ${event.clientOrganization.name}`
-                        : ''}
-                      {event.order?.code ? ` · ${event.order.code}` : ''}
-                    </p>
-                    {event.assignees.length > 0 ? (
-                      <p className="mt-1 text-xs text-[var(--muted)]">
-                        {event.assignees
-                          .map((row) => row.user.fullName)
-                          .join(', ')}
-                      </p>
-                    ) : null}
-                  </div>
-                  <div className="flex shrink-0 flex-col items-end gap-1">
-                    <Badge variant="primary">
-                      {event.type.replaceAll('_', ' ')}
-                    </Badge>
-                    <Badge variant="neutral">{event.status}</Badge>
-                  </div>
-                </button>
-              </li>
-            ))}
-          </ul>
-        </Card>
-      ) : null}
+
+          {warnings.length > 0 ? (
+            <Card
+              padding="sm"
+              className="border-[var(--warning)] bg-[var(--warning-soft)]"
+            >
+              <p className="text-sm font-medium text-[var(--foreground)]">
+                Scheduling warnings
+              </p>
+              <ul className="mt-1 list-disc pl-5 text-xs text-[var(--muted)]">
+                {warnings.map((warning) => (
+                  <li key={warning}>{warning}</li>
+                ))}
+              </ul>
+            </Card>
+          ) : null}
+
+          {isLoading ? <ListSkeleton rows={5} /> : null}
+          {!isLoading && errorMessage ? (
+            <ErrorState
+              title="Unable to load schedule"
+              description={errorMessage}
+            />
+          ) : null}
+
+          {!isLoading && !errorMessage ? (
+            <StudioCalendar
+              view={view}
+              anchor={anchor}
+              events={events}
+              onSelectEvent={(event) => openEdit(event)}
+              onSelectSlot={
+                canManage
+                  ? (day) => {
+                      setAnchor(day);
+                      openCreate(day);
+                    }
+                  : undefined
+              }
+            />
+          ) : null}
+
+          {!isLoading && !errorMessage && upcoming.length > 0 ? (
+            <Card padding="none" className="overflow-hidden">
+              <div className="border-b border-[var(--border)] px-4 py-3">
+                <p className="text-sm font-semibold text-[var(--foreground)]">
+                  Agenda
+                </p>
+              </div>
+              <ul className="divide-y divide-[var(--border)]">
+                {upcoming.map((event) => (
+                  <li key={event.id}>
+                    <button
+                      type="button"
+                      onClick={() => openEdit(event)}
+                      className="flex w-full items-start justify-between gap-3 px-4 py-3 text-left hover:bg-[var(--surface-muted)]"
+                    >
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-medium text-[var(--foreground)]">
+                          {event.title}
+                        </p>
+                        <p className="mt-0.5 text-xs text-[var(--muted)]">
+                          {new Date(event.startsAt).toLocaleString()} –{' '}
+                          {new Date(event.endsAt).toLocaleTimeString()}
+                          {event.location ? ` · ${event.location}` : ''}
+                          {event.clientOrganization?.name
+                            ? ` · ${event.clientOrganization.name}`
+                            : ''}
+                          {event.order?.code ? ` · ${event.order.code}` : ''}
+                        </p>
+                        {event.assignees.length > 0 ? (
+                          <p className="mt-1 text-xs text-[var(--muted)]">
+                            {event.assignees
+                              .map((row) => row.user.fullName)
+                              .join(', ')}
+                          </p>
+                        ) : null}
+                      </div>
+                      <div className="flex shrink-0 flex-col items-end gap-1">
+                        <Badge variant="primary">
+                          {event.type.replaceAll('_', ' ')}
+                        </Badge>
+                        <Badge variant="neutral">{event.status}</Badge>
+                      </div>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </Card>
+          ) : null}
+
+          {!isLoading && !errorMessage && upcoming.length === 0 ? (
+            <p className="text-sm text-[var(--muted)]">
+              {canManage
+                ? 'No events in this range. Use New event or click a day on the calendar.'
+                : 'No events in this range.'}
+            </p>
+          ) : null}
+        </>
+      ) : (
+        <div className="space-y-4">
+          {bookingClientId ? (
+            <BookingSettingsPanel clientOrganizationId={bookingClientId} />
+          ) : (
+            <EmptyState
+              title="No studio linked"
+              description="Link a client organization before enabling public booking."
+            />
+          )}
+          <BookingRequestsPanel
+            highlightId={bookingRequestId}
+            onChanged={() => loadEvents()}
+          />
+        </div>
+      )}
 
       <Modal
         open={modalOpen}
         onClose={() => setModalOpen(false)}
-        title={editingEvent ? 'Edit schedule event' : 'New schedule event'}
-        description="Create or update a shoot, session, or meeting. Overlaps warn but do not block."
+        title={
+          !canManage && editingEvent
+            ? 'Event details'
+            : editingEvent
+              ? 'Edit schedule event'
+              : 'New schedule event'
+        }
+        description={
+          canManage
+            ? 'Create or update a shoot, session, or meeting. Overlaps warn but do not block.'
+            : 'View-only. Ask a teammate with schedule manage access to make changes.'
+        }
         footer={
-          <div className="flex w-full items-center justify-between gap-3">
-            {editingEvent && canManage ? (
-              <Button
-                variant="danger"
-                onClick={() => void handleCancelEvent()}
-                disabled={isSubmitting || editingEvent.status === 'cancelled'}
-              >
-                Cancel event
+          canManage ? (
+            <div className="flex w-full flex-wrap items-center justify-between gap-3">
+              {editingEvent ? (
+                <Button
+                  variant="danger"
+                  onClick={() => void handleCancelEvent()}
+                  disabled={isSubmitting || editingEvent.status === 'cancelled'}
+                >
+                  Cancel event
+                </Button>
+              ) : (
+                <span />
+              )}
+              <ModalActions
+                onCancel={() => setModalOpen(false)}
+                onSubmit={() => void handleSubmit()}
+                submitLabel={editingEvent ? 'Save changes' : 'Create event'}
+                isSubmitting={isSubmitting}
+                disabled={!titleValid()}
+              />
+            </div>
+          ) : (
+            <div className="flex w-full justify-end">
+              <Button variant="secondary" onClick={() => setModalOpen(false)}>
+                Close
               </Button>
-            ) : (
-              <span />
-            )}
-            <ModalActions
-              onCancel={() => setModalOpen(false)}
-              onSubmit={() => void handleSubmit()}
-              submitLabel={editingEvent ? 'Save changes' : 'Create event'}
-              isSubmitting={isSubmitting}
-              disabled={!titleValid()}
-            />
-          </div>
+            </div>
+          )
         }
       >
         <form
           className="space-y-4"
-          onSubmit={(event) => void handleSubmit(event)}
+          onSubmit={(event) => {
+            event.preventDefault();
+            if (canManage) void handleSubmit(event);
+          }}
         >
           <Input
             label="Title"
@@ -589,6 +641,8 @@ export default function SchedulePage() {
               setForm((current) => ({ ...current, title: event.target.value }))
             }
             required
+            readOnly={!canManage}
+            disabled={!canManage}
           />
           <Select
             label="Type"
@@ -596,6 +650,7 @@ export default function SchedulePage() {
             onChange={(event) =>
               setForm((current) => ({ ...current, type: event.target.value }))
             }
+            disabled={!canManage}
             options={[
               { value: 'shoot', label: 'Shoot' },
               { value: 'studio_session', label: 'Studio session' },
@@ -616,6 +671,8 @@ export default function SchedulePage() {
               }))
             }
             required
+            readOnly={!canManage}
+            disabled={!canManage}
           />
           <Input
             label="Ends"
@@ -625,6 +682,8 @@ export default function SchedulePage() {
               setForm((current) => ({ ...current, endsAt: event.target.value }))
             }
             required
+            readOnly={!canManage}
+            disabled={!canManage}
           />
           <Input
             label="Location"
@@ -635,11 +694,14 @@ export default function SchedulePage() {
                 location: event.target.value,
               }))
             }
+            readOnly={!canManage}
+            disabled={!canManage}
           />
           {!isExternal ? (
             <Select
               label="Client studio"
               value={form.clientOrganizationId}
+              disabled={!canManage}
               onChange={(event) =>
                 setForm((current) => ({
                   ...current,
@@ -659,6 +721,7 @@ export default function SchedulePage() {
           <Select
             label="Linked order"
             value={form.orderId}
+            disabled={!canManage}
             onChange={(event) =>
               setForm((current) => ({ ...current, orderId: event.target.value }))
             }
@@ -673,6 +736,7 @@ export default function SchedulePage() {
           <Select
             label="Assignee"
             value={form.assigneeUserId}
+            disabled={!canManage}
             onChange={(event) =>
               setForm((current) => ({
                 ...current,

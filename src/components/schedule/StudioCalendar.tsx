@@ -123,7 +123,7 @@ export function StudioCalendar({
                   className={cn(
                     'inline-flex h-6 w-6 items-center justify-center rounded-full text-xs font-semibold',
                     sameDay(day, today) &&
-                      'bg-[var(--primary)] text-[var(--primary-foreground)]',
+                      'bg-[var(--primary)] text-white',
                   )}
                 >
                   {day.getDate()}

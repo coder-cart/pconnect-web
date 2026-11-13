@@ -43,7 +43,9 @@ export function BookingSettingsPanel({
       setSettings(response.data);
     } catch (error) {
       setErrorMessage(
-        error instanceof Error ? error.message : 'Unable to load booking settings',
+        error instanceof Error
+          ? error.message
+          : 'Unable to load booking settings',
       );
     }
   }
@@ -119,36 +121,60 @@ export function BookingSettingsPanel({
       ) : null}
 
       {!settings.exists || !settings.enabled ? (
-        <Button disabled={isSaving} onClick={() => void enable()}>
-          Enable public booking
-        </Button>
+        <div className="space-y-3">
+          {settings.exists && settings.publicUrl ? (
+            <p className="rounded-[var(--radius-md)] bg-[var(--surface-muted)] px-3 py-2 text-xs text-[var(--muted)]">
+              Public booking is off. Your link stays reserved until you enable
+              it again.
+            </p>
+          ) : null}
+          <Button disabled={isSaving} onClick={() => void enable()}>
+            {settings.exists ? 'Re-enable public booking' : 'Enable public booking'}
+          </Button>
+        </div>
       ) : (
         <>
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="space-y-2">
             <Input
               label="Share URL"
               value={settings.publicUrl ?? ''}
               readOnly
             />
-            <Button
-              variant="secondary"
-              disabled={!settings.publicUrl}
-              onClick={async () => {
-                if (!settings.publicUrl) return;
-                await navigator.clipboard.writeText(settings.publicUrl);
-                setCopied(true);
-                window.setTimeout(() => setCopied(false), 1500);
-              }}
-            >
-              {copied ? 'Copied' : 'Copy link'}
-            </Button>
-            <Button
-              variant="secondary"
-              disabled={isSaving}
-              onClick={() => void save({ enabled: false })}
-            >
-              Disable
-            </Button>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                size="sm"
+                variant="secondary"
+                disabled={!settings.publicUrl}
+                onClick={async () => {
+                  if (!settings.publicUrl) return;
+                  await navigator.clipboard.writeText(settings.publicUrl);
+                  setCopied(true);
+                  window.setTimeout(() => setCopied(false), 1500);
+                }}
+              >
+                {copied ? 'Copied' : 'Copy link'}
+              </Button>
+              <Button
+                size="sm"
+                variant="secondary"
+                disabled={!settings.publicUrl}
+                onClick={() => {
+                  if (settings.publicUrl) {
+                    window.open(settings.publicUrl, '_blank', 'noopener,noreferrer');
+                  }
+                }}
+              >
+                Open page
+              </Button>
+              <Button
+                size="sm"
+                variant="ghost"
+                disabled={isSaving}
+                onClick={() => void save({ enabled: false })}
+              >
+                Disable
+              </Button>
+            </div>
           </div>
 
           <div className="grid gap-3 sm:grid-cols-2">
@@ -178,6 +204,7 @@ export function BookingSettingsPanel({
             <Input
               label="Buffer (minutes)"
               type="number"
+              min={0}
               value={String(settings.bufferMinutes)}
               onChange={(event) =>
                 setSettings({
@@ -189,6 +216,7 @@ export function BookingSettingsPanel({
             <Input
               label="Min notice (hours)"
               type="number"
+              min={0}
               value={String(settings.minNoticeHours)}
               onChange={(event) =>
                 setSettings({
