@@ -16,6 +16,7 @@ import {
   formatNotificationTitle,
   getNotificationIconType,
 } from '@/lib/notifications';
+import { formatMentionPlainText } from '@/lib/chatMarkdown';
 import { cn } from '@/lib/cn';
 
 interface NotificationListItemProps {
@@ -71,7 +72,7 @@ export function NotificationListItem({
             compact ? 'line-clamp-2 text-xs' : 'text-sm',
           )}
         >
-          {notification.body}
+          {formatMentionPlainText(notification.body)}
         </p>
         <div className="mt-2 flex flex-wrap items-center gap-3">
           <span className="text-xs text-[var(--muted)]">

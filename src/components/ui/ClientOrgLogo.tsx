@@ -84,7 +84,11 @@ export function ClientOrgLogo({
     >
       {imageUrl ? (
         // eslint-disable-next-line @next/next/no-img-element
-        <img src={imageUrl} alt={`${name} logo`} className="h-full w-full object-cover" />
+        <img
+          src={imageUrl}
+          alt={`${name} logo`}
+          className="h-full w-full object-contain"
+        />
       ) : (
         <Building2 className="h-5 w-5 text-[var(--muted)]" aria-hidden="true" />
       )}

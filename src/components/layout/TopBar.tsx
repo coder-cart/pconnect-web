@@ -1,6 +1,6 @@
 'use client';
 
-import { ReactNode, useCallback, useEffect, useState } from 'react';
+import { ReactNode, useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   Bell,
@@ -35,7 +35,7 @@ import {
   unlockNotificationSound,
 } from '@/lib/notification-sound';
 
-export type CreateAction = 'order' | 'client' | 'user';
+export type CreateAction = 'order' | 'revision' | 'client' | 'user';
 
 interface TopBarProps {
   user: AuthenticatedUser;
@@ -53,6 +53,7 @@ export function TopBar({
   onCreate,
 }: TopBarProps) {
   const router = useRouter();
+  const headerRef = useRef<HTMLElement>(null);
   const { theme, toggleTheme } = useTheme();
   const [createOpen, setCreateOpen] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
@@ -64,6 +65,28 @@ export function TopBar({
 
   useEffect(() => {
     setSoundMuted(isNotificationSoundMuted());
+  }, []);
+
+  useEffect(() => {
+    const header = headerRef.current;
+    if (!header) return;
+
+    function applyHeaderHeight() {
+      if (!header) return;
+      document.documentElement.style.setProperty(
+        '--app-header-height',
+        `${header.getBoundingClientRect().height}px`,
+      );
+    }
+
+    applyHeaderHeight();
+    const observer = new ResizeObserver(applyHeaderHeight);
+    observer.observe(header);
+    window.addEventListener('resize', applyHeaderHeight);
+    return () => {
+      observer.disconnect();
+      window.removeEventListener('resize', applyHeaderHeight);
+    };
   }, []);
 
   const showToast = useCallback((text: string, tone: StatusToastTone = 'success') => {
@@ -83,14 +106,22 @@ export function TopBar({
     showToast(pushMessage, tone);
   }, [pushMessage, showToast]);
 
+  const canCreateOrders =
+    user.permissionCodes.includes('orders.create') ||
+    user.permissionCodes.includes('orders.manage');
+
   const createItems = [
     {
       action: 'order' as const,
       label: 'New Order',
       icon: <ClipboardList className="h-4 w-4" />,
-      show:
-        user.permissionCodes.includes('orders.create') ||
-        user.permissionCodes.includes('orders.manage'),
+      show: canCreateOrders,
+    },
+    {
+      action: 'revision' as const,
+      label: 'Revision',
+      icon: <ClipboardList className="h-4 w-4" />,
+      show: canCreateOrders,
     },
     {
       action: 'client' as const,
@@ -143,11 +174,12 @@ export function TopBar({
 
   return (
     <header
-      className="shell-chrome sticky top-0 z-20 border-b border-[var(--shell-border)] bg-[#1d2353] text-[var(--shell-text)]"
-      style={{ paddingTop: 'var(--safe-top)', backgroundColor: '#1d2353' }}
+      ref={headerRef}
+      className="shell-chrome sticky top-0 z-30 border-b border-[var(--shell-border)] bg-[var(--shell-brand)] text-[var(--shell-text)]"
+      style={{ paddingTop: 'var(--safe-top)' }}
     >
-      <div className="flex w-full items-center gap-2 px-3 py-2 sm:gap-3 sm:px-4 sm:py-3 lg:px-6">
-        <div className="flex shrink-0 items-center gap-2 sm:gap-3">
+      <div className="flex w-full min-w-0 items-center gap-1 px-2 py-1.5 sm:gap-2 sm:px-4 sm:py-2.5 lg:gap-3 lg:px-6">
+        <div className="flex shrink-0 items-center">
           <button
             type="button"
             onClick={onOpenMobileNav}
@@ -156,37 +188,34 @@ export function TopBar({
           >
             <Menu className="h-5 w-5" />
           </button>
-
-          <div className="hidden min-w-0 shrink-0 lg:block">
-            {/* <p className="truncate text-sm font-medium text-[var(--shell-text)]">Workspace</p> */}
-            {/* <p className="truncate text-xs text-[var(--shell-muted)]">Demo workspace</p> */}
-          </div>
         </div>
 
-        <div className="mx-1 min-w-0 flex-1 sm:mx-3 lg:mx-6 lg:max-w-xl">
+        <div className="min-w-[6.5rem] flex-1 lg:max-w-xl">
           <GlobalSearch variant="shell" />
         </div>
 
         <div className="ml-auto flex shrink-0 items-center gap-0.5 sm:gap-1">
           {createItems.length > 0 ? (
             <div className="relative" data-tour="topbar-create">
-              <Button
-                variant="primary"
-                size="sm"
-                aria-label="Create new item"
-                className="hidden sm:inline-flex"
-                onClick={() => setCreateOpen((value) => !value)}
-              >
-                <Plus className="h-4 w-4" />
-                Create
-              </Button>
-              <IconButton
-                className="sm:hidden"
-                label="Create new item"
-                onClick={() => setCreateOpen((value) => !value)}
-              >
-                <Plus className="h-4 w-4" />
-              </IconButton>
+              <div className="hidden lg:block">
+                <Button
+                  variant="primary"
+                  size="sm"
+                  aria-label="Create new item"
+                  onClick={() => setCreateOpen((value) => !value)}
+                >
+                  <Plus className="h-4 w-4" />
+                  Create
+                </Button>
+              </div>
+              <div className="lg:hidden">
+                <IconButton
+                  label="Create new item"
+                  onClick={() => setCreateOpen((value) => !value)}
+                >
+                  <Plus className="h-4 w-4" />
+                </IconButton>
+              </div>
               {createOpen ? (
                 <>
                   <button
@@ -195,7 +224,7 @@ export function TopBar({
                     aria-label="Close create menu"
                     onClick={() => setCreateOpen(false)}
                   />
-                  <div className="fixed inset-x-2 top-[3.75rem] z-20 rounded-[var(--radius-lg)] border border-[var(--border)] bg-[var(--surface)] p-2 shadow-[var(--shadow-md)] sm:absolute sm:inset-x-auto sm:right-0 sm:top-[calc(100%+8px)] sm:min-w-44">
+                  <div className="shell-overlay-panel shell-menu rounded-[var(--radius-lg)] border border-[var(--border)] bg-[var(--surface)] p-2 text-[var(--foreground)] shadow-[var(--shadow-md)] lg:min-w-44">
                     {createItems.map((item) => (
                       <button
                         key={item.action}
@@ -233,11 +262,10 @@ export function TopBar({
               busy={pushBusy}
               onClick={() => void handlePushToggle()}
             >
-              <BellRing
-                className={`h-4 w-4 ${pushStatus === 'on' ? 'text-white' : ''}`}
-              />
+              <BellRing className="h-4 w-4" />
             </IconButton>
           )}
+          <div className="hidden lg:block">
           <IconButton
             label={soundMuted ? 'Unmute notification sound' : 'Mute notification sound'}
             active={!soundMuted}
@@ -246,16 +274,22 @@ export function TopBar({
             {soundMuted ? (
               <VolumeX className="h-4 w-4" />
             ) : (
-              <Volume2 className="h-4 w-4 text-white" />
+              <Volume2 className="h-4 w-4" />
             )}
           </IconButton>
-          <IconButton label="Toggle theme" onClick={toggleTheme}>
+          </div>
+          <div className="hidden lg:block">
+          <IconButton
+            label="Toggle theme"
+            onClick={toggleTheme}
+          >
             {theme === 'light' ? (
               <Moon className="h-4 w-4" />
             ) : (
               <Sun className="h-4 w-4" />
             )}
           </IconButton>
+          </div>
 
           <div className="relative">
             <IconButton
@@ -278,7 +312,7 @@ export function TopBar({
             ) : null}
           </div>
 
-          <div className="relative hidden sm:block">
+          <div className="relative hidden lg:block">
             <IconButton label="Help and support" onClick={() => setHelpOpen((v) => !v)}>
               <HelpCircle className="h-4 w-4" />
             </IconButton>
@@ -290,9 +324,9 @@ export function TopBar({
                   aria-label="Close help menu"
                   onClick={() => setHelpOpen(false)}
                 />
-                <div className="absolute right-0 top-[calc(100%+8px)] z-20 w-56 rounded-[var(--radius-lg)] border border-[var(--border)] bg-[var(--surface)] p-3 shadow-[var(--shadow-md)]">
+                <div className="shell-overlay-panel absolute right-0 top-[calc(100%+8px)] z-20 w-56 rounded-[var(--radius-lg)] border border-[var(--border)] bg-[var(--surface)] p-3 text-[var(--foreground)] shadow-[var(--shadow-md)]">
                   <p className="text-sm font-medium text-[var(--foreground)]">Need help?</p>
-                  <p className="mt-1 text-xs text-[var(--muted)]">
+                  <p className="mt-1 text-xs leading-relaxed text-[var(--muted)]">
                     Open Messages for updates or contact your workspace admin.
                   </p>
                   <Button

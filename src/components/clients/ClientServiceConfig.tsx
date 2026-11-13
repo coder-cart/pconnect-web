@@ -202,7 +202,94 @@ export function ClientServiceConfig({
         <p className="mb-3 text-sm text-[var(--danger)]">{saveError}</p>
       ) : null}
 
-      <div className="overflow-x-auto overscroll-x-contain">
+      <ul className="divide-y divide-[var(--border)] md:hidden">
+        {rows.map((row) => {
+          const edit = edits[row.serviceId];
+          if (!edit) return null;
+          const disabled = !canManage;
+          return (
+            <li key={row.serviceId} className="py-2">
+              <label className="flex items-start gap-3">
+                <input
+                  type="checkbox"
+                  className="mt-1 h-4 w-4"
+                  checked={edit.enabled}
+                  disabled={disabled}
+                  onChange={(event) =>
+                    updateEdit(row.serviceId, {
+                      enabled: event.target.checked,
+                    })
+                  }
+                  aria-label={`Enable ${row.name}`}
+                />
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-sm font-medium text-[var(--foreground)]">
+                    {row.name}
+                  </span>
+                  <span className="block truncate text-xs text-[var(--muted)]">
+                    {row.code}
+                    {row.category ? ` · ${row.category}` : ''}
+                  </span>
+                </span>
+              </label>
+              {edit.enabled ? (
+                <details className="mt-1 pl-7">
+                  <summary className="cursor-pointer text-xs text-[var(--primary)]">
+                    Price and ETA
+                  </summary>
+                <div className="mt-2 grid grid-cols-2 gap-2">
+                  {canViewFinance ? (
+                    <label className="block text-xs text-[var(--muted)]">
+                      Price ({priceSymbol})
+                      <input
+                        type="number"
+                        min={0}
+                        step="0.01"
+                        value={edit.clientPrice}
+                        disabled={disabled}
+                        placeholder={
+                          row.defaultClientPrice != null
+                            ? String(row.defaultClientPrice)
+                            : '—'
+                        }
+                        onChange={(event) =>
+                          updateEdit(row.serviceId, {
+                            clientPrice: event.target.value,
+                          })
+                        }
+                        className="mt-1 h-9 w-full rounded border border-[var(--border)] bg-[var(--surface)] px-2 text-sm"
+                      />
+                    </label>
+                  ) : null}
+                  <label className="block text-xs text-[var(--muted)]">
+                    ETA (hrs)
+                    <input
+                      type="number"
+                      min={0}
+                      value={edit.clientEtaHours}
+                      disabled={disabled}
+                      placeholder={
+                        row.defaultEtaHours != null
+                          ? String(row.defaultEtaHours)
+                          : '—'
+                      }
+                      onChange={(event) =>
+                        updateEdit(row.serviceId, {
+                          clientEtaHours: event.target.value,
+                        })
+                      }
+                      className="mt-1 h-9 w-full rounded border border-[var(--border)] bg-[var(--surface)] px-2 text-sm"
+                    />
+                  </label>
+                </div>
+                </details>
+              ) : null}
+            </li>
+          );
+        })}
+      </ul>
+
+      <div className="hidden overflow-x-auto overscroll-x-contain md:block">
         <table className="w-full min-w-[640px] text-left text-sm md:min-w-[720px]">
           <thead>
                 <tr className="border-b border-[var(--border)] text-xs font-medium uppercase tracking-wide text-[var(--muted)]">

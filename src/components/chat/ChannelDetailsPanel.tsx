@@ -8,6 +8,7 @@ import {
   MessageCircle,
   Pin,
   Plus,
+  Trash2,
   Users,
   X,
 } from 'lucide-react';
@@ -23,6 +24,11 @@ import {
   isDirectOrGroupChannel,
 } from '@/lib/chat-types';
 import { cn } from '@/lib/cn';
+import { formatMentionPlainText } from '@/lib/chatMarkdown';
+import {
+  isAway,
+  presenceSubtitle,
+} from '@/lib/user-presence';
 
 const DETAILS_PANEL_ID = 'channel-details-panel';
 
@@ -37,8 +43,12 @@ interface ChannelDetailsPanelProps {
   isLoadingPins: boolean;
   canInvite: boolean;
   onInvite: () => void;
+  canDeleteGroup?: boolean;
+  onDeleteGroup?: () => void;
+  isDeletingGroup?: boolean;
   onJumpToPin: (messageId: string) => void;
   onClose: () => void;
+  className?: string;
 }
 
 function collectAttachments(messages: ChatMessage[], kind: 'file' | 'link') {
@@ -74,8 +84,12 @@ export function ChannelDetailsPanel({
   isLoadingPins,
   canInvite,
   onInvite,
+  canDeleteGroup = false,
+  onDeleteGroup,
+  isDeletingGroup = false,
   onJumpToPin,
   onClose,
+  className,
 }: ChannelDetailsPanelProps) {
   useEffect(() => {
     function handleKeyDown(event: KeyboardEvent) {
@@ -116,6 +130,10 @@ export function ChannelDetailsPanel({
     () => collectAttachments(messages, 'link'),
     [messages],
   );
+  const channelMembers = useMemo(
+    () => members.filter((member) => member.inChannel !== false),
+    [members],
+  );
 
   const description = [
     channelContext?.clientOrganizationName
@@ -139,10 +157,6 @@ export function ChannelDetailsPanel({
     ? `#${label}`.toLowerCase().replace(/\s+/g, '-')
     : label.toLowerCase().replace(/\s+/g, '-');
 
-  const previewMembers = members.slice(0, 4);
-  const previewFiles = files.slice(0, 4);
-  const previewPins = pins.slice(0, 3);
-
   return (
     <Card
       id={DETAILS_PANEL_ID}
@@ -151,12 +165,13 @@ export function ChannelDetailsPanel({
         'fixed inset-0 z-40 flex min-h-0 flex-col overflow-hidden rounded-none',
         'lg:relative lg:inset-auto lg:z-auto lg:sticky lg:top-0 lg:h-full lg:rounded-[var(--radius-lg)]',
         'transition-[opacity,transform] duration-200 ease-out',
+        className,
       )}
     >
-      <div className="flex shrink-0 items-start justify-between gap-3 border-b border-[var(--border)] px-4 py-4 safe-pt">
-        <div className="flex min-w-0 items-start gap-3">
-          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-[var(--radius-md)] bg-[var(--primary-soft)] text-[var(--primary)]">
-            <ChannelIcon className="h-5 w-5" />
+      <div className="chat-inset flex shrink-0 items-start justify-between gap-2.5 border-b border-[var(--border)] safe-pt">
+        <div className="flex min-w-0 items-start gap-2.5">
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[var(--radius-md)] bg-[var(--primary-soft)] text-[var(--primary)]">
+            <ChannelIcon className="h-4 w-4" />
           </div>
           <div className="min-w-0">
             <p className="truncate text-sm font-semibold text-[var(--foreground)]">
@@ -178,7 +193,7 @@ export function ChannelDetailsPanel({
         </button>
       </div>
 
-      <div className="min-h-0 flex-1 space-y-5 overflow-y-auto overscroll-contain px-4 py-4">
+      <div className="chat-inset min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain">
         <section>
           <p className="text-xs leading-relaxed text-[var(--muted)]">
             {description}
@@ -189,7 +204,7 @@ export function ChannelDetailsPanel({
           <StatCard
             icon={<Users className="h-3.5 w-3.5" />}
             label="Members"
-            value={members.length}
+            value={channelMembers.length}
           />
           <StatCard
             icon={<FileText className="h-3.5 w-3.5" />}
@@ -208,43 +223,59 @@ export function ChannelDetailsPanel({
           />
         </section>
 
+        {canInvite || (canDeleteGroup && onDeleteGroup) ? (
+          <section className="space-y-2">
+            {canInvite ? (
+              <Button
+                type="button"
+                size="sm"
+                variant="secondary"
+                className="w-full"
+                onClick={onInvite}
+              >
+                <Plus className="h-4 w-4" />
+                Add teammates
+              </Button>
+            ) : null}
+            {canDeleteGroup && onDeleteGroup ? (
+              <Button
+                type="button"
+                size="sm"
+                variant="secondary"
+                className="w-full text-[var(--danger)]"
+                disabled={isDeletingGroup}
+                onClick={onDeleteGroup}
+              >
+                <Trash2 className="h-4 w-4" />
+                {isDeletingGroup ? 'Deleting…' : 'Delete channel'}
+              </Button>
+            ) : null}
+          </section>
+        ) : null}
+
         <section className="space-y-2.5">
           <div className="flex items-center justify-between gap-2">
             <p className="text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">
               Members
             </p>
-            {members.length > previewMembers.length ? (
-              <span className="text-xs text-[var(--muted)]">
-                {members.length} total
-              </span>
-            ) : null}
+            <span className="text-xs text-[var(--muted)]">
+              {channelMembers.length} total
+            </span>
           </div>
-          <MemberList members={previewMembers} />
-          {canInvite ? (
-            <Button
-              type="button"
-              size="sm"
-              variant="secondary"
-              className="w-full"
-              onClick={onInvite}
-            >
-              <Plus className="h-4 w-4" />
-              Add people
-            </Button>
-          ) : null}
+          <MemberList members={channelMembers} />
         </section>
 
         <section className="space-y-2.5">
           <p className="text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">
             Shared files
           </p>
-          {previewFiles.length === 0 ? (
+          {files.length === 0 ? (
             <p className="text-sm text-[var(--muted)]">
               No shared files in loaded messages yet.
             </p>
           ) : (
             <ul className="space-y-2">
-              {previewFiles.map((file) => {
+              {files.map((file) => {
                 const title =
                   file.fileName ?? file.file?.fileName ?? file.title ?? 'File';
                 return (
@@ -292,11 +323,11 @@ export function ChannelDetailsPanel({
           </p>
           {isLoadingPins ? (
             <p className="text-sm text-[var(--muted)]">Loading pins…</p>
-          ) : previewPins.length === 0 ? (
+          ) : pins.length === 0 ? (
             <p className="text-sm text-[var(--muted)]">No pinned messages yet.</p>
           ) : (
             <ul className="space-y-2">
-              {previewPins.map((pin) => (
+              {pins.map((pin) => (
                 <li key={pin.id}>
                   <button
                     type="button"
@@ -318,7 +349,9 @@ export function ChannelDetailsPanel({
                       </span>
                     </div>
                     <p className="mt-1.5 line-clamp-2 text-sm text-[var(--foreground)]">
-                      {pin.message.body || 'Pinned attachment'}
+                      {pin.message.body
+                        ? formatMentionPlainText(pin.message.body)
+                        : 'Pinned attachment'}
                     </p>
                   </button>
                 </li>
@@ -365,27 +398,40 @@ function MemberList({ members }: { members: ChannelMemberOption[] }) {
   return (
     <ul className="space-y-1">
       {members.map((member) => (
-        <li
-          key={member.id}
-          className="flex items-center gap-2.5 rounded-[var(--radius-md)] px-1 py-1.5"
-        >
-          <UserAvatar
-            user={{
-              id: member.id,
-              fullName: member.fullName,
-              avatarUpdatedAt: member.avatarUpdatedAt,
-            }}
-            size="sm"
-          />
-          <div className="min-w-0">
-            <p className="truncate text-sm font-medium text-[var(--foreground)]">
-              {member.fullName}
-            </p>
-            <p className="truncate text-xs capitalize text-[var(--muted)]">
-              {member.userType === 'external' ? 'Client' : 'Team member'}
-            </p>
-          </div>
-        </li>
+          <li
+            key={member.id}
+            className="flex items-center gap-2.5 rounded-[var(--radius-md)] px-1 py-1.5"
+          >
+            <span className="relative shrink-0">
+              <UserAvatar
+                user={{
+                  id: member.id,
+                  fullName: member.fullName,
+                  avatarUpdatedAt: member.avatarUpdatedAt,
+                }}
+                size="sm"
+              />
+              <span
+                className={cn(
+                  'absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full border-2 border-[var(--surface)]',
+                  isAway(member.presenceStatus)
+                    ? 'bg-[var(--muted)]'
+                    : 'bg-[var(--success)]',
+                )}
+                aria-hidden
+              />
+            </span>
+            <div className="min-w-0">
+              <p className="truncate text-sm font-medium text-[var(--foreground)]">
+                {member.fullName}
+              </p>
+              <p className="truncate text-xs text-[var(--muted)]">
+                {presenceSubtitle(member)}
+                {' · '}
+                {member.userType === 'external' ? 'Client' : 'Team member'}
+              </p>
+            </div>
+          </li>
       ))}
     </ul>
   );

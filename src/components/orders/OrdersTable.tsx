@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { OrderSummary, humanize, orderPriorityVariant } from '@/lib/orders';
 import { parseStatusMetadata } from '@/lib/order-status';
 import { StatusBadge } from '@/components/orders/StatusBadge';
+import { OutputFormatThumb } from '@/components/orders/OutputFormatThumb';
 import { Badge } from '@/components/ui/Badge';
 import { TableScroll } from '@/components/ui/TableScroll';
 
@@ -100,7 +101,11 @@ export function OrdersTable({
                     )}
                     <p className="text-xs text-[var(--muted)]">{order.code}</p>
                   </div>
-                  <div className="flex flex-wrap gap-2">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <OutputFormatThumb
+                      outputFormat={order.outputFormat}
+                      size="sm"
+                    />
                     <Badge variant="primary">{order.outputFormat ?? 'JPG'}</Badge>
                     <Badge
                       variant={orderPriorityVariant(order.priority)}
@@ -235,7 +240,15 @@ export function OrdersTable({
                     </td>
                   ) : null}
                   <td className="px-4 py-3">
-                    <Badge variant="primary">{order.outputFormat ?? 'JPG'}</Badge>
+                    <div className="flex items-center gap-2">
+                      <OutputFormatThumb
+                        outputFormat={order.outputFormat}
+                        size="sm"
+                      />
+                      <Badge variant="primary">
+                        {order.outputFormat ?? 'JPG'}
+                      </Badge>
+                    </div>
                   </td>
                   <td className="px-4 py-3">
                     <Badge

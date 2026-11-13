@@ -30,6 +30,13 @@ export interface OrderUpdatedPayload {
   reason: string;
 }
 
+export interface PresenceUpdatedPayload {
+  userId: string;
+  presenceStatus: 'active' | 'away';
+  statusText: string | null;
+  statusEmoji: string | null;
+}
+
 interface RealtimeContextValue {
   socket: Socket | null;
   isConnected: boolean;
@@ -45,6 +52,9 @@ interface RealtimeContextValue {
   ) => () => void;
   subscribeMessageActivity: (
     handler: (payload: MessageActivityPayload) => void,
+  ) => () => void;
+  subscribePresenceUpdated: (
+    handler: (payload: PresenceUpdatedPayload) => void,
   ) => () => void;
   subscribeConnected: (handler: () => void) => () => void;
 }
@@ -72,6 +82,7 @@ const CHANNEL_EVENTS = [
   'reaction.removed',
   'message.pinned',
   'message.unpinned',
+  'annotation.created',
 ] as const;
 
 const RealtimeContext = createContext<RealtimeContextValue | null>(null);
@@ -92,6 +103,9 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
   >(new Set());
   const activityHandlersRef = useRef<
     Set<(payload: MessageActivityPayload) => void>
+  >(new Set());
+  const presenceHandlersRef = useRef<
+    Set<(payload: PresenceUpdatedPayload) => void>
   >(new Set());
   const connectedHandlersRef = useRef<Set<() => void>>(new Set());
 
@@ -163,6 +177,11 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
       activityHandlersRef.current.forEach((handler) => handler(payload));
     });
 
+    socket.on('presence.updated', (payload: PresenceUpdatedPayload) => {
+      if (!payload?.userId) return;
+      presenceHandlersRef.current.forEach((handler) => handler(payload));
+    });
+
     return () => {
       socket.disconnect();
       socketRef.current = null;
@@ -229,6 +248,16 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
     [],
   );
 
+  const subscribePresenceUpdated = useCallback(
+    (handler: (payload: PresenceUpdatedPayload) => void) => {
+      presenceHandlersRef.current.add(handler);
+      return () => {
+        presenceHandlersRef.current.delete(handler);
+      };
+    },
+    [],
+  );
+
   const subscribeConnected = useCallback((handler: () => void) => {
     connectedHandlersRef.current.add(handler);
     return () => {
@@ -248,6 +277,7 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
         subscribeNotificationCreated,
         subscribeOrderUpdated,
         subscribeMessageActivity,
+        subscribePresenceUpdated,
         subscribeConnected,
       }}
     >

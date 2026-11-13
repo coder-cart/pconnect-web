@@ -20,6 +20,7 @@ interface CreateChannelModalProps {
   presetType?: string;
   presetClientOrganizationId?: string;
   lockClientOrganization?: boolean;
+  audience?: 'staff' | 'client';
 }
 
 interface MemberCandidatesResponse {
@@ -39,6 +40,7 @@ export function CreateChannelModal({
   presetType,
   presetClientOrganizationId,
   lockClientOrganization = false,
+  audience = 'staff',
 }: CreateChannelModalProps) {
   const [name, setName] = useState('');
   const [type, setType] = useState('public');
@@ -51,9 +53,9 @@ export function CreateChannelModal({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  const isClientChannel = type === 'client_shared';
-  const isExternalConnectionFlow = presetType === 'client_shared';
-  const showMemberPicker = type === 'private' || isClientChannel;
+  const isClientAudience = audience === 'client';
+  const isClientChannel = !isClientAudience && type === 'client_shared';
+  const showMemberPicker = isClientAudience || type === 'private' || isClientChannel;
   const canSubmit =
     name.trim().length > 0 && (!isClientChannel || clientOrganizationId.length > 0);
 
@@ -69,16 +71,21 @@ export function CreateChannelModal({
     }
 
     setName('');
-    setType(presetType ?? 'public');
+    setType(isClientAudience ? 'private' : (presetType ?? 'public'));
     setClientOrganizationId(presetClientOrganizationId ?? '');
     setClientSearch('');
     setSelectedMemberIds([]);
     setErrorMessage(null);
 
+    if (isClientAudience) {
+      setClients([]);
+      return;
+    }
+
     apiRequest<ApiResponse<ClientOption[]>>('/clients')
       .then((response) => setClients(response.data))
       .catch(() => setClients([]));
-  }, [open, presetType, presetClientOrganizationId]);
+  }, [open, presetType, presetClientOrganizationId, isClientAudience]);
 
   useEffect(() => {
     if (!open) {
@@ -115,7 +122,7 @@ export function CreateChannelModal({
         method: 'POST',
         body: JSON.stringify({
           name: name.trim(),
-          type,
+          type: isClientAudience ? 'private' : type,
           clientOrganizationId: isClientChannel ? clientOrganizationId : undefined,
           memberUserIds: showMemberPicker ? selectedMemberIds : undefined,
         }),
@@ -136,33 +143,38 @@ export function CreateChannelModal({
       open={open}
       onClose={onClose}
       title={
-        isExternalConnectionFlow
-          ? 'Create external connection'
+        isClientAudience
+          ? 'Create private channel'
           : isClientChannel
             ? 'Create client channel'
-            : 'Create internal connection'
+            : 'Create team channel'
       }
       description={
-        isExternalConnectionFlow
-          ? 'Select a client, choose members, then create the connection.'
+        isClientAudience
+          ? 'Only people in your organization can see this channel. Members are notified when someone sends a message.'
           : isClientChannel
             ? 'Create a shared channel with a client. Add client contacts to invite them.'
-            : 'Create a public or private internal channel for your team.'
+            : 'Create a public or private internal channel, or a shared channel with a client.'
       }
       footer={
         <ModalActions
           onCancel={onClose}
           onSubmit={() => void handleSubmit()}
-          submitLabel={
-            isExternalConnectionFlow ? 'Create connection' : 'Create channel'
-          }
+          submitLabel="Create channel"
           isSubmitting={isSubmitting}
           disabled={!canSubmit}
         />
       }
     >
       <form className="space-y-4" onSubmit={(event) => void handleSubmit(event)}>
-        {!isExternalConnectionFlow ? (
+        <Input
+          label="Channel name"
+          value={name}
+          onChange={(event) => setName(event.target.value)}
+          placeholder={isClientAudience ? 'e.g. design-review' : isClientChannel ? 'e.g. design' : 'e.g. engineering'}
+          required
+        />
+        {isClientAudience ? null : (
           <Select
             label="Channel type"
             value={type}
@@ -170,18 +182,15 @@ export function CreateChannelModal({
             options={[
               { value: 'public', label: 'Public (all internal users)' },
               { value: 'private', label: 'Private (members only)' },
-              {
-                value: 'client_shared',
-                label: 'Client channel (shared with a client)',
-              },
+              { value: 'client_shared', label: 'Client channel (shared with a client)' },
             ]}
           />
-        ) : null}
+        )}
 
         {isClientChannel ? (
           <div className="space-y-2">
             <p className="text-sm font-medium text-[var(--foreground)]">
-              1. Select client
+              Select client
             </p>
             {!lockClientOrganization ? (
               <div className="relative">
@@ -212,9 +221,6 @@ export function CreateChannelModal({
                       onClick={() => {
                         setClientOrganizationId(client.id);
                         setSelectedMemberIds([]);
-                        if (isExternalConnectionFlow) {
-                          setName(client.name);
-                        }
                       }}
                       className={cn(
                         'flex w-full items-center rounded-[var(--radius-sm)] px-3 py-2 text-left text-sm transition-colors',
@@ -236,41 +242,27 @@ export function CreateChannelModal({
         {showMemberPicker ? (
           <div className="space-y-2">
             <p className="text-sm font-medium text-[var(--foreground)]">
-              {isClientChannel ? '2. Select members' : 'Initial members'}
+              {isClientChannel ? 'Select members' : 'Initial members'}
             </p>
             <p className="text-xs text-[var(--muted)]">
               You are added automatically.
-              {isClientChannel
-                ? !clientOrganizationId
-                  ? ' Select a client first to load eligible members.'
-                  : clientUsers.length > 0
-                    ? ' Select team members below — client contacts receive an invite to join.'
+              {isClientAudience
+                ? ' Select teammates below. Everyone added is notified about new messages.'
+                : isClientChannel
+                  ? clientUsers.length > 0
+                    ? ' Select client team members below — they receive an invite to join.'
                     : ' This client has no portal team members yet. Add them on Clients → Portal users, then invite them here.'
-                : ''}
+                  : ''}
             </p>
-            {isClientChannel && !clientOrganizationId ? (
-              <p className="rounded-[var(--radius-md)] border border-dashed border-[var(--border)] px-3 py-4 text-sm text-[var(--muted)]">
-                Choose a client to continue.
-              </p>
-            ) : (
-              <ChannelMemberPicker
-                internalUsers={internalUsers}
-                clientUsers={isClientChannel ? clientUsers : []}
-                selectedUserIds={selectedMemberIds}
-                onChange={setSelectedMemberIds}
-                showClientUsers={isClientChannel}
-              />
-            )}
+            <ChannelMemberPicker
+              internalUsers={internalUsers}
+              clientUsers={isClientAudience || isClientChannel ? clientUsers : []}
+              selectedUserIds={selectedMemberIds}
+              onChange={setSelectedMemberIds}
+              showClientUsers={isClientAudience || isClientChannel}
+            />
           </div>
         ) : null}
-
-        <Input
-          label={isClientChannel ? '3. Connection name' : 'Channel name'}
-          value={name}
-          onChange={(event) => setName(event.target.value)}
-          placeholder={isClientChannel ? 'e.g. design' : 'e.g. engineering'}
-          required
-        />
 
         {errorMessage ? (
           <p className="text-sm text-[var(--danger)]">{errorMessage}</p>

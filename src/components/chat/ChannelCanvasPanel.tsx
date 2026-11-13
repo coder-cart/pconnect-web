@@ -39,12 +39,12 @@ export function ChannelCanvasPanel({ channelId }: ChannelCanvasPanelProps) {
   }, [channelId, content, isLoading]);
 
   if (isLoading) {
-    return <p className="p-4 text-sm text-[var(--muted)]">Loading canvas...</p>;
+    return <p className="chat-inset text-sm text-[var(--muted)]">Loading canvas...</p>;
   }
 
   return (
-    <div className="flex flex-1 flex-col p-4">
-      <div className="mb-3 flex items-center justify-between">
+    <div className="chat-inset flex flex-1 flex-col">
+      <div className="mb-2.5 flex items-center justify-between">
         <p className="text-sm font-medium text-[var(--foreground)]">Channel canvas</p>
         {isSaving ? (
           <span className="text-xs text-[var(--muted)]">Saving...</span>
@@ -54,7 +54,7 @@ export function ChannelCanvasPanel({ channelId }: ChannelCanvasPanelProps) {
         value={content}
         onChange={(event) => setContent(event.target.value)}
         placeholder="Add notes, links, or markdown for this channel..."
-        className="min-h-[320px] flex-1 rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm outline-none focus:border-[var(--primary)]"
+        className="min-h-[240px] flex-1 rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm outline-none focus:border-[var(--primary)] sm:min-h-[280px]"
       />
       {errorMessage ? (
         <p className="mt-2 text-sm text-[var(--danger)]">{errorMessage}</p>

@@ -15,6 +15,12 @@ import {
   useUnreadMessages,
 } from '@/components/providers/UnreadMessagesProvider';
 import { cn } from '@/lib/cn';
+import {
+  formatCustomStatus,
+  isAway,
+  presenceSubtitle,
+} from '@/lib/user-presence';
+import { formatMentionPlainText } from '@/lib/chatMarkdown';
 
 interface SidebarProps {
   user: AuthenticatedUser;
@@ -40,17 +46,8 @@ function personForConversation(conversation: UnreadConversation): UnreadPerson {
   };
 }
 
-function previewText(body: string) {
-  return body.replace(/@\[([^\]]+)\]\([^)]+\)/g, '@$1');
-}
 
 function UnreadPersonHoverCard({ person }: { person: UnreadPerson }) {
-  const away = person.presenceStatus === 'away';
-  const statusLine = [person.statusEmoji, person.statusText]
-    .filter(Boolean)
-    .join(' ')
-    .trim();
-
   return (
     <div
       className="absolute left-0 top-full z-40 mt-1 w-56 max-w-[calc(100vw-2rem)] rounded-[var(--radius-lg)] border border-[var(--border)] bg-[var(--surface)] p-3 text-left shadow-[var(--shadow-md)] lg:left-full lg:top-0 lg:mt-0 lg:ml-2"
@@ -75,11 +72,8 @@ function UnreadPersonHoverCard({ person }: { person: UnreadPerson }) {
             </p>
           ) : null}
           <p className="mt-1 text-xs font-medium text-[var(--foreground)]">
-            {away ? 'Away' : 'Active'}
+            {presenceSubtitle(person)}
           </p>
-          {statusLine ? (
-            <p className="mt-1 truncate text-xs text-[var(--muted)]">{statusLine}</p>
-          ) : null}
         </div>
       </div>
     </div>
@@ -97,9 +91,10 @@ function UnreadConversationLink({
 }) {
   const [open, setOpen] = useState(false);
   const person = personForConversation(conversation);
-  const away = person.presenceStatus === 'away';
+  const away = isAway(person.presenceStatus);
+  const statusLine = formatCustomStatus(person);
   const preview = conversation.latestMessage?.body
-    ? previewText(conversation.latestMessage.body)
+    ? formatMentionPlainText(conversation.latestMessage.body)
     : conversation.name;
 
   return (
@@ -150,9 +145,14 @@ function UnreadConversationLink({
             <span className="min-w-0 flex-1">
               <span className="block truncate text-sm font-semibold text-[var(--shell-text)]">
                 {person.fullName}
+                {person.statusEmoji ? (
+                  <span className="ml-1 font-normal" aria-hidden>
+                    {person.statusEmoji}
+                  </span>
+                ) : null}
               </span>
               <span className="block truncate text-[11px] text-[var(--shell-muted)]">
-                {preview}
+                {statusLine || preview}
               </span>
             </span>
             <span className="shrink-0 rounded-full bg-[var(--shell-badge)] px-1.5 py-0.5 text-[10px] font-semibold text-[var(--shell-badge-text)]">
@@ -234,7 +234,7 @@ export function Sidebar({
   return (
     <aside
       className={cn(
-        'shell-chrome flex flex-col border-r border-[var(--shell-border)] bg-[#1d2353] text-[var(--shell-text)] transition-[width] duration-200',
+        'shell-chrome flex flex-col border-r border-[var(--shell-border)] bg-[var(--shell-brand)] text-[var(--shell-text)] transition-[width] duration-200',
         mobile
           ? 'h-full w-full max-w-sm'
           : cn(
@@ -247,11 +247,15 @@ export function Sidebar({
       <div
         className={cn(
           'flex shrink-0 items-center border-b border-[var(--shell-border)] px-3 py-3',
-          isCollapsed ? 'justify-center' : 'justify-between px-4 py-4',
+          isCollapsed ? 'justify-center' : 'justify-between px-4 py-3.5',
         )}
       >
-        {!isCollapsed ? <Logo /> : null}
-        <div className="flex items-center gap-1">
+        {isCollapsed ? (
+          <Logo compact className=" " />
+        ) : (
+          <Logo className=" " />
+        )}
+        <div className="flex shrink-0 items-center gap-1">
           {!mobile && onToggleCollapsed ? (
             <button
               type="button"
@@ -279,7 +283,7 @@ export function Sidebar({
         </div>
       </div>
 
-      <nav className="min-h-0 flex-1 space-y-1 overflow-y-auto px-2 py-3 sm:px-3 sm:py-4">
+      <nav className="shell-scroll min-h-0 flex-1 space-y-1 overflow-y-auto px-2 py-3 sm:px-3 sm:py-4">
         {homeItem ? (
           <SidebarLink
             item={homeItem}
@@ -321,7 +325,11 @@ export function Sidebar({
               <Settings className="h-4 w-4" />
             </Link>
           ) : (
-            <AdminToolsMenu showSettings={showSettings} showStaff={showStaff} />
+            <AdminToolsMenu
+              showSettings={showSettings}
+              showStaff={showStaff}
+              onNavigate={onNavigate}
+            />
           )
         ) : null}
         <Link

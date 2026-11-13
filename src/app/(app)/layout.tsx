@@ -1,7 +1,6 @@
 'use client';
 
 import { ReactNode, useCallback, useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
 import { AppShell } from '@/components/layout/AppShell';
 import {
   AuthenticatedUser,
@@ -9,6 +8,7 @@ import {
   clearStoredToken,
   getStoredRefreshToken,
   getStoredToken,
+  reconcileSessionMarker,
 } from '@/lib/auth';
 import { apiRequest } from '@/lib/api-client';
 import { disableDevicePush } from '@/lib/push-notifications';
@@ -18,45 +18,88 @@ interface ProtectedLayoutProps {
   children: ReactNode;
 }
 
+function redirectToLogin() {
+  // Hard navigation is more reliable than soft replace in iOS standalone PWAs.
+  window.location.replace('/login');
+}
+
 export default function ProtectedLayout({ children }: ProtectedLayoutProps) {
-  const router = useRouter();
   const [user, setUser] = useState<AuthenticatedUser | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   useEffect(() => {
-    const token = getStoredToken();
+    let cancelled = false;
 
-    if (!token) {
-      router.replace('/login');
+    // Cookie without tokens (common after Add to Home Screen) must not keep
+    // the splash up or bounce through middleware forever.
+    if (!reconcileSessionMarker()) {
+      setIsLoading(false);
+      redirectToLogin();
       return;
     }
 
-    apiRequest<ApiResponse<AuthenticatedUser>>('/auth/me', { token })
+    const token = getStoredToken();
+    if (!token) {
+      clearStoredToken();
+      setIsLoading(false);
+      redirectToLogin();
+      return;
+    }
+
+    // Rely on stored token + refresh-on-401 (do not pass token explicitly,
+    // or an expired access token skips refresh and surfaces as Unauthorized).
+    apiRequest<ApiResponse<AuthenticatedUser>>('/auth/me')
       .then((response) => {
+        if (cancelled) return;
         setUser(response.data);
       })
       .catch((error: Error) => {
+        if (cancelled) return;
         clearStoredToken();
         setErrorMessage(error.message);
-        router.replace('/login');
+        setUser(null);
+        redirectToLogin();
       })
       .finally(() => {
-        setIsLoading(false);
+        if (!cancelled) {
+          setIsLoading(false);
+        }
       });
-  }, [router]);
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const refreshUser = useCallback(async () => {
-    const token = getStoredToken();
-    if (!token) {
+    if (!reconcileSessionMarker()) {
+      setUser(null);
+      redirectToLogin();
       return;
     }
 
-    const response = await apiRequest<ApiResponse<AuthenticatedUser>>(
-      '/auth/me',
-      { token },
-    );
-    setUser(response.data);
+    const token = getStoredToken();
+    if (!token) {
+      clearStoredToken();
+      setUser(null);
+      redirectToLogin();
+      return;
+    }
+
+    try {
+      const response = await apiRequest<ApiResponse<AuthenticatedUser>>(
+        '/auth/me',
+      );
+      setUser(response.data);
+    } catch (error) {
+      clearStoredToken();
+      setUser(null);
+      setErrorMessage(
+        error instanceof Error ? error.message : 'Session expired',
+      );
+      redirectToLogin();
+    }
   }, []);
 
   async function handleLogout() {
@@ -75,7 +118,7 @@ export default function ProtectedLayout({ children }: ProtectedLayoutProps) {
     }
 
     clearStoredToken();
-    router.replace('/login');
+    redirectToLogin();
   }
 
   if (isLoading) {

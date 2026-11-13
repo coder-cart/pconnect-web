@@ -1,16 +1,19 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Plus } from 'lucide-react';
 import { apiRequest } from '@/lib/api-client';
 import {
   ApiResponse,
   AuthenticatedUser,
+  isProductionOnlyStaff,
+  isClientChatOnly,
   userHasPermission,
   userIsExternal,
 } from '@/lib/auth';
 import {
   appendUniqueById,
+  insertMessageChronologically,
   ChatChannel,
   ChatMessage,
   ChannelContext,
@@ -23,6 +26,7 @@ import { EmptyState, ErrorState } from '@/components/ui/StatePanels';
 import { ListSkeleton } from '@/components/ui/Skeleton';
 import { CreateChannelModal } from '@/components/modals/CreateChannelModal';
 import { ManageChannelMembersModal } from '@/components/modals/ManageChannelMembersModal';
+import { AddConnectionModal } from '@/components/modals/AddConnectionModal';
 import { StartDirectMessageModal } from '@/components/modals/StartDirectMessageModal';
 import { ChatComposer } from '@/components/chat/ChatComposer';
 import { ChannelSidebar } from '@/components/chat/ChannelSidebar';
@@ -36,7 +40,11 @@ import { ChatScrollArea } from '@/components/chat/ChatScrollArea';
 import { useRealtime } from '@/components/providers/RealtimeProvider';
 import { useUnreadMessages } from '@/components/providers/UnreadMessagesProvider';
 import { cn } from '@/lib/cn';
+import { formatMentionPlainText } from '@/lib/chatMarkdown';
+import { CHAT_HUDDLE_ENABLED } from '@/lib/chat-release';
 import { ChannelMemberOption, ChannelNotificationPreference } from '@/lib/channelMembers';
+import { applyPresenceUpdate } from '@/lib/user-presence';
+import { isWorkspaceAdmin } from '@/lib/navigation';
 
 interface ChatWorkspaceProps {
   user: AuthenticatedUser;
@@ -53,6 +61,30 @@ function updateMessageInList(
   );
 }
 
+function resolveReactorName(
+  userId: string,
+  currentUserId: string,
+  reactor?: { fullName?: string | null },
+  memberNames?: Record<string, string>,
+) {
+  const fromPayload = reactor?.fullName?.trim();
+  if (
+    fromPayload &&
+    fromPayload.toLowerCase() !== 'team member' &&
+    fromPayload.toLowerCase() !== 'someone' &&
+    fromPayload.toLowerCase() !== 'unknown user'
+  ) {
+    return fromPayload;
+  }
+  if (memberNames?.[userId]) {
+    return memberNames[userId];
+  }
+  if (userId === currentUserId) {
+    return 'You';
+  }
+  return 'Someone';
+}
+
 function applyReactionToggle(
   messages: ChatMessage[],
   messageId: string,
@@ -60,29 +92,65 @@ function applyReactionToggle(
   userId: string,
   added: boolean,
   currentUserId: string,
+  reactor?: { id: string; fullName: string; avatarUpdatedAt?: string | null },
+  memberNames?: Record<string, string>,
 ): ChatMessage[] {
   return messages.map((message) => {
     if (message.id !== messageId) return message;
 
-    const reactions = [...(message.reactions ?? [])];
+    const reactions = [...(message.reactions ?? [])].map((reaction) => ({
+      ...reaction,
+      userIds: [...reaction.userIds],
+      users: reaction.users ? [...reaction.users] : undefined,
+    }));
     const existing = reactions.find((reaction) => reaction.emoji === emoji);
+    const reactorProfile = {
+      id: reactor?.id ?? userId,
+      fullName: resolveReactorName(
+        userId,
+        currentUserId,
+        reactor,
+        memberNames,
+      ),
+      avatarUpdatedAt: reactor?.avatarUpdatedAt ?? null,
+    };
 
     if (added) {
       if (existing) {
-        existing.count += 1;
-        existing.userIds.push(userId);
+        if (!existing.userIds.includes(userId)) {
+          existing.count += 1;
+          existing.userIds.push(userId);
+          existing.users = [
+            ...(existing.users ?? []),
+            {
+              id: reactorProfile.id,
+              fullName: reactorProfile.fullName,
+              avatarUpdatedAt: reactorProfile.avatarUpdatedAt ?? null,
+            },
+          ];
+        }
         if (userId === currentUserId) existing.reactedByMe = true;
       } else {
         reactions.push({
           emoji,
           count: 1,
           userIds: [userId],
+          users: [
+            {
+              id: reactorProfile.id,
+              fullName: reactorProfile.fullName,
+              avatarUpdatedAt: reactorProfile.avatarUpdatedAt ?? null,
+            },
+          ],
           reactedByMe: userId === currentUserId,
         });
       }
     } else if (existing) {
       existing.count -= 1;
       existing.userIds = existing.userIds.filter((id) => id !== userId);
+      existing.users = (existing.users ?? []).filter(
+        (user) => user.id !== userId,
+      );
       if (userId === currentUserId) existing.reactedByMe = false;
       if (existing.count <= 0) {
         return {
@@ -126,6 +194,7 @@ export function ChatWorkspace({
   const [isLoadingThread, setIsLoadingThread] = useState(false);
   const [isSending, setIsSending] = useState(false);
   const [isSendingThreadReply, setIsSendingThreadReply] = useState(false);
+  const [isDeletingGroup, setIsDeletingGroup] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [createChannelOpen, setCreateChannelOpen] = useState(false);
   const [channelPreset, setChannelPreset] = useState<{
@@ -133,6 +202,7 @@ export function ChatWorkspace({
     clientOrganizationId?: string;
   } | null>(null);
   const [startDmOpen, setStartDmOpen] = useState(false);
+  const [addConnectionOpen, setAddConnectionOpen] = useState(false);
   const [manageMembersOpen, setManageMembersOpen] = useState(false);
   const [viewerCanInviteClientTeammates, setViewerCanInviteClientTeammates] =
     useState(false);
@@ -143,6 +213,17 @@ export function ChatWorkspace({
   const [pendingInvites, setPendingInvites] = useState<PendingChannelInvite[]>([]);
   const [channelContext, setChannelContext] = useState<ChannelContext | null>(null);
   const [channelMembers, setChannelMembers] = useState<ChannelMemberOption[]>([]);
+  const memberNames = useMemo(() => {
+    const directory: Record<string, string> = {
+      [user.id]: user.fullName,
+    };
+    for (const member of channelMembers) {
+      directory[member.id] = member.fullName;
+    }
+    return directory;
+  }, [channelMembers, user.fullName, user.id]);
+  const memberNamesRef = useRef(memberNames);
+  memberNamesRef.current = memberNames;
   const [notificationPreference, setNotificationPreference] =
     useState<ChannelNotificationPreference | null>(null);
   const [isUpdatingNotification, setIsUpdatingNotification] = useState(false);
@@ -154,20 +235,25 @@ export function ChatWorkspace({
     leaveChannel,
     subscribeMessageCreated,
     subscribeChannelEvents,
+    subscribePresenceUpdated,
   } = useRealtime();
   const { unreadByChannel, loaded: unreadLoaded, setActiveChannel } =
     useUnreadMessages();
   const isExternalUser = userIsExternal(user);
-  const canCreateChannel =
+  const canCreateStaffChannel =
     !isExternalUser && userHasPermission(user, 'channels.create_internal');
+  const canCreateClientPrivateChannel =
+    isExternalUser && !isClientChatOnly(user);
+  const canCreateChannel = canCreateStaffChannel || canCreateClientPrivateChannel;
+  const canAddConnection =
+    !isExternalUser &&
+    !isProductionOnlyStaff(user.roleCodes) &&
+    ['company_owner', 'internal_admin', 'internal_manager'].some((role) =>
+      user.roleCodes.includes(role),
+    );
 
   const openCreateChannel = useCallback(() => {
     setChannelPreset({ type: 'public' });
-    setCreateChannelOpen(true);
-  }, []);
-
-  const openCreateExternalConnection = useCallback(() => {
-    setChannelPreset({ type: 'client_shared' });
     setCreateChannelOpen(true);
   }, []);
 
@@ -219,8 +305,16 @@ export function ChatWorkspace({
       .then((data) => {
         if (data.length > 0) {
           setSelectedChannelId((current) => {
-            const preferred = current ?? initialChannelId;
+            const preferred = current ?? initialChannelId ?? null;
             if (preferred) return preferred;
+
+            // Mobile opens on the conversation list; desktop still picks a default.
+            const isMobileViewport =
+              typeof window !== 'undefined' &&
+              window.matchMedia('(max-width: 1023px)').matches;
+            if (isMobileViewport) {
+              return null;
+            }
 
             if (isExternalUser) {
               const hub = data.find((channel) => channel.type === 'client_shared');
@@ -278,7 +372,7 @@ export function ChatWorkspace({
           channelId === activeChannelId
         ) {
           setThreadReplies((current) =>
-            appendUniqueById(current, typedMessage),
+            insertMessageChronologically(current, typedMessage),
           );
         }
 
@@ -293,8 +387,25 @@ export function ChatWorkspace({
       }
 
       if (channelId === activeChannelId) {
-        setMessages((current) => appendUniqueById(current, typedMessage));
+        setMessages((current) =>
+          insertMessageChronologically(current, typedMessage),
+        );
       }
+
+      setChannels((current) =>
+        current.map((channel) =>
+          channel.id === channelId
+            ? {
+                ...channel,
+                latestMessage: {
+                  body: typedMessage.body,
+                  createdAt: typedMessage.createdAt,
+                  senderName: typedMessage.sender.fullName,
+                },
+              }
+            : channel,
+        ),
+      );
     });
   }, [subscribeMessageCreated]);
 
@@ -317,8 +428,14 @@ export function ChatWorkspace({
           messageId: string;
           emoji: string;
           userId: string;
+          user?: {
+            id: string;
+            fullName: string;
+            avatarUpdatedAt?: string | null;
+          };
         };
         const added = event === 'reaction.added';
+        const names = memberNamesRef.current;
         setMessages((current) =>
           applyReactionToggle(
             current,
@@ -327,6 +444,8 @@ export function ChatWorkspace({
             payload.userId,
             added,
             user.id,
+            payload.user,
+            names,
           ),
         );
         setThreadReplies((current) =>
@@ -337,11 +456,63 @@ export function ChatWorkspace({
             payload.userId,
             added,
             user.id,
+            payload.user,
+            names,
           ),
         );
       }
+
+      if (event === 'annotation.created') {
+        const payload = data as {
+          fileId?: string;
+          annotation?: { fileId?: string };
+        };
+        const fileId = payload.fileId ?? payload.annotation?.fileId;
+        if (!fileId) return;
+
+        const bumpCount = (messages: ChatMessage[]) =>
+          messages.map((message) => ({
+            ...message,
+            attachments: message.attachments?.map((attachment) => {
+              if (attachment.file?.id !== fileId) return attachment;
+              return {
+                ...attachment,
+                file: {
+                  ...attachment.file,
+                  annotationCount: (attachment.file.annotationCount ?? 0) + 1,
+                },
+              };
+            }),
+          }));
+
+        setMessages((current) => bumpCount(current));
+        setThreadReplies((current) => bumpCount(current));
+      }
     });
   }, [subscribeChannelEvents, user.id]);
+
+  useEffect(() => {
+    return subscribePresenceUpdated((payload) => {
+      setChannels((current) =>
+        current.map((channel) => {
+          if (!channel.dmPeer || channel.dmPeer.id !== payload.userId) {
+            return channel;
+          }
+          return {
+            ...channel,
+            dmPeer: applyPresenceUpdate(channel.dmPeer, payload),
+          };
+        }),
+      );
+      setChannelMembers((current) =>
+        current.map((member) =>
+          member.id === payload.userId
+            ? applyPresenceUpdate(member, payload)
+            : member,
+        ),
+      );
+    });
+  }, [subscribePresenceUpdated]);
 
   useEffect(() => {
     if (!selectedChannelId || isLoadingChannels) return;
@@ -373,9 +544,11 @@ export function ChatWorkspace({
       apiRequest<ApiResponse<unknown>>(`/channels/${requestChannelId}/read`, {
         method: 'POST',
       }),
-      apiRequest<ApiResponse<{ joinPath?: string } | null>>(
-        `/channels/${requestChannelId}/huddles/active`,
-      ).catch(() => ({ success: true, data: null })),
+      CHAT_HUDDLE_ENABLED
+        ? apiRequest<ApiResponse<{ joinPath?: string } | null>>(
+            `/channels/${requestChannelId}/huddles/active`,
+          ).catch(() => ({ success: true, data: null }))
+        : Promise.resolve({ success: true as const, data: null }),
     ])
       .then(([messagesResponse, , huddleResponse]) => {
         if (cancelled || selectedChannelIdRef.current !== requestChannelId) {
@@ -499,9 +672,18 @@ export function ChatWorkspace({
       .finally(() => setIsLoadingThread(false));
   }, [selectedChannelId, threadMessageId]);
 
+  // Soft-nav from notifications while already on /chat must update selection.
+  useEffect(() => {
+    if (initialChannelId) {
+      setSelectedChannelId(initialChannelId);
+    }
+  }, [initialChannelId]);
+
   useEffect(() => {
     if (!initialMessageId) return;
-    window.setTimeout(() => setHighlightMessageId(null), 3000);
+    setHighlightMessageId(initialMessageId);
+    const timer = window.setTimeout(() => setHighlightMessageId(null), 3000);
+    return () => window.clearTimeout(timer);
   }, [initialMessageId, messages]);
 
   async function handleNotificationChange(payload: {
@@ -578,7 +760,7 @@ export function ChatWorkspace({
       );
 
       setMessages((currentMessages) =>
-        appendUniqueById(currentMessages, response.data),
+        insertMessageChronologically(currentMessages, response.data),
       );
     } catch (error) {
       setErrorMessage(
@@ -617,7 +799,9 @@ export function ChatWorkspace({
         },
       );
 
-      setThreadReplies((current) => appendUniqueById(current, response.data));
+      setThreadReplies((current) =>
+        insertMessageChronologically(current, response.data),
+      );
     } catch (error) {
       setErrorMessage(
         error instanceof Error ? error.message : 'Unable to send reply',
@@ -714,6 +898,11 @@ export function ChatWorkspace({
     setHighlightMessageId(messageId);
     setThreadMessageId(null);
     setDetailsOpen(false);
+    window.setTimeout(() => {
+      setHighlightMessageId((current) =>
+        current === messageId ? null : current,
+      );
+    }, 3000);
   }
 
   function handleOpenThread(messageId: string) {
@@ -753,7 +942,7 @@ export function ChatWorkspace({
   }
 
   function handleCopyMessage(body: string) {
-    void navigator.clipboard.writeText(body);
+    void navigator.clipboard.writeText(formatMentionPlainText(body));
   }
 
   function handleCopyLink(channelId: string, messageId: string) {
@@ -791,17 +980,48 @@ export function ChatWorkspace({
     setSelectedChannelId(channel.id);
   }
 
+  async function handleDeleteGroup() {
+    if (!selectedChannelId || selectedChannel?.type !== 'group') return;
+    const confirmed = window.confirm(
+      `Delete channel “${getChannelLabel(selectedChannel)}”? This cannot be undone.`,
+    );
+    if (!confirmed) return;
+
+    setIsDeletingGroup(true);
+    setErrorMessage(null);
+    try {
+      await apiRequest(`/channels/${selectedChannelId}`, { method: 'DELETE' });
+      setChannels((current) =>
+        current.filter((channel) => channel.id !== selectedChannelId),
+      );
+      setSelectedChannelId(null);
+      setDetailsOpen(false);
+      setMessages([]);
+    } catch (error) {
+      setErrorMessage(
+        error instanceof Error ? error.message : 'Unable to delete channel',
+      );
+    } finally {
+      setIsDeletingGroup(false);
+    }
+  }
+
   const selectedChannel = channels.find(
     (channel) => channel.id === selectedChannelId,
   );
   const canManageMembers =
-    (canCreateChannel &&
+    (canCreateStaffChannel &&
       (selectedChannel?.type === 'private' ||
+        selectedChannel?.type === 'group' ||
         selectedChannel?.type === 'client_shared')) ||
     (isExternalUser &&
       selectedChannel?.type === 'client_shared' &&
       viewerCanInviteClientTeammates);
   const canInvite = canManageMembers;
+  const canDeleteGroup =
+    isWorkspaceAdmin(user.roleCodes) &&
+    Boolean(selectedChannel) &&
+    selectedChannel?.type !== 'public';
   const activeThreadMessage = messages.find(
     (message) => message.id === threadMessageId,
   );
@@ -915,13 +1135,13 @@ export function ChatWorkspace({
     <>
       <div
         className={cn(
-          'grid h-full min-h-0 gap-0 lg:gap-3',
+          'grid h-full min-h-0 grid-cols-1 gap-0 overflow-hidden',
           showDesktopSidebar && (detailsOpen || threadMessageId)
-            ? 'lg:grid-cols-[280px_minmax(0,1fr)_320px]'
+            ? 'lg:grid-cols-[15.5rem_minmax(0,1fr)_17.5rem] xl:grid-cols-[17rem_minmax(0,1fr)_19rem]'
             : showDesktopSidebar
-              ? 'lg:grid-cols-[280px_minmax(0,1fr)]'
+              ? 'lg:grid-cols-[15.5rem_minmax(0,1fr)] xl:grid-cols-[17rem_minmax(0,1fr)]'
               : detailsOpen || threadMessageId
-                ? 'lg:grid-cols-[minmax(0,1fr)_320px]'
+                ? 'lg:grid-cols-[minmax(0,1fr)_17.5rem] xl:grid-cols-[minmax(0,1fr)_19rem]'
                 : 'lg:grid-cols-[minmax(0,1fr)]',
         )}
       >
@@ -931,14 +1151,20 @@ export function ChatWorkspace({
           pendingInvites={pendingInvites}
           acceptingInviteId={acceptingInviteId}
           canCreateChannel={canCreateChannel}
+          canAddConnection={canAddConnection}
+          showInternalSections
+          internalEmptyText={
+            isExternalUser
+              ? 'Your organization channels appear here.'
+              : 'No internal connections yet.'
+          }
           onSelectChannel={setSelectedChannelId}
           onCreateChannel={openCreateChannel}
-          onCreateExternalConnection={
-            isExternalUser ? undefined : openCreateExternalConnection
-          }
+          onAddConnection={() => setAddConnectionOpen(true)}
           onStartDirectMessage={() => setStartDmOpen(true)}
           onAcceptInvite={(invite) => void handleAcceptInvite(invite)}
           className={cn(
+            'order-1 h-full min-h-0 w-full lg:col-start-1',
             showMobileChat ? 'hidden' : 'flex',
             showDesktopSidebar ? 'lg:flex' : 'lg:hidden',
           )}
@@ -947,8 +1173,9 @@ export function ChatWorkspace({
         <Card
           padding="none"
           className={cn(
-            'flex min-h-0 min-w-0 flex-col overflow-hidden',
+            'order-2 flex min-h-0 min-w-0 flex-col overflow-hidden rounded-none shadow-none',
             !showMobileChat ? 'hidden lg:flex' : 'flex',
+            showDesktopSidebar ? 'lg:col-start-2' : 'lg:col-start-1',
           )}
         >
           <ChannelHeader
@@ -960,6 +1187,7 @@ export function ChatWorkspace({
               selectedChannel?.clientOrganizationLogoUpdatedAt
             }
             channelContext={channelContext}
+            dmPeer={selectedChannel?.dmPeer}
             members={channelMembers}
             activeTab={channelTab}
             onTabChange={setChannelTab}
@@ -993,7 +1221,7 @@ export function ChatWorkspace({
               <PinnedMessagesPanel
                 pins={pinnedMessages}
                 isLoading={isLoadingPins}
-                canUnpin={canCreateChannel}
+                canUnpin={canCreateStaffChannel}
                 onJumpToMessage={handleJumpToPinnedMessage}
                 onUnpin={handleUnpin}
               />
@@ -1003,9 +1231,9 @@ export function ChatWorkspace({
               {selectedChannelId ? (
                 <ChatScrollArea
                   scrollKey={selectedChannelId}
-                  anchorMessageId={initialMessageId}
-                  containerClassName="px-3 py-3 sm:px-5 sm:py-4"
-                  contentClassName="space-y-0.5"
+                  anchorMessageId={highlightMessageId}
+                  containerClassName="chat-inset-x py-[var(--chat-inset-y)]"
+                  contentClassName="space-y-0"
                 >
                   <MessageList
                     messages={messages}
@@ -1013,6 +1241,7 @@ export function ChatWorkspace({
                     currentUserId={user.id}
                     unreadSince={unreadSince}
                     canManageChannel={canManageMembers}
+                    memberNames={memberNames}
                     isLoading={isLoadingMessages}
                     activeThreadMessageId={threadMessageId}
                     highlightMessageId={highlightMessageId}
@@ -1028,7 +1257,7 @@ export function ChatWorkspace({
                 </ChatScrollArea>
               ) : null}
 
-              <div className="safe-pb shrink-0 border-t border-[var(--border)] bg-[var(--surface)] p-3 sm:p-4">
+              <div className="chat-inset safe-pb sticky bottom-0 z-10 shrink-0 border-t border-[var(--border)] bg-[var(--surface)]">
                 <ChatComposer
                   channelId={selectedChannelId}
                   channelName={
@@ -1060,8 +1289,15 @@ export function ChatWorkspace({
             isLoadingPins={isLoadingPins}
             canInvite={canInvite}
             onInvite={() => setManageMembersOpen(true)}
+            canDeleteGroup={canDeleteGroup}
+            onDeleteGroup={() => void handleDeleteGroup()}
+            isDeletingGroup={isDeletingGroup}
             onJumpToPin={handleJumpToPinnedMessage}
             onClose={() => setDetailsOpen(false)}
+            className={cn(
+              'order-3',
+              showDesktopSidebar ? 'lg:col-start-3' : 'lg:col-start-2',
+            )}
           />
         ) : null}
 
@@ -1090,6 +1326,10 @@ export function ChatWorkspace({
             onCopyMessage={handleCopyMessage}
             onCopyLink={handleCopyLink}
             onMarkUnread={handleMarkUnread}
+            className={cn(
+              'order-3',
+              showDesktopSidebar ? 'lg:col-start-3' : 'lg:col-start-2',
+            )}
           />
         ) : null}
       </div>
@@ -1105,12 +1345,18 @@ export function ChatWorkspace({
         presetType={channelPreset?.type}
         presetClientOrganizationId={channelPreset?.clientOrganizationId}
         lockClientOrganization={Boolean(channelPreset?.clientOrganizationId)}
+        audience={isExternalUser ? 'client' : 'staff'}
       />
       <StartDirectMessageModal
         open={startDmOpen}
         onClose={() => setStartDmOpen(false)}
         onStarted={handleDirectMessageStarted}
         isExternalUser={isExternalUser}
+      />
+      <AddConnectionModal
+        open={addConnectionOpen}
+        onClose={() => setAddConnectionOpen(false)}
+        onStarted={handleDirectMessageStarted}
       />
       <ManageChannelMembersModal
         open={manageMembersOpen}

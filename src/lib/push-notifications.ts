@@ -68,6 +68,43 @@ function urlBase64ToUint8Array(value: string) {
   return output;
 }
 
+function normalizeVapidPublicKey(value: string) {
+  return value.replace(/=+$/, '').replace(/\+/g, '-').replace(/\//g, '_');
+}
+
+function uint8ArrayToUrlBase64(bytes: Uint8Array) {
+  let binary = '';
+  bytes.forEach((byte) => {
+    binary += String.fromCharCode(byte);
+  });
+  return normalizeVapidPublicKey(window.btoa(binary));
+}
+
+function subscriptionMatchesPublicKey(
+  subscription: PushSubscription,
+  publicKey: string,
+) {
+  const applicationServerKey = subscription.options?.applicationServerKey;
+  if (!applicationServerKey) return false;
+  const current = uint8ArrayToUrlBase64(new Uint8Array(applicationServerKey));
+  return current === normalizeVapidPublicKey(publicKey);
+}
+
+async function saveSubscriptionToApi(subscription: PushSubscription) {
+  const json = subscription.toJSON();
+  if (!json.endpoint || !json.keys?.p256dh || !json.keys.auth) {
+    throw new Error('The browser did not return a push subscription.');
+  }
+  await apiRequest('/notifications/push/subscribe', {
+    method: 'POST',
+    body: JSON.stringify({
+      endpoint: json.endpoint,
+      p256dh: json.keys.p256dh,
+      auth: json.keys.auth,
+    }),
+  });
+}
+
 async function persistPushSubscription(
   registration: ServiceWorkerRegistration,
   publicKey: string,
@@ -87,18 +124,7 @@ async function persistPushSubscription(
     userVisibleOnly: true,
     applicationServerKey: urlBase64ToUint8Array(publicKey),
   });
-  const json = subscription.toJSON();
-  if (!json.endpoint || !json.keys?.p256dh || !json.keys.auth) {
-    throw new Error('The browser did not return a push subscription.');
-  }
-  await apiRequest('/notifications/push/subscribe', {
-    method: 'POST',
-    body: JSON.stringify({
-      endpoint: json.endpoint,
-      p256dh: json.keys.p256dh,
-      auth: json.keys.auth,
-    }),
-  });
+  await saveSubscriptionToApi(subscription);
 }
 
 export async function enableDevicePush() {
@@ -139,22 +165,6 @@ export async function healDevicePushSubscription() {
   const registration = await registerPushWorker();
   if (!registration) return 'unsupported';
 
-  const existing = await registration.pushManager.getSubscription();
-  if (existing) {
-    const json = existing.toJSON();
-    if (json.endpoint && json.keys?.p256dh && json.keys.auth) {
-      await apiRequest('/notifications/push/subscribe', {
-        method: 'POST',
-        body: JSON.stringify({
-          endpoint: json.endpoint,
-          p256dh: json.keys.p256dh,
-          auth: json.keys.auth,
-        }),
-      }).catch(() => undefined);
-    }
-    return 'on';
-  }
-
   try {
     const keyResponse = await apiRequest<
       ApiResponse<{ configured: boolean; publicKey: string | null }>
@@ -162,7 +172,14 @@ export async function healDevicePushSubscription() {
     if (!keyResponse.data.configured || !keyResponse.data.publicKey) {
       return 'off';
     }
-    await persistPushSubscription(registration, keyResponse.data.publicKey);
+    const publicKey = keyResponse.data.publicKey;
+    const existing = await registration.pushManager.getSubscription();
+    if (existing && subscriptionMatchesPublicKey(existing, publicKey)) {
+      await saveSubscriptionToApi(existing).catch(() => undefined);
+      return 'on';
+    }
+    // Missing sub, or bound to a rotated VAPID public key — recreate.
+    await persistPushSubscription(registration, publicKey);
     return 'on';
   } catch {
     return 'off';

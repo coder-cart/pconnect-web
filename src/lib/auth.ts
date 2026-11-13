@@ -5,6 +5,10 @@ export type ClientPortalAccessLevel = 'chat_only' | 'chat_and_orders';
 export interface AuthenticatedUser {
   id: string;
   tenantId: string;
+  /** Workspace / company name for this tenant (not product brand). */
+  tenantName?: string;
+  /** ISO timestamp when workspace logo last changed; null = no logo. */
+  tenantLogoUpdatedAt?: string | null;
   email: string;
   fullName: string;
   userType: 'internal' | 'external';
@@ -86,6 +90,27 @@ export function clearStoredToken(): void {
   window.localStorage.removeItem(AUTH_TOKEN_KEY);
   window.localStorage.removeItem(REFRESH_TOKEN_KEY);
   clearSessionCookie();
+}
+
+/**
+ * Keep the middleware session cookie aligned with real tokens.
+ * iOS home-screen apps often keep the cookie after localStorage is empty,
+ * which would otherwise trap users on protected routes behind a boot splash.
+ */
+export function reconcileSessionMarker(): boolean {
+  if (typeof window === 'undefined') {
+    return false;
+  }
+  const hasToken = Boolean(
+    window.localStorage.getItem(AUTH_TOKEN_KEY) ||
+      window.localStorage.getItem(REFRESH_TOKEN_KEY),
+  );
+  if (!hasToken) {
+    clearSessionCookie();
+    return false;
+  }
+  setSessionCookie();
+  return true;
 }
 
 export function userHasPermission(

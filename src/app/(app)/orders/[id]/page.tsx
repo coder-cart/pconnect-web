@@ -10,6 +10,7 @@ import {
   userHasPermission,
   userIsExternal,
 } from '@/lib/auth';
+import { isWorkspaceAdmin } from '@/lib/navigation';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
@@ -38,6 +39,8 @@ import {
 import { OrderFilesPanel } from '@/components/orders/OrderFilesPanel';
 import { OrderChannelChat } from '@/components/orders/OrderChannelChat';
 import { FolderStatusField } from '@/components/orders/FolderStatusField';
+import { OrderRevisionHistory } from '@/components/orders/OrderRevisionHistory';
+import { RequestRevisionModal } from '@/components/orders/RequestRevisionModal';
 import {
   ServiceMultiSelect,
   serviceIdsFromLines,
@@ -85,7 +88,9 @@ export function OrderDetailView({
   const router = useRouter();
   const { user, refreshKey, notifyRefresh } = useWorkspace();
   const canManage = userHasPermission(user, 'orders.manage');
+  const canDeleteOrder = isWorkspaceAdmin(user.roleCodes);
   const canView = userHasPermission(user, 'orders.view');
+  const canCreate = userHasPermission(user, 'orders.create');
   const canViewFinance = userHasAnyPermission(user, [
     'finance.invoices.view_all',
     'finance.invoices.create',
@@ -109,6 +114,7 @@ export function OrderDetailView({
     'client',
   );
   const [busy, setBusy] = useState(false);
+  const [revisionModalOpen, setRevisionModalOpen] = useState(false);
   const [clientNotesDraft, setClientNotesDraft] = useState('');
   const [sourceLinkDraft, setSourceLinkDraft] = useState('');
   const [clientNameDraft, setClientNameDraft] = useState('');
@@ -487,7 +493,7 @@ export function OrderDetailView({
                   Mark order as received
                 </Button>
               ) : null}
-              {canManage ? (
+              {canDeleteOrder ? (
                 <Button
                   variant="danger"
                   onClick={handleDeleteOrder}
@@ -531,12 +537,12 @@ export function OrderDetailView({
                 />
               ) : null}
               <Badge variant="primary">{order.outputFormat ?? 'JPG'}</Badge>
-              <span className="text-[var(--muted)]">
-                {order.estimatedTatHours != null
-                  ? `Turnaround ${order.estimatedTatHours} hours`
-                  : 'Turnaround not set'}
-              </span>
-              {order.dueDate ? (
+              {!isExternal && order.estimatedTatHours != null ? (
+                <span className="text-[var(--muted)]">
+                  Turnaround {order.estimatedTatHours} hours
+                </span>
+              ) : null}
+              {!isExternal && order.dueDate ? (
                 <span className="text-[var(--muted)]">
                   Due {new Date(order.dueDate).toLocaleDateString()}
                 </span>
@@ -572,9 +578,45 @@ export function OrderDetailView({
                 <ClientDeliveryActions
                   order={order}
                   busy={busy}
+                  canRequestRevision={
+                    canCreate &&
+                    !order.hasOpenClientRevision &&
+                    (clientLifecycleStage(order.workflowStatus?.code) ===
+                      'delivered' ||
+                      clientLifecycleStage(order.workflowStatus?.code) ===
+                        'completed')
+                  }
                   onAcknowledge={() => runClientAction('acknowledge')}
                   onSaveHistory={() => runClientAction('save-to-history')}
+                  onRequestRevision={() => setRevisionModalOpen(true)}
                 />
+              ) : null}
+              {order ? <OrderRevisionHistory order={order} /> : null}
+              {canCreate &&
+              order &&
+              !isExternal &&
+              !order.hasOpenClientRevision &&
+              (clientLifecycleStage(order.workflowStatus?.code) === 'delivered' ||
+                clientLifecycleStage(order.workflowStatus?.code) ===
+                  'completed') ? (
+                <Card className="flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <h3 className="text-sm font-medium text-[var(--foreground)]">
+                      Request a revision
+                    </h3>
+                    <p className="text-xs text-[var(--muted)]">
+                      Adds a revision round under this order. No new order is
+                      created.
+                    </p>
+                  </div>
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    onClick={() => setRevisionModalOpen(true)}
+                  >
+                    Request revision
+                  </Button>
+                </Card>
               ) : null}
               {canManage ? (
                 <OrderExcelEditor
@@ -610,7 +652,7 @@ export function OrderDetailView({
                     onChange={(event) => setClientNameDraft(event.target.value)}
                   />
                   <div className="space-y-2">
-                    <div className="flex items-center justify-between">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
                       <p className="text-sm font-medium text-[var(--foreground)]">
                         Work lines
                       </p>
@@ -1019,6 +1061,17 @@ export function OrderDetailView({
           ) : null}
         </>
       ) : null}
+
+      <RequestRevisionModal
+        open={revisionModalOpen}
+        order={order}
+        canSetPriority={canManage}
+        onClose={() => setRevisionModalOpen(false)}
+        onCreated={() => {
+          notifyRefresh();
+          load();
+        }}
+      />
     </div>
   );
 }
@@ -1026,20 +1079,24 @@ export function OrderDetailView({
 function ClientDeliveryActions({
   order,
   busy,
+  canRequestRevision,
   onAcknowledge,
   onSaveHistory,
+  onRequestRevision,
 }: {
   order: OrderSummary;
   busy: boolean;
+  canRequestRevision?: boolean;
   onAcknowledge: () => void;
   onSaveHistory: () => void;
+  onRequestRevision?: () => void;
 }) {
   const stage = clientLifecycleStage(order.workflowStatus?.code);
   const canReceive = stage === 'delivered';
   const isCompleted = stage === 'completed' || Boolean(order.clientAcknowledgedAt);
   const deliveryHref = toExternalHref(order.deliveryLink ?? '');
 
-  if (!canReceive && !isCompleted && !order.historySavedAt) {
+  if (!canReceive && !isCompleted && !order.historySavedAt && !canRequestRevision) {
     return null;
   }
 
@@ -1061,11 +1118,6 @@ function ClientDeliveryActions({
         </p>
       )}
       <Badge variant="primary">{order.outputFormat ?? 'JPG'}</Badge>
-      <p className="text-sm text-[var(--muted)]">
-        {order.estimatedTatHours != null
-          ? `Turnaround ${order.estimatedTatHours} hours`
-          : 'Turnaround not set'}
-      </p>
       {isCompleted ? (
         <p className="text-sm text-[var(--muted)]">
           Receipt confirmed — this order is completed.
@@ -1085,6 +1137,16 @@ function ClientDeliveryActions({
           </Button>
         </div>
       )}
+      {canRequestRevision ? (
+        <Button
+          size="sm"
+          variant="secondary"
+          onClick={onRequestRevision}
+          disabled={busy}
+        >
+          Request revision
+        </Button>
+      ) : null}
     </Card>
   );
 }

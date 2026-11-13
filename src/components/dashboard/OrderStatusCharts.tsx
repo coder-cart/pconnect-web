@@ -9,60 +9,80 @@ export type StageCount = {
 
 const WEEKDAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'] as const;
 
+type WeekDayRow = {
+  day: string;
+  pending: number;
+  progress: number;
+  qc: number;
+  ready: number;
+};
+
 export function OrderWeekBars({
   series,
 }: {
-  series: Array<{ day: string; pending: number; progress: number; qc: number; ready: number }>;
+  series: WeekDayRow[];
 }) {
-  const max = Math.max(
-    1,
-    ...series.flatMap((row) => [row.pending, row.progress, row.qc, row.ready]),
+  const totals = series.map(
+    (row) => row.pending + row.progress + row.qc + row.ready,
   );
+  const maxTotal = Math.max(0, ...totals);
+  const weekTotal = totals.reduce((sum, value) => sum + value, 0);
 
   return (
     <Card className="h-full">
       <h2 className="text-sm font-semibold text-[var(--foreground)]">Order overview</h2>
       <p className="mt-0.5 text-xs text-[var(--muted)]">Active orders by due day this week</p>
-      <div className="mt-4 flex h-40 items-end justify-between gap-2">
-        {series.map((row) => {
-          const total = row.pending + row.progress + row.qc + row.ready;
-          const heightPct = Math.max(8, (total / max) * 100);
-          return (
-            <div key={row.day} className="flex flex-1 flex-col items-center gap-2">
+      {weekTotal === 0 ? (
+        <div className="mt-4 flex h-40 items-center justify-center rounded-[var(--radius-md)] border border-dashed border-[var(--border)] bg-[var(--surface-muted)]/40">
+          <p className="px-4 text-center text-xs text-[var(--muted)]">
+            No active orders due this week
+          </p>
+        </div>
+      ) : (
+        <div className="mt-4 flex h-44 gap-2 pt-4">
+          {series.map((row, index) => {
+            const total = totals[index] ?? 0;
+            const heightPct =
+              maxTotal === 0 || total === 0
+                ? 0
+                : Math.max(12, (total / maxTotal) * 100);
+
+            return (
               <div
-                className="flex w-full max-w-[2.25rem] flex-col justify-end overflow-hidden rounded-md bg-[var(--surface-muted)]"
-                style={{ height: `${heightPct}%`, minHeight: '1.5rem' }}
-                title={`${row.day}: ${total}`}
+                key={row.day}
+                className="flex min-w-0 flex-1 flex-col items-center gap-1.5"
               >
-                {row.ready > 0 ? (
+                <div className="flex w-full flex-1 flex-col justify-end">
                   <div
-                    className="w-full bg-emerald-500"
-                    style={{ flex: row.ready }}
-                  />
-                ) : null}
-                {row.qc > 0 ? (
-                  <div className="w-full bg-violet-500" style={{ flex: row.qc }} />
-                ) : null}
-                {row.progress > 0 ? (
-                  <div
-                    className="w-full bg-blue-500"
-                    style={{ flex: row.progress }}
-                  />
-                ) : null}
-                {row.pending > 0 ? (
-                  <div
-                    className="w-full bg-orange-500"
-                    style={{ flex: row.pending }}
-                  />
-                ) : null}
+                    className="relative mx-auto w-full max-w-[2.25rem]"
+                    style={{ height: total === 0 ? '0.25rem' : `${heightPct}%` }}
+                    title={`${row.day}: ${total} order${total === 1 ? '' : 's'}`}
+                  >
+                    {total > 0 ? (
+                      <span className="absolute -top-4 left-1/2 -translate-x-1/2 text-[0.65rem] font-medium tabular-nums text-[var(--muted)]">
+                        {total}
+                      </span>
+                    ) : null}
+                    <div className="flex h-full w-full flex-col justify-end overflow-hidden rounded-md bg-[var(--surface-muted)]">
+                      {total === 0 ? null : (
+                        <>
+                          <BarSegment count={row.ready} total={total} color="bg-emerald-500" />
+                          <BarSegment count={row.qc} total={total} color="bg-violet-500" />
+                          <BarSegment count={row.progress} total={total} color="bg-blue-500" />
+                          <BarSegment count={row.pending} total={total} color="bg-orange-500" />
+                        </>
+                      )}
+                    </div>
+                  </div>
+                </div>
+                <span className="text-[0.7rem] font-medium text-[var(--muted)]">
+                  {row.day}
+                </span>
               </div>
-              <span className="text-[0.7rem] font-medium text-[var(--muted)]">
-                {row.day}
-              </span>
-            </div>
-          );
-        })}
-      </div>
+            );
+          })}
+        </div>
+      )}
       <div className="mt-3 flex flex-wrap gap-3 text-[0.7rem] text-[var(--muted)]">
         <LegendDot color="bg-orange-500" label="Pending" />
         <LegendDot color="bg-blue-500" label="In progress" />
@@ -73,7 +93,33 @@ export function OrderWeekBars({
   );
 }
 
-export function OrderStatusDonut({ stages }: { stages: StageCount[] }) {
+function BarSegment({
+  count,
+  total,
+  color,
+}: {
+  count: number;
+  total: number;
+  color: string;
+}) {
+  if (count <= 0 || total <= 0) return null;
+  return (
+    <div
+      className={`w-full ${color}`}
+      style={{ height: `${(count / total) * 100}%` }}
+    />
+  );
+}
+
+export function OrderStatusDonut({
+  stages,
+  title = 'Orders by status',
+  description = 'Active pipeline distribution',
+}: {
+  stages: StageCount[];
+  title?: string;
+  description?: string;
+}) {
   const total = stages.reduce((sum, stage) => sum + stage.count, 0);
   const radius = 54;
   const stroke = 16;
@@ -82,8 +128,8 @@ export function OrderStatusDonut({ stages }: { stages: StageCount[] }) {
 
   return (
     <Card className="h-full">
-      <h2 className="text-sm font-semibold text-[var(--foreground)]">Orders by status</h2>
-      <p className="mt-0.5 text-xs text-[var(--muted)]">Active pipeline distribution</p>
+      <h2 className="text-sm font-semibold text-[var(--foreground)]">{title}</h2>
+      <p className="mt-0.5 text-xs text-[var(--muted)]">{description}</p>
       <div className="mt-3 flex flex-col items-center gap-4 sm:flex-row sm:justify-center">
         <div className="relative h-36 w-36">
           <svg viewBox="0 0 140 140" className="h-full w-full -rotate-90" aria-hidden>
@@ -154,7 +200,7 @@ function LegendDot({ color, label }: { color: string; label: string }) {
 export function buildWeekSeries(
   rows: Array<{ dueDate?: string | null; stage: string | null }>,
 ) {
-  const base = WEEKDAYS.map((day) => ({
+  const base: WeekDayRow[] = WEEKDAYS.map((day) => ({
     day,
     pending: 0,
     progress: 0,
@@ -168,26 +214,52 @@ export function buildWeekSeries(
   end.setDate(end.getDate() + 7);
 
   for (const row of rows) {
-    if (!row.dueDate) continue;
-    const due = new Date(row.dueDate);
+    if (!row.dueDate || !row.stage) continue;
+    const due = parseLocalDate(row.dueDate);
+    if (Number.isNaN(due.getTime())) continue;
     if (due < start || due >= end) continue;
     const index = (due.getDay() + 6) % 7;
     const bucket = base[index];
     if (!bucket) continue;
+
     if (row.stage === 'order_received') bucket.pending += 1;
     else if (row.stage === 'in_progress') bucket.progress += 1;
     else if (row.stage === 'quality_check') bucket.qc += 1;
-    else if (row.stage === 'delivered' || row.stage === 'ready_for_delivery')
+    else if (row.stage === 'delivered' || row.stage === 'ready_for_delivery') {
       bucket.ready += 1;
+    }
   }
 
   return base;
 }
 
+/** Parse ISO / date-only values in local time so weekday bucketing stays correct. */
+function parseLocalDate(value: string) {
+  const dateOnly = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  if (dateOnly) {
+    return new Date(
+      Number(dateOnly[1]),
+      Number(dateOnly[2]) - 1,
+      Number(dateOnly[3]),
+    );
+  }
+
+  const withTime = /^(\d{4})-(\d{2})-(\d{2})[T\s]/.exec(value);
+  if (withTime) {
+    const parsed = new Date(value);
+    if (!Number.isNaN(parsed.getTime())) {
+      return new Date(parsed.getFullYear(), parsed.getMonth(), parsed.getDate());
+    }
+  }
+
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return parsed;
+  return new Date(parsed.getFullYear(), parsed.getMonth(), parsed.getDate());
+}
+
 function startOfWeek(date: Date) {
-  const value = new Date(date);
+  const value = new Date(date.getFullYear(), date.getMonth(), date.getDate());
   const day = (value.getDay() + 6) % 7;
-  value.setHours(0, 0, 0, 0);
   value.setDate(value.getDate() - day);
   return value;
 }

@@ -1,6 +1,15 @@
 'use client';
 
-import { FormEvent, useRef, useState } from 'react';
+import {
+  ClipboardEvent,
+  FormEvent,
+  KeyboardEvent,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from 'react';
+import { createPortal } from 'react-dom';
 import {
   AtSign,
   Bold,
@@ -10,14 +19,17 @@ import {
   List,
   ListOrdered,
   Mic,
+  MessageSquareText,
   Paperclip,
   Plus,
   Quote,
+  RotateCcw,
   Send,
   Smile,
   Strikethrough,
   Type,
   Video,
+  X,
 } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import {
@@ -26,7 +38,11 @@ import {
 } from '@/components/ui/DropdownMenu';
 import { EmojiPicker } from '@/components/chat/EmojiPicker';
 import { MentionPicker } from '@/components/chat/MentionPicker';
+import { ImageAnnotationDialog } from '@/components/chat/ImageAnnotationDialog';
+import { ComposerImageLightbox } from '@/components/chat/ComposerImageLightbox';
 import { cn } from '@/lib/cn';
+import { positionPanelAboveAnchor } from '@/lib/viewport-menu';
+import { CHAT_MEDIA_UPLOADS_ENABLED } from '@/lib/chat-release';
 import {
   ChannelMemberOption,
   filterMentionCandidates,
@@ -38,14 +54,57 @@ import {
   insertMentionSpan,
   isEditorEmpty,
 } from '@/lib/chatMarkdown';
+import {
+  collectClipboardImageFiles,
+  prepareChatImageFile,
+  screenshotFileName,
+  validateChatImageFile,
+} from '@/lib/chat-image-upload';
 import { API_BASE_URL, AUTH_TOKEN_KEY } from '@/lib/config';
+import {
+  AnnotatableFile,
+  IMAGE_ANNOTATION_ACCEPT,
+  isAnnotatableImageMime,
+} from '@/lib/image-annotations';
+
+type PendingUploadStatus = 'uploading' | 'ready' | 'error';
 
 interface PendingAttachment {
+  localId: string;
   kind: 'file' | 'link';
+  /** Normal chat attach vs dedicated image-feedback flow. */
+  purpose?: 'attachment' | 'annotation';
   fileId?: string;
   url?: string;
   title?: string;
   label: string;
+  mimeType?: string;
+  previewUrl?: string | null;
+  annotationCount?: number;
+  hasWebp?: boolean;
+  originalWidth?: number | null;
+  originalHeight?: number | null;
+  status: PendingUploadStatus;
+  progress?: number;
+  error?: string | null;
+  /** Kept for retry after a failed image upload. */
+  retryFile?: File | null;
+}
+
+const THUMBNAIL_SIZE_PX = 88;
+
+function createLocalId() {
+  if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
+    return crypto.randomUUID();
+  }
+  return `pending-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+}
+
+function isImageAttachment(attachment: PendingAttachment) {
+  return (
+    attachment.kind === 'file' &&
+    Boolean(attachment.mimeType?.startsWith('image/') || attachment.previewUrl)
+  );
 }
 
 interface ChatComposerProps {
@@ -92,6 +151,7 @@ export function ChatComposer({
   const [linkTitle, setLinkTitle] = useState('');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isUploading, setIsUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState<number | null>(null);
   const [isRecording, setIsRecording] = useState(false);
   const [alsoSendToChannel, setAlsoSendToChannel] = useState(false);
   const [notifyClientTeam, setNotifyClientTeam] = useState(false);
@@ -99,10 +159,44 @@ export function ChatComposer({
   const [mentionQuery, setMentionQuery] = useState('');
   const [mentionActiveIndex, setMentionActiveIndex] = useState(0);
   const [mentionRange, setMentionRange] = useState<Range | null>(null);
+  const [annotatingFile, setAnnotatingFile] = useState<AnnotatableFile | null>(
+    null,
+  );
+  const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const annotateInputRef = useRef<HTMLInputElement>(null);
   const editorRef = useRef<HTMLDivElement>(null);
+  const composerShellRef = useRef<HTMLDivElement>(null);
+  const emojiButtonRef = useRef<HTMLButtonElement>(null);
+  const emojiPanelRef = useRef<HTMLDivElement>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const mediaChunksRef = useRef<Blob[]>([]);
+  const pasteGuardRef = useRef(false);
+  const [emojiPos, setEmojiPos] = useState({ left: 0, top: 0 });
+  const [emojiReady, setEmojiReady] = useState(false);
+
+  const imageAttachments = attachments.filter(isImageAttachment);
+  const otherAttachments = attachments.filter(
+    (attachment) => !isImageAttachment(attachment),
+  );
+  const lightboxImages = imageAttachments
+    .filter((attachment) => Boolean(attachment.previewUrl))
+    .map((attachment) => ({
+      id: attachment.localId,
+      url: attachment.previewUrl as string,
+      label: attachment.label,
+    }));
+  const hasUploadingAttachments = attachments.some(
+    (attachment) => attachment.status === 'uploading',
+  );
+  const hasFailedAttachments = attachments.some(
+    (attachment) => attachment.status === 'error',
+  );
+  const readyAttachments = attachments.filter(
+    (attachment) =>
+      attachment.status === 'ready' &&
+      (attachment.kind === 'link' || Boolean(attachment.fileId)),
+  );
 
   const isThread = variant === 'thread';
   const mentionCandidates = filterMentionCandidates(
@@ -232,17 +326,24 @@ export function ChatComposer({
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!channelId || isSubmitting || isUploading || isRecording) return;
+    if (!channelId || isSubmitting || isRecording || hasUploadingAttachments) {
+      return;
+    }
 
     const messageBody = getMessageBody();
-    if (!messageBody.trim() && attachments.length === 0) return;
+    if (!messageBody.trim() && readyAttachments.length === 0) return;
+
+    if (hasFailedAttachments) {
+      setErrorMessage('Remove or retry failed uploads before sending');
+      return;
+    }
 
     setErrorMessage(null);
 
     try {
       await onSubmit({
         body: messageBody.trim(),
-        attachments: attachments.map(({ kind, fileId, url, title }) => ({
+        attachments: readyAttachments.map(({ kind, fileId, url, title }) => ({
           kind,
           fileId,
           url,
@@ -250,77 +351,335 @@ export function ChatComposer({
         })),
         ...(isThread ? { alsoSendToChannel, notifyClientTeam } : {}),
       });
+      attachments.forEach((attachment) => {
+        if (attachment.previewUrl) {
+          URL.revokeObjectURL(attachment.previewUrl);
+        }
+      });
       clearEditor();
       setAttachments([]);
       setLinkOpen(false);
       setLinkUrl('');
       setLinkTitle('');
     } catch (error) {
+      // Keep composer content + previews so the user can retry send.
       setErrorMessage(
         error instanceof Error ? error.message : 'Unable to send message',
       );
     }
   }
 
-  async function uploadBlob(blob: Blob, fileName: string, mimeType: string) {
-    if (!channelId) return;
+  function patchAttachment(
+    localId: string,
+    patch: Partial<PendingAttachment>,
+  ) {
+    setAttachments((current) =>
+      current.map((item) =>
+        item.localId === localId ? { ...item, ...patch } : item,
+      ),
+    );
+  }
+
+  function removeAttachment(localId: string) {
+    setAttachments((current) => {
+      const target = current.find((item) => item.localId === localId);
+      if (target?.previewUrl) {
+        URL.revokeObjectURL(target.previewUrl);
+      }
+      return current.filter((item) => item.localId !== localId);
+    });
+    setLightboxIndex((current) => {
+      if (current == null) return current;
+      const remaining = imageAttachments.filter(
+        (item) => item.localId !== localId && item.previewUrl,
+      );
+      if (remaining.length === 0) return null;
+      return Math.min(current, remaining.length - 1);
+    });
+  }
+
+  async function uploadFileToChannel(
+    file: File,
+    localId: string,
+    options?: {
+      purpose?: 'attachment' | 'annotation';
+      openAnnotation?: boolean;
+    },
+  ) {
+    if (!channelId) {
+      throw new Error('No channel selected');
+    }
 
     const token = window.localStorage.getItem(AUTH_TOKEN_KEY);
     const formData = new FormData();
-    formData.append('file', new File([blob], fileName, { type: mimeType }));
+    formData.append('file', file);
 
-    const response = await fetch(
-      `${API_BASE_URL}/channels/${channelId}/attachments/upload`,
-      {
-        method: 'POST',
-        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
-        body: formData,
-      },
-    );
+    const payload = await new Promise<{
+      id: string;
+      fileName: string;
+      mimeType: string;
+      processingStatus?: string;
+      originalWidth?: number | null;
+      originalHeight?: number | null;
+      webpStorageKey?: string | null;
+      thumbnailStorageKey?: string | null;
+      _count?: { imageAnnotations: number };
+    }>((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      xhr.open(
+        'POST',
+        `${API_BASE_URL}/channels/${channelId}/attachments/upload`,
+      );
+      if (token) {
+        xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+      }
+      xhr.upload.onprogress = (event) => {
+        if (!event.lengthComputable) return;
+        const progress = Math.round((event.loaded / event.total) * 100);
+        patchAttachment(localId, { progress, status: 'uploading' });
+        setUploadProgress(progress);
+      };
+      xhr.onload = () => {
+        try {
+          const body = JSON.parse(xhr.responseText) as {
+            success?: boolean;
+            data?: {
+              id: string;
+              fileName: string;
+              mimeType: string;
+              processingStatus?: string;
+              originalWidth?: number | null;
+              originalHeight?: number | null;
+              webpStorageKey?: string | null;
+              thumbnailStorageKey?: string | null;
+              _count?: { imageAnnotations: number };
+            };
+            message?: string;
+          };
+          if (xhr.status >= 200 && xhr.status < 300 && body.success && body.data) {
+            resolve(body.data);
+            return;
+          }
+          reject(new Error(body.message ?? 'Upload failed'));
+        } catch {
+          reject(new Error('Upload failed'));
+        }
+      };
+      xhr.onerror = () => reject(new Error('Upload failed'));
+      xhr.send(formData);
+    });
 
-    const payload = (await response.json()) as {
-      success?: boolean;
-      data?: { id: string; fileName: string };
-      message?: string;
-    };
+    patchAttachment(localId, {
+      status: 'ready',
+      progress: 100,
+      error: null,
+      retryFile: null,
+      fileId: payload.id,
+      label: payload.fileName,
+      mimeType: payload.mimeType,
+      annotationCount: payload._count?.imageAnnotations ?? 0,
+      hasWebp: Boolean(payload.webpStorageKey),
+      originalWidth: payload.originalWidth,
+      originalHeight: payload.originalHeight,
+      purpose: options?.purpose ?? 'attachment',
+    });
 
-    if (!response.ok || !payload.success || !payload.data) {
-      throw new Error(payload.message ?? 'Upload failed');
+    if (
+      options?.openAnnotation &&
+      isAnnotatableImageMime(payload.mimeType)
+    ) {
+      setAnnotatingFile({
+        id: payload.id,
+        fileName: payload.fileName,
+        mimeType: payload.mimeType,
+        processingStatus: payload.processingStatus,
+        originalWidth: payload.originalWidth,
+        originalHeight: payload.originalHeight,
+        hasWebp: Boolean(payload.webpStorageKey),
+        hasThumbnail: Boolean(payload.thumbnailStorageKey),
+        annotationCount: payload._count?.imageAnnotations ?? 0,
+      });
     }
-
-    setAttachments((current) => [
-      ...current,
-      {
-        kind: 'file',
-        fileId: payload.data!.id,
-        label: payload.data!.fileName,
-      },
-    ]);
   }
 
-  async function handleFileSelected(fileList: FileList | null) {
-    if (!channelId || !fileList?.[0]) return;
+  async function handleFiles(fileList: ArrayLike<File> | null, options?: {
+    fromClipboard?: boolean;
+    purpose?: 'attachment' | 'annotation';
+    openAnnotation?: boolean;
+  }) {
+    if (!CHAT_MEDIA_UPLOADS_ENABLED || !channelId || !fileList?.length) return;
 
-    const file = fileList[0];
     setIsUploading(true);
+    setUploadProgress(0);
     setErrorMessage(null);
 
+    const purpose = options?.purpose ?? 'attachment';
+    const prepared: Array<{ localId: string; file: File; previewUrl: string | null }> =
+      [];
+
     try {
-      await uploadBlob(file, file.name, file.type);
+      const files = Array.from(fileList);
+      for (let index = 0; index < files.length; index += 1) {
+        let file = files[index];
+
+        if (file.type.startsWith('image/')) {
+          if (
+            options?.fromClipboard &&
+            (!file.name || file.name === 'image.png' || file.name === 'image.jpg')
+          ) {
+            file = new File([file], screenshotFileName(index), {
+              type: file.type || 'image/png',
+              lastModified: file.lastModified || Date.now(),
+            });
+          }
+          file = await prepareChatImageFile(file);
+          const validationError = validateChatImageFile(file);
+          if (validationError) {
+            throw new Error(validationError);
+          }
+        } else if (purpose === 'annotation') {
+          throw new Error('Only PNG, JPG, JPEG, and WEBP images can be annotated');
+        }
+
+        const localId = createLocalId();
+        const previewUrl = file.type.startsWith('image/')
+          ? URL.createObjectURL(file)
+          : null;
+
+        prepared.push({ localId, file, previewUrl });
+        setAttachments((current) => [
+          ...current,
+          {
+            localId,
+            kind: 'file',
+            purpose,
+            label: file.name,
+            mimeType: file.type,
+            previewUrl,
+            status: 'uploading',
+            progress: 0,
+            retryFile: file,
+          },
+        ]);
+      }
+
+      for (const item of prepared) {
+        try {
+          await uploadFileToChannel(item.file, item.localId, {
+            purpose,
+            openAnnotation: options?.openAnnotation,
+          });
+        } catch (error) {
+          patchAttachment(item.localId, {
+            status: 'error',
+            progress: 0,
+            error:
+              error instanceof Error ? error.message : 'Unable to upload file',
+            retryFile: item.file,
+          });
+        }
+      }
     } catch (error) {
       setErrorMessage(
         error instanceof Error ? error.message : 'Unable to upload file',
       );
     } finally {
       setIsUploading(false);
+      setUploadProgress(null);
       if (fileInputRef.current) {
         fileInputRef.current.value = '';
+      }
+      if (annotateInputRef.current) {
+        annotateInputRef.current.value = '';
       }
     }
   }
 
+  async function retryAttachment(attachment: PendingAttachment) {
+    if (!attachment.retryFile || !channelId) return;
+    patchAttachment(attachment.localId, {
+      status: 'uploading',
+      progress: 0,
+      error: null,
+    });
+    setIsUploading(true);
+    setErrorMessage(null);
+    try {
+      await uploadFileToChannel(attachment.retryFile, attachment.localId, {
+        purpose: attachment.purpose ?? 'attachment',
+      });
+    } catch (error) {
+      patchAttachment(attachment.localId, {
+        status: 'error',
+        progress: 0,
+        error: error instanceof Error ? error.message : 'Unable to upload file',
+      });
+    } finally {
+      setIsUploading(false);
+      setUploadProgress(null);
+    }
+  }
+
+  async function handleFileSelected(fileList: FileList | null) {
+    await handleFiles(fileList, { purpose: 'attachment' });
+  }
+
+  async function handleAnnotateFileSelected(fileList: FileList | null) {
+    if (!fileList?.length) return;
+    await handleFiles([fileList[0]], {
+      purpose: 'annotation',
+      openAnnotation: true,
+    });
+  }
+
+  function openAnnotateOnPending(attachment: PendingAttachment) {
+    if (!attachment.fileId || !isAnnotatableImageMime(attachment.mimeType)) {
+      return;
+    }
+    setAnnotatingFile({
+      id: attachment.fileId,
+      fileName: attachment.label,
+      mimeType: attachment.mimeType ?? 'image/jpeg',
+      hasWebp: attachment.hasWebp,
+      originalWidth: attachment.originalWidth,
+      originalHeight: attachment.originalHeight,
+      annotationCount: attachment.annotationCount,
+    });
+  }
+
+  function handleEditorPaste(event: ClipboardEvent<HTMLDivElement>) {
+    if (!CHAT_MEDIA_UPLOADS_ENABLED || !channelId || hasUploadingAttachments) {
+      return;
+    }
+
+    const imageFiles = collectClipboardImageFiles(event.clipboardData);
+    if (imageFiles.length === 0) {
+      return;
+    }
+
+    // One paste gesture → one handler run (guards against doubled events).
+    if (pasteGuardRef.current) {
+      event.preventDefault();
+      return;
+    }
+
+    event.preventDefault();
+    pasteGuardRef.current = true;
+
+    const plainText = event.clipboardData?.getData('text/plain')?.trim();
+    if (plainText) {
+      insertAtCursor(plainText);
+    }
+
+    void handleFiles(imageFiles, { fromClipboard: true }).finally(() => {
+      window.setTimeout(() => {
+        pasteGuardRef.current = false;
+      }, 400);
+    });
+  }
+
   async function startRecording(kind: 'audio' | 'video') {
-    if (!channelId || isRecording) return;
+    if (!CHAT_MEDIA_UPLOADS_ENABLED || !channelId || isRecording) return;
 
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
@@ -347,11 +706,12 @@ export function ChatComposer({
       recorder.onstop = () => {
         stream.getTracks().forEach((track) => track.stop());
         const blob = new Blob(mediaChunksRef.current, { type: mimeType });
-        const extension = mimeType.includes('video') ? 'webm' : 'webm';
-        void uploadBlob(blob, `${kind}-clip.${extension}`, mimeType).catch(
-          (error: Error) => setErrorMessage(error.message),
-        );
+        const extension = 'webm';
+        const file = new File([blob], `${kind}-clip.${extension}`, {
+          type: mimeType,
+        });
         setIsRecording(false);
+        void handleFiles([file], { purpose: 'attachment' });
       };
 
       recorder.start();
@@ -374,10 +734,12 @@ export function ChatComposer({
     setAttachments((current) => [
       ...current,
       {
+        localId: createLocalId(),
         kind: 'link',
         url: linkUrl.trim(),
         title: linkTitle.trim() || linkUrl.trim(),
         label: linkTitle.trim() || linkUrl.trim(),
+        status: 'ready',
       },
     ]);
     setLinkOpen(false);
@@ -385,7 +747,55 @@ export function ChatComposer({
     setLinkTitle('');
   }
 
-  function handleEditorKeyDown(event: React.KeyboardEvent<HTMLDivElement>) {
+  useLayoutEffect(() => {
+    if (!emojiOpen) {
+      setEmojiReady(false);
+      return;
+    }
+
+    function place() {
+      const anchor = emojiButtonRef.current?.getBoundingClientRect();
+      const panel = emojiPanelRef.current?.getBoundingClientRect();
+      if (!anchor || !panel) return;
+      setEmojiPos(positionPanelAboveAnchor(anchor, panel.width, panel.height));
+      setEmojiReady(true);
+    }
+
+    place();
+    const vv = window.visualViewport;
+    vv?.addEventListener('resize', place);
+    vv?.addEventListener('scroll', place);
+    window.addEventListener('resize', place);
+    return () => {
+      vv?.removeEventListener('resize', place);
+      vv?.removeEventListener('scroll', place);
+      window.removeEventListener('resize', place);
+    };
+  }, [emojiOpen]);
+
+  useEffect(() => {
+    if (!emojiOpen) return;
+    function handlePointerDown(event: MouseEvent | TouchEvent) {
+      const target = event.target as Node;
+      if (
+        emojiButtonRef.current?.contains(target) ||
+        emojiPanelRef.current?.contains(target)
+      ) {
+        return;
+      }
+      setEmojiOpen(false);
+    }
+    document.addEventListener('mousedown', handlePointerDown);
+    document.addEventListener('touchstart', handlePointerDown, {
+      passive: true,
+    });
+    return () => {
+      document.removeEventListener('mousedown', handlePointerDown);
+      document.removeEventListener('touchstart', handlePointerDown);
+    };
+  }, [emojiOpen]);
+
+  function handleEditorKeyDown(event: KeyboardEvent<HTMLDivElement>) {
     if (mentionOpen && mentionCandidates.length > 0) {
       if (event.key === 'ArrowDown') {
         event.preventDefault();
@@ -417,32 +827,175 @@ export function ChatComposer({
       }
     }
 
-    if (event.key === 'Enter' && !event.shiftKey) {
+    // Enter sends; Shift+Enter inserts a new line (desktop, Mac, tablets).
+    // Soft keyboards still use the Send button when Enter is awkward.
+    if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) {
       event.preventDefault();
+      if (
+        hasUploadingAttachments ||
+        hasFailedAttachments ||
+        isRecording ||
+        isSubmitting
+      ) {
+        return;
+      }
       event.currentTarget.closest('form')?.requestSubmit();
     }
   }
 
   return (
-    <form onSubmit={(event) => void handleSubmit(event)} className="space-y-3">
-      {attachments.length > 0 ? (
-        <div className="flex flex-wrap gap-2">
-          {attachments.map((attachment, index) => (
+    <form
+      onSubmit={(event) => void handleSubmit(event)}
+      className="flex max-h-[min(46vh,420px)] flex-col gap-2"
+    >
+      {imageAttachments.length > 0 ? (
+        <div className="shrink-0 space-y-1.5">
+          <div className="flex items-center justify-between gap-2">
+            <p className="text-xs text-[var(--muted)]">
+              {imageAttachments.length}{' '}
+              {imageAttachments.length === 1 ? 'image' : 'images'}
+              {hasUploadingAttachments ? ' · uploading…' : ''}
+              <span className="hidden sm:inline"> · tap to preview</span>
+            </p>
+          </div>
+          <div className="max-h-[112px] overflow-x-auto overflow-y-hidden pb-0.5">
+            <div className="flex w-max gap-2">
+              {imageAttachments.map((attachment, index) => (
+                <div
+                  key={attachment.localId}
+                  className="group relative shrink-0 overflow-hidden rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface-muted)]"
+                  style={{
+                    width: THUMBNAIL_SIZE_PX,
+                    height: THUMBNAIL_SIZE_PX,
+                  }}
+                >
+                  <button
+                    type="button"
+                    className="absolute inset-0"
+                    title="View full image"
+                    aria-label={`Preview ${attachment.label}`}
+                    onClick={() => {
+                      if (!attachment.previewUrl) return;
+                      const lightboxPos = lightboxImages.findIndex(
+                        (item) => item.id === attachment.localId,
+                      );
+                      setLightboxIndex(
+                        lightboxPos >= 0 ? lightboxPos : index,
+                      );
+                    }}
+                  >
+                    {attachment.previewUrl ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={attachment.previewUrl}
+                        alt=""
+                        className="h-full w-full object-cover"
+                      />
+                    ) : (
+                      <span className="flex h-full items-center justify-center text-[10px] text-[var(--muted)]">
+                        Image
+                      </span>
+                    )}
+                  </button>
+
+                  {attachment.status === 'uploading' ? (
+                    <div className="pointer-events-none absolute inset-0 flex items-end bg-black/35 p-1.5">
+                      <div className="h-1 w-full overflow-hidden rounded-full bg-white/30">
+                        <div
+                          className="h-full rounded-full bg-white"
+                          style={{ width: `${attachment.progress ?? 8}%` }}
+                        />
+                      </div>
+                    </div>
+                  ) : null}
+
+                  {attachment.status === 'error' ? (
+                    <button
+                      type="button"
+                      className="absolute inset-0 flex flex-col items-center justify-center gap-1 bg-black/65 px-1 text-center"
+                      onClick={() => void retryAttachment(attachment)}
+                    >
+                      <RotateCcw className="h-3.5 w-3.5 text-white" />
+                      <span className="text-[10px] font-medium text-white">
+                        Retry
+                      </span>
+                    </button>
+                  ) : null}
+
+                  <button
+                    type="button"
+                    className="absolute right-1 top-1 z-[1] inline-flex h-5 w-5 items-center justify-center rounded-full bg-black/75 text-white"
+                    title="Remove image"
+                    aria-label={`Remove ${attachment.label}`}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      removeAttachment(attachment.localId);
+                    }}
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+
+                  {attachment.purpose === 'annotation' &&
+                  attachment.status === 'ready' &&
+                  attachment.fileId ? (
+                    <button
+                      type="button"
+                      className="absolute bottom-1 left-1 z-[1] inline-flex h-5 w-5 items-center justify-center rounded-full bg-black/75 text-white"
+                      title="Open image annotation"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        openAnnotateOnPending(attachment);
+                      }}
+                    >
+                      <MessageSquareText className="h-3 w-3" />
+                    </button>
+                  ) : null}
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {otherAttachments.length > 0 ? (
+        <div className="flex max-h-20 shrink-0 flex-wrap gap-2 overflow-y-auto">
+          {otherAttachments.map((attachment) => (
             <span
-              key={`${attachment.label}-${index}`}
-              className="inline-flex items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--surface-muted)] px-3 py-1 text-xs"
+              key={attachment.localId}
+              className="inline-flex max-w-full items-center gap-2 rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface-muted)] px-2 py-1.5 text-xs"
             >
-              {attachment.label}
+              <span className="min-w-0">
+                <span className="block truncate font-medium text-[var(--foreground)]">
+                  {attachment.label}
+                </span>
+                {attachment.status === 'uploading' ? (
+                  <span className="text-[11px] text-[var(--muted)]">
+                    Uploading {attachment.progress ?? 0}%
+                  </span>
+                ) : null}
+                {attachment.status === 'error' ? (
+                  <span className="text-[11px] text-[var(--danger)]">
+                    {attachment.error ?? 'Upload failed'}
+                  </span>
+                ) : null}
+              </span>
+              {attachment.status === 'error' ? (
+                <button
+                  type="button"
+                  className="rounded p-1 text-[var(--muted)] hover:bg-[var(--surface)] hover:text-[var(--foreground)]"
+                  title="Retry upload"
+                  onClick={() => void retryAttachment(attachment)}
+                >
+                  <RotateCcw className="h-3.5 w-3.5" />
+                </button>
+              ) : null}
               <button
                 type="button"
-                className="text-[var(--muted)] hover:text-[var(--foreground)]"
-                onClick={() =>
-                  setAttachments((current) =>
-                    current.filter((_, itemIndex) => itemIndex !== index),
-                  )
-                }
+                className="rounded p-1 text-[var(--muted)] hover:text-[var(--foreground)]"
+                aria-label="Remove attachment"
+                onClick={() => removeAttachment(attachment.localId)}
               >
-                ×
+                <X className="h-3.5 w-3.5" />
               </button>
             </span>
           ))}
@@ -484,7 +1037,10 @@ export function ChatComposer({
         </div>
       ) : null}
 
-      <div className="relative overflow-visible rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface)]">
+      <div
+        ref={composerShellRef}
+        className="relative min-h-0 shrink-0 overflow-visible rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface)]"
+      >
         {formatOpen ? (
           <div className="flex flex-wrap items-center gap-0.5 border-b border-[var(--border)] px-2 py-1.5">
             {[
@@ -525,7 +1081,7 @@ export function ChatComposer({
                 key={label}
                 type="button"
                 aria-label={label}
-                className="rounded-[var(--radius-sm)] p-1.5 text-[var(--muted)] hover:bg-[var(--surface-muted)] hover:text-[var(--foreground)]"
+                className="min-h-touch min-w-touch rounded-[var(--radius-sm)] p-1.5 text-[var(--muted)] hover:bg-[var(--surface-muted)] hover:text-[var(--foreground)] sm:min-h-0 sm:min-w-0"
                 onMouseDown={(event) => event.preventDefault()}
                 onClick={action}
               >
@@ -546,9 +1102,11 @@ export function ChatComposer({
           }
           suppressContentEditableWarning
           onInput={syncEditorState}
+          onPaste={handleEditorPaste}
           className={cn(
-            'min-h-[72px] w-full bg-transparent px-3 py-2 text-sm outline-none',
-            'empty:before:text-[var(--muted)] empty:before:content-[attr(data-placeholder)]',
+            'max-h-[140px] min-h-[44px] w-full overflow-y-auto bg-transparent px-2.5 py-2 text-sm outline-none sm:max-h-[180px] sm:min-h-[52px] sm:px-3',
+            'whitespace-pre-wrap break-words',
+            'empty:before:pointer-events-none empty:before:text-[var(--muted)] empty:before:content-[attr(data-placeholder)]',
             '[&_a]:text-[var(--primary)] [&_a]:underline',
             '[&_[data-mention-id]]:rounded [&_[data-mention-id]]:bg-[var(--primary-soft)] [&_[data-mention-id]]:px-1 [&_[data-mention-id]]:font-medium [&_[data-mention-id]]:text-[var(--primary)]',
             '[&_blockquote]:border-l-2 [&_blockquote]:border-[var(--border)] [&_blockquote]:pl-3 [&_blockquote]:text-[var(--muted-foreground)]',
@@ -591,17 +1149,57 @@ export function ChatComposer({
               trigger={
                 <button
                   type="button"
-                  className="rounded-[var(--radius-sm)] p-1.5 text-[var(--muted)] hover:bg-[var(--surface-muted)] hover:text-[var(--foreground)]"
-                  aria-label="Add attachment"
+                  className="min-h-touch min-w-touch rounded-[var(--radius-sm)] p-1.5 text-[var(--muted)] hover:bg-[var(--surface-muted)] hover:text-[var(--foreground)] sm:min-h-0 sm:min-w-0"
+                  aria-label={
+                    CHAT_MEDIA_UPLOADS_ENABLED ? 'Add attachment' : 'Add link'
+                  }
                 >
                   <Plus className="h-4 w-4" />
                 </button>
               }
             >
-              <DropdownMenuItem onClick={() => fileInputRef.current?.click()}>
-                <Paperclip className="h-4 w-4" />
-                Upload file
-              </DropdownMenuItem>
+              {CHAT_MEDIA_UPLOADS_ENABLED ? (
+                <DropdownMenuItem onClick={() => fileInputRef.current?.click()}>
+                  <Paperclip className="h-4 w-4" />
+                  Upload image / file
+                </DropdownMenuItem>
+              ) : null}
+              {CHAT_MEDIA_UPLOADS_ENABLED ? (
+                <DropdownMenuItem
+                  disabled={!channelId || isUploading}
+                  onClick={() => annotateInputRef.current?.click()}
+                >
+                  <MessageSquareText className="h-4 w-4" />
+                  Annotate image…
+                </DropdownMenuItem>
+              ) : null}
+              {CHAT_MEDIA_UPLOADS_ENABLED
+                ? attachments
+                    .filter(
+                      (item) =>
+                        item.kind === 'file' &&
+                        item.fileId &&
+                        isAnnotatableImageMime(item.mimeType),
+                    )
+                    .map((item) => (
+                      <DropdownMenuItem
+                        key={`annotate-${item.fileId}`}
+                        onClick={() => {
+                          setAttachments((current) =>
+                            current.map((row) =>
+                              row.fileId === item.fileId
+                                ? { ...row, purpose: 'annotation' }
+                                : row,
+                            ),
+                          );
+                          openAnnotateOnPending(item);
+                        }}
+                      >
+                        <MessageSquareText className="h-4 w-4" />
+                        Annotate: {item.label}
+                      </DropdownMenuItem>
+                    ))
+                : null}
               <DropdownMenuItem onClick={() => setLinkOpen(true)}>
                 <Link2 className="h-4 w-4" />
                 Add link
@@ -610,7 +1208,7 @@ export function ChatComposer({
             <button
               type="button"
               className={cn(
-                'rounded-[var(--radius-sm)] p-1.5 hover:bg-[var(--surface-muted)]',
+                'min-h-touch min-w-touch rounded-[var(--radius-sm)] p-1.5 hover:bg-[var(--surface-muted)] sm:min-h-0 sm:min-w-0',
                 formatOpen
                   ? 'text-[var(--primary)]'
                   : 'text-[var(--muted)] hover:text-[var(--foreground)]',
@@ -620,39 +1218,50 @@ export function ChatComposer({
             >
               <Type className="h-4 w-4" />
             </button>
-            <div className="relative">
-              <button
-                type="button"
-                className="rounded-[var(--radius-sm)] p-1.5 text-[var(--muted)] hover:bg-[var(--surface-muted)] hover:text-[var(--foreground)]"
-                aria-label="Add emoji"
-                onClick={() => setEmojiOpen((open) => !open)}
-              >
-                <Smile className="h-4 w-4" />
-              </button>
-              {emojiOpen ? (
-                <div className="absolute bottom-full left-0 z-30 mb-1">
-                  <EmojiPicker
-                    onSelect={(emoji) => {
-                      insertAtCursor(emoji);
-                      setEmojiOpen(false);
+            <button
+              ref={emojiButtonRef}
+              type="button"
+              className="min-h-touch min-w-touch rounded-[var(--radius-sm)] p-1.5 text-[var(--muted)] hover:bg-[var(--surface-muted)] hover:text-[var(--foreground)] sm:min-h-0 sm:min-w-0"
+              aria-label="Add emoji"
+              aria-expanded={emojiOpen}
+              onClick={() => setEmojiOpen((open) => !open)}
+            >
+              <Smile className="h-4 w-4" />
+            </button>
+            {emojiOpen
+              ? createPortal(
+                  <div
+                    ref={emojiPanelRef}
+                    className="fixed z-[90]"
+                    style={{
+                      left: emojiPos.left,
+                      top: emojiPos.top,
+                      visibility: emojiReady ? 'visible' : 'hidden',
                     }}
-                  />
-                </div>
-              ) : null}
-            </div>
+                  >
+                    <EmojiPicker
+                      onSelect={(emoji) => {
+                        insertAtCursor(emoji);
+                        setEmojiOpen(false);
+                      }}
+                    />
+                  </div>,
+                  document.body,
+                )
+              : null}
             <button
               type="button"
-              className="rounded-[var(--radius-sm)] p-1.5 text-[var(--muted)] hover:bg-[var(--surface-muted)] hover:text-[var(--foreground)]"
+              className="min-h-touch min-w-touch rounded-[var(--radius-sm)] p-1.5 text-[var(--muted)] hover:bg-[var(--surface-muted)] hover:text-[var(--foreground)] sm:min-h-0 sm:min-w-0"
               aria-label="Mention someone"
               onClick={triggerMentionPicker}
             >
               <AtSign className="h-4 w-4" />
             </button>
-            {!isThread ? (
+            {CHAT_MEDIA_UPLOADS_ENABLED && !isThread ? (
               <>
                 <button
                   type="button"
-                  className="rounded-[var(--radius-sm)] p-1.5 text-[var(--muted)] hover:bg-[var(--surface-muted)] hover:text-[var(--foreground)]"
+                  className="min-h-touch min-w-touch rounded-[var(--radius-sm)] p-1.5 text-[var(--muted)] hover:bg-[var(--surface-muted)] hover:text-[var(--foreground)] sm:min-h-0 sm:min-w-0"
                   aria-label="Record video clip"
                   disabled={isRecording || !channelId}
                   onClick={() => void startRecording('video')}
@@ -661,7 +1270,7 @@ export function ChatComposer({
                 </button>
                 <button
                   type="button"
-                  className="rounded-[var(--radius-sm)] p-1.5 text-[var(--muted)] hover:bg-[var(--surface-muted)] hover:text-[var(--foreground)]"
+                  className="min-h-touch min-w-touch rounded-[var(--radius-sm)] p-1.5 text-[var(--muted)] hover:bg-[var(--surface-muted)] hover:text-[var(--foreground)] sm:min-h-0 sm:min-w-0"
                   aria-label="Record audio clip"
                   disabled={isRecording || !channelId}
                   onClick={() => void startRecording('audio')}
@@ -671,20 +1280,33 @@ export function ChatComposer({
               </>
             ) : null}
           </div>
-          <Button
-            type="submit"
-            size="sm"
-            disabled={
-              isSubmitting ||
-              isUploading ||
-              isRecording ||
-              !channelId ||
-              (isEmpty && attachments.length === 0)
-            }
-          >
-            <Send className="h-4 w-4" />
-            Send
-          </Button>
+          <div className="flex flex-col items-end gap-1 sm:flex-row sm:items-center sm:gap-2">
+          
+            <Button
+              type="submit"
+              size="sm"
+              className="min-h-touch sm:min-h-0"
+              title={
+                hasUploadingAttachments
+                  ? 'Wait for upload to finish'
+                  : hasFailedAttachments
+                    ? 'Retry or remove failed uploads first'
+                    : 'Send message (Enter). New line: Shift+Enter'
+              }
+              aria-label="Send message"
+              disabled={
+                isSubmitting ||
+                hasUploadingAttachments ||
+                hasFailedAttachments ||
+                isRecording ||
+                !channelId ||
+                (isEmpty && readyAttachments.length === 0)
+              }
+            >
+              <Send className="h-4 w-4" />
+              Send
+            </Button>
+          </div>
         </div>
 
         <MentionPicker
@@ -692,17 +1314,33 @@ export function ChatComposer({
           members={mentionCandidates}
           activeIndex={mentionActiveIndex}
           currentUserId={currentUserId}
+          anchorRef={composerShellRef}
           onSelect={selectMention}
           onActiveIndexChange={setMentionActiveIndex}
         />
       </div>
 
-      <input
-        ref={fileInputRef}
-        type="file"
-        className="hidden"
-        onChange={(event) => void handleFileSelected(event.target.files)}
-      />
+      {CHAT_MEDIA_UPLOADS_ENABLED ? (
+        <>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept={`${IMAGE_ANNOTATION_ACCEPT},application/pdf,image/*,video/*,audio/*`}
+            multiple
+            className="hidden"
+            onChange={(event) => void handleFileSelected(event.target.files)}
+          />
+          <input
+            ref={annotateInputRef}
+            type="file"
+            accept={IMAGE_ANNOTATION_ACCEPT}
+            className="hidden"
+            onChange={(event) =>
+              void handleAnnotateFileSelected(event.target.files)
+            }
+          />
+        </>
+      ) : null}
 
       {isRecording ? (
         <p className="text-xs text-[var(--primary)]">Recording clip...</p>
@@ -710,6 +1348,43 @@ export function ChatComposer({
 
       {errorMessage ? (
         <p className="text-sm text-[var(--danger)]">{errorMessage}</p>
+      ) : null}
+
+      {annotatingFile && channelId ? (
+        <ImageAnnotationDialog
+          open
+          channelId={channelId}
+          file={annotatingFile}
+          mode="compose"
+          currentUserId={currentUserId}
+          canAnnotate
+          onClose={() => setAnnotatingFile(null)}
+          onAnnotationsChange={(count) => {
+            setAttachments((current) =>
+              current.map((item) =>
+                item.fileId === annotatingFile.id
+                  ? {
+                      ...item,
+                      purpose: 'annotation',
+                      annotationCount: count,
+                    }
+                  : item,
+              ),
+            );
+            setAnnotatingFile((current) =>
+              current ? { ...current, annotationCount: count } : current,
+            );
+          }}
+        />
+      ) : null}
+
+      {lightboxIndex != null && lightboxImages[lightboxIndex] ? (
+        <ComposerImageLightbox
+          images={lightboxImages}
+          index={lightboxIndex}
+          onIndexChange={setLightboxIndex}
+          onClose={() => setLightboxIndex(null)}
+        />
       ) : null}
     </form>
   );

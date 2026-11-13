@@ -122,7 +122,7 @@ export default function ReportsPage() {
 
       {!isLoading && !errorMessage && data ? (
         <div className="space-y-4">
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="grid grid-cols-2 gap-2 sm:gap-4 lg:grid-cols-4">
             <StatCard
               icon={Package}
               label={`Delivered (${data.throughput.windowDays}d)`}
@@ -233,7 +233,42 @@ export default function ReportsPage() {
                     Artist cost pivot ({productionDashboard.year})
                   </h3>
                 </div>
-                <div className="overflow-x-auto overscroll-x-contain">
+                <ul className="divide-y divide-[var(--border)] md:hidden">
+                  {productionDashboard.artistMonthPivot.map((row) => (
+                    <li key={row.artistName} className="px-3 py-2.5">
+                      <div className="flex items-center justify-between gap-3">
+                        <span className="truncate text-sm font-medium text-[var(--foreground)]">
+                          {row.artistName}
+                        </span>
+                        <span className="shrink-0 text-sm font-medium">
+                          ₹{row.total.toFixed(0)}
+                        </span>
+                      </div>
+                      <details className="mt-1">
+                        <summary className="cursor-pointer text-xs text-[var(--primary)]">
+                          Monthly amounts
+                        </summary>
+                        <dl className="mt-2 grid grid-cols-3 gap-x-2 gap-y-1 text-xs">
+                          {Array.from({ length: 12 }, (_, index) => (
+                            <div key={index + 1} className="flex justify-between gap-1">
+                              <dt className="text-[var(--muted)]">
+                                {new Date(2026, index, 1).toLocaleString('en', {
+                                  month: 'short',
+                                })}
+                              </dt>
+                              <dd>
+                                {row.months[index + 1]
+                                  ? `₹${row.months[index + 1].toFixed(0)}`
+                                  : '—'}
+                              </dd>
+                            </div>
+                          ))}
+                        </dl>
+                      </details>
+                    </li>
+                  ))}
+                </ul>
+                <div className="hidden overflow-x-auto overscroll-x-contain md:block">
                 <table className="min-w-[720px] w-full text-sm">
                   <thead>
                     <tr className="border-b border-[var(--border)] bg-[var(--surface-muted)]">

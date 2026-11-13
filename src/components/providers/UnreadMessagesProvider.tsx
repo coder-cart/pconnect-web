@@ -14,8 +14,10 @@ import { apiRequest } from '@/lib/api-client';
 import { ApiResponse } from '@/lib/auth';
 import {
   MessageActivityPayload,
+  PresenceUpdatedPayload,
   useRealtime,
 } from '@/components/providers/RealtimeProvider';
+import { applyPresenceUpdate } from '@/lib/user-presence';
 
 export interface UnreadPerson {
   id: string;
@@ -64,7 +66,8 @@ const UnreadMessagesContext = createContext<UnreadMessagesContextValue | null>(
 const SEEN_LIMIT = 500;
 
 export function UnreadMessagesProvider({ children }: { children: ReactNode }) {
-  const { subscribeMessageActivity, subscribeConnected } = useRealtime();
+  const { subscribeMessageActivity, subscribePresenceUpdated, subscribeConnected } =
+    useRealtime();
   const [conversations, setConversations] = useState<UnreadConversation[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
@@ -148,6 +151,38 @@ export function UnreadMessagesProvider({ children }: { children: ReactNode }) {
       void refreshUnread();
     });
   }, [subscribeConnected, refreshUnread]);
+
+  useEffect(() => {
+    return subscribePresenceUpdated((payload: PresenceUpdatedPayload) => {
+      setConversations((current) =>
+        current.map((item) => {
+          const nextDmPeer =
+            item.dmPeer?.id === payload.userId
+              ? applyPresenceUpdate(item.dmPeer, payload)
+              : item.dmPeer;
+          const nextSender =
+            item.latestMessage?.sender.id === payload.userId
+              ? applyPresenceUpdate(item.latestMessage.sender, payload)
+              : item.latestMessage?.sender;
+
+          if (nextDmPeer === item.dmPeer && nextSender === item.latestMessage?.sender) {
+            return item;
+          }
+
+          return {
+            ...item,
+            dmPeer: nextDmPeer,
+            latestMessage: item.latestMessage
+              ? {
+                  ...item.latestMessage,
+                  sender: nextSender ?? item.latestMessage.sender,
+                }
+              : null,
+          };
+        }),
+      );
+    });
+  }, [subscribePresenceUpdated]);
 
   useEffect(() => {
     return subscribeMessageActivity((payload: MessageActivityPayload) => {

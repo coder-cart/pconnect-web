@@ -4,7 +4,6 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import {
   CheckCircle2,
-  ChevronDown,
   ClipboardList,
   Clock,
   LayoutGrid,
@@ -41,6 +40,8 @@ import {
 import { isWorkspaceAdmin } from '@/lib/navigation';
 import { OrderKanbanBoard } from '@/components/orders/OrderKanbanBoard';
 import { OrderCreateModal } from '@/components/orders/OrderCreateForm';
+import { RequestRevisionModal } from '@/components/orders/RequestRevisionModal';
+import { RevisionOrderPickerModal } from '@/components/orders/RevisionOrderPickerModal';
 import { OrdersTable } from '@/components/orders/OrdersTable';
 import { OrderDetailDrawer } from '@/components/orders/OrderDetailDrawer';
 import { cn } from '@/lib/cn';
@@ -148,8 +149,8 @@ export default function OrdersPage() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [accessRestricted, setAccessRestricted] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
-  const [createMode, setCreateMode] = useState<'new' | 'revision'>('new');
-  const [createMenuOpen, setCreateMenuOpen] = useState(false);
+  const [revisionPickerOpen, setRevisionPickerOpen] = useState(false);
+  const [revisionOrder, setRevisionOrder] = useState<OrderSummary | null>(null);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
   const [receivingId, setReceivingId] = useState<string | null>(null);
@@ -532,56 +533,26 @@ export default function OrdersPage() {
                 Filter{activeFilterCount > 0 ? ` (${activeFilterCount})` : ''}
               </Button>
             )}
-            {canCreate && isExternal ? (
-              <div className="relative">
+            {canCreate ? (
+              <>
                 <Button
-                  onClick={() => setCreateMenuOpen((open) => !open)}
-                  aria-expanded={createMenuOpen}
+                  variant="secondary"
+                  onClick={() => setRevisionPickerOpen(true)}
                 >
-                  <Plus className="h-4 w-4" />
-                  New
-                  <ChevronDown className="h-4 w-4" />
+                  Revision
                 </Button>
-                {createMenuOpen ? (
-                  <div className="absolute right-0 z-20 mt-1 w-44 rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface)] p-1 shadow-[var(--shadow-md)]">
-                    <button
-                      type="button"
-                      className="block w-full rounded-[var(--radius-sm)] px-3 py-2 text-left text-sm hover:bg-[var(--surface-muted)]"
-                      onClick={() => {
-                        setCreateMode('new');
-                        setCreateOpen(true);
-                        setCreateMenuOpen(false);
-                      }}
-                    >
-                      New Order
-                    </button>
-                    <button
-                      type="button"
-                      className="block w-full rounded-[var(--radius-sm)] px-3 py-2 text-left text-sm hover:bg-[var(--surface-muted)]"
-                      onClick={() => {
-                        setCreateMode('revision');
-                        setCreateOpen(true);
-                        setCreateMenuOpen(false);
-                      }}
-                    >
-                      Revision
-                    </button>
-                  </div>
-                ) : null}
-              </div>
-            ) : null}
-            {canCreate && !isExternal ? (
-              <Button onClick={() => setCreateOpen(true)}>
-                <Plus className="h-4 w-4" />
-                New order
-              </Button>
+                <Button onClick={() => setCreateOpen(true)}>
+                  <Plus className="h-4 w-4" />
+                  New order
+                </Button>
+              </>
             ) : null}
           </div>
         }
       />
 
       {!historyView && useBoardChrome ? (
-        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+        <div className="grid grid-cols-2 gap-2 sm:gap-3 xl:grid-cols-5">
           <button
             type="button"
             className="text-left"
@@ -869,7 +840,7 @@ export default function OrdersPage() {
           title={emptyTitle}
           description={
             isExternal && clientTab === 'orders'
-              ? 'Create a New Order or Revision to get started.'
+              ? 'Create a new order to get started. Request revisions from delivered orders.'
               : hideClientIdentity
                 ? 'Assigned orders appear here.'
                 : 'Orders in this stage appear here.'
@@ -905,14 +876,25 @@ export default function OrdersPage() {
                         Open delivery link
                       </a>
                     ) : null}
-                    <Button
-                      size="sm"
-                      onClick={() => markReceived(order.id)}
-                      disabled={receivingId === order.id}
-                    >
-                      <CheckCircle2 className="h-4 w-4" />
-                      Mark as Received
-                    </Button>
+                    <div className="flex flex-wrap gap-2">
+                      <Button
+                        size="sm"
+                        onClick={() => markReceived(order.id)}
+                        disabled={receivingId === order.id}
+                      >
+                        <CheckCircle2 className="h-4 w-4" />
+                        Mark as Received
+                      </Button>
+                      {canCreate && !order.hasOpenClientRevision ? (
+                        <Button
+                          size="sm"
+                          variant="secondary"
+                          onClick={() => setRevisionOrder(order)}
+                        >
+                          Request revision
+                        </Button>
+                      ) : null}
+                    </div>
                   </Card>
                 );
               })}
@@ -953,8 +935,32 @@ export default function OrdersPage() {
         open={createOpen}
         canManage={canManage}
         isExternal={isExternal}
-        initialMode={createMode}
         onClose={() => setCreateOpen(false)}
+        onCreated={() => {
+          notifyRefresh();
+          if (isExternal) setClientTab('orders');
+          else setManagerTab('order_received');
+          load();
+          loadTabCounts();
+        }}
+      />
+      <RevisionOrderPickerModal
+        open={revisionPickerOpen}
+        canSetPriority={canManage}
+        onClose={() => setRevisionPickerOpen(false)}
+        onCreated={() => {
+          notifyRefresh();
+          if (isExternal) setClientTab('orders');
+          else setManagerTab('order_received');
+          load();
+          loadTabCounts();
+        }}
+      />
+      <RequestRevisionModal
+        open={Boolean(revisionOrder)}
+        order={revisionOrder}
+        canSetPriority={canManage}
+        onClose={() => setRevisionOrder(null)}
         onCreated={() => {
           notifyRefresh();
           if (isExternal) setClientTab('orders');

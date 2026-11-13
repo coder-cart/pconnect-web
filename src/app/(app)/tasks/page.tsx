@@ -54,8 +54,8 @@ function statusLabel(status: string) {
 
 function statusVariant(status: string) {
   if (status === 'done') return 'success' as const;
-  if (status === 'in_progress') return 'primary' as const;
-  if (status === 'on_hold' || status === 'in_review') return 'warning' as const;
+  if (status === 'in_progress' || status === 'in_review') return 'primary' as const;
+  if (status === 'on_hold' || status === 'cancelled') return 'warning' as const;
   return 'neutral' as const;
 }
 

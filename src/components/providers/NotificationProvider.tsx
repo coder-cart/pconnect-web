@@ -6,6 +6,7 @@ import {
   useCallback,
   useContext,
   useEffect,
+  useRef,
   useState,
 } from 'react';
 import { apiRequest } from '@/lib/api-client';
@@ -41,6 +42,7 @@ interface NotificationContextValue {
   pushBusy: boolean;
   enablePush: () => Promise<void>;
   disablePush: () => Promise<void>;
+  sendTestPush: () => Promise<void>;
   pushMessage: string | null;
 }
 
@@ -49,6 +51,8 @@ const NotificationContext = createContext<NotificationContextValue | null>(null)
 export function NotificationProvider({ children }: { children: ReactNode }) {
   const { subscribeNotificationCreated } = useRealtime();
   const [notifications, setNotifications] = useState<NotificationRecord[]>([]);
+  const notificationsRef = useRef(notifications);
+  notificationsRef.current = notifications;
   const [unreadCount, setUnreadCount] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -197,6 +201,28 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  const sendTestPush = useCallback(async () => {
+    setPushBusy(true);
+    setPushMessage(null);
+    try {
+      const response = await apiRequest<
+        ApiResponse<{
+          configured: boolean;
+          subscriptionCount: number;
+          message: string;
+        }>
+      >('/notifications/push/test', { method: 'POST' });
+      setPushMessage(response.data.message);
+      setPushStatus(await readDevicePushStatus());
+    } catch (error) {
+      setPushMessage(
+        error instanceof Error ? error.message : 'Could not send a test push',
+      );
+    } finally {
+      setPushBusy(false);
+    }
+  }, []);
+
   useEffect(() => {
     function unlock() {
       unlockNotificationSound();
@@ -213,17 +239,21 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
         return;
       }
 
-      if (shouldPlayForNotification(notification)) {
-        playNotificationSound();
-      }
-
+      const replacedExisting = notificationsRef.current.some(
+        (item) => item.id === notification.id,
+      );
       setNotifications((current) => {
         const withoutDuplicate = current.filter(
           (item) => item.id !== notification.id,
         );
         return [notification, ...withoutDuplicate].slice(0, 50);
       });
-      setUnreadCount((current) => current + 1);
+      if (!replacedExisting && shouldPlayForNotification(notification)) {
+        playNotificationSound();
+      }
+      if (!replacedExisting) {
+        setUnreadCount((current) => current + 1);
+      }
       void loadUnreadCount();
     });
   }, [subscribeNotificationCreated, loadUnreadCount]);
@@ -242,6 +272,7 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
         pushBusy,
         enablePush,
         disablePush,
+        sendTestPush,
         pushMessage,
       }}
     >

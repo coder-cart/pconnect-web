@@ -1,9 +1,8 @@
 'use client';
 
 import { ReactNode, useState } from 'react';
-import { ChevronDown, Hash, Plus, Search, Users } from 'lucide-react';
+import { ChevronDown, Hash, Lock, Plus, Search, Users } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
-import { ClientOrgLogo } from '@/components/ui/ClientOrgLogo';
 import { UserAvatar } from '@/components/ui/UserAvatar';
 import {
   ChatChannel,
@@ -12,6 +11,7 @@ import {
   PendingChannelInvite,
 } from '@/lib/chat-types';
 import { cn } from '@/lib/cn';
+import { isAway, presenceSubtitle } from '@/lib/user-presence';
 
 interface ChannelSidebarProps {
   channels: ChatChannel[];
@@ -19,26 +19,35 @@ interface ChannelSidebarProps {
   pendingInvites: PendingChannelInvite[];
   acceptingInviteId: string | null;
   canCreateChannel: boolean;
+  canAddConnection: boolean;
+  showInternalSections: boolean;
+  internalEmptyText?: string;
   onSelectChannel: (channelId: string) => void;
   onCreateChannel: () => void;
-  onCreateExternalConnection?: () => void;
+  onAddConnection: () => void;
   onStartDirectMessage: () => void;
   onAcceptInvite: (invite: PendingChannelInvite) => void;
   className?: string;
 }
 
 function ChannelIcon({ type }: { type: string }) {
-  if (type === 'group') {
-    return <Users className="h-4 w-4 shrink-0" />;
+  const className = 'h-4 w-4 shrink-0';
+  switch (type) {
+    case 'private':
+    case 'client_shared':
+      return <Lock className={className} aria-hidden />;
+    case 'group':
+      return <Users className={className} aria-hidden />;
+    case 'public':
+    default:
+      return <Hash className={className} aria-hidden />;
   }
-
-  return <Hash className="h-4 w-4 shrink-0" />;
 }
 
 function DmPeerAvatar({ peer }: { peer: ChatDmPeer }) {
-  const away = peer.presenceStatus === 'away';
+  const away = isAway(peer.presenceStatus);
   return (
-    <span className="relative shrink-0">
+    <span className="relative shrink-0" title={away ? 'Away' : 'Active'}>
       <UserAvatar
         user={{
           id: peer.id,
@@ -48,24 +57,24 @@ function DmPeerAvatar({ peer }: { peer: ChatDmPeer }) {
         size="xs"
         className="ring-1 ring-[var(--shell-border)]"
       />
+      {/* Slack-style: filled green = Active, hollow outline = Away */}
       <span
         className={cn(
-          'absolute -bottom-0.5 -right-0.5 h-2 w-2 rounded-full border border-[var(--shell-brand)]',
-          away ? 'bg-[var(--shell-muted)]' : 'bg-[var(--success)]',
+          'absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full border-2 border-[var(--chat-sidebar-bg)]',
+          away ? 'bg-transparent' : 'bg-[var(--success)]',
         )}
-        aria-hidden
+        style={
+          away
+            ? { boxShadow: 'inset 0 0 0 1.5px var(--shell-muted)' }
+            : undefined
+        }
+        aria-label={away ? 'Away' : 'Active'}
       />
     </span>
   );
 }
 
 function DmHoverCard({ peer }: { peer: ChatDmPeer }) {
-  const away = peer.presenceStatus === 'away';
-  const statusLine = [peer.statusEmoji, peer.statusText]
-    .filter(Boolean)
-    .join(' ')
-    .trim();
-
   return (
     <div
       className="pointer-events-none absolute left-0 top-full z-40 mt-1 w-56 max-w-[calc(100vw-2rem)] rounded-[var(--radius-lg)] border border-[var(--border)] bg-[var(--surface)] p-3 shadow-[var(--shadow-md)] lg:left-full lg:top-0 lg:mt-0 lg:ml-2"
@@ -90,11 +99,8 @@ function DmHoverCard({ peer }: { peer: ChatDmPeer }) {
             </p>
           ) : null}
           <p className="mt-1 text-xs font-medium text-[var(--foreground)]">
-            {away ? 'Away' : 'Active'}
+            {presenceSubtitle(peer)}
           </p>
-          {statusLine ? (
-            <p className="mt-1 truncate text-xs text-[var(--muted)]">{statusLine}</p>
-          ) : null}
         </div>
       </div>
     </div>
@@ -117,14 +123,11 @@ function ChannelButton({
   const label = getChannelLabel(channel);
   const isDirect = channel.type === 'direct';
   const peer = channel.dmPeer ?? null;
-  const showHash =
-    channel.type !== 'direct' &&
-    channel.type !== 'group' &&
-    channel.type !== 'client_shared';
+  const showTypeIcon = !isDirect;
 
   return (
     <div
-      className="relative"
+      className="relative min-w-0"
       onMouseEnter={() => {
         if (window.matchMedia('(hover: hover)').matches) setHovering(true);
       }}
@@ -134,9 +137,9 @@ function ChannelButton({
         type="button"
         onClick={() => onSelect(channel.id)}
         className={cn(
-          'flex min-h-touch w-full items-start gap-2.5 rounded-[var(--radius-md)] px-2.5 py-2 text-left text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--shell-focus-ring)]',
+          'flex min-h-9 w-full min-w-0 items-center gap-2 rounded-[var(--radius-md)] px-2 py-1.5 text-left text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--shell-focus-ring)]',
           isActive
-            ? 'bg-[var(--shell-active)] text-[var(--shell-text)] shadow-[inset_3px_0_0_0_rgba(255,255,255,0.55)]'
+            ? 'bg-[var(--shell-active)] text-[var(--shell-text)] shadow-[inset_3px_0_0_0_rgba(255,255,255,0.45)]'
             : 'text-[var(--shell-muted)] hover:bg-[var(--shell-hover)] hover:text-[var(--shell-text)]',
         )}
         title={label}
@@ -150,28 +153,20 @@ function ChannelButton({
               fullName: label,
             }}
             size="xs"
-            className="mt-0.5 shrink-0"
+            className="shrink-0"
           />
-        ) : channel.type === 'client_shared' && channel.clientOrganizationId ? (
-          <ClientOrgLogo
-            clientId={channel.clientOrganizationId}
-            name={channel.clientOrganizationName ?? label}
-            logoUpdatedAt={channel.clientOrganizationLogoUpdatedAt}
-            className="mt-0.5 h-8 w-8"
-          />
-        ) : (
+        ) : showTypeIcon ? (
           <span
             className={cn(
-              'mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-[var(--radius-md)]',
-              isActive
-                ? 'bg-white/15 text-[var(--shell-text)]'
-                : 'bg-[var(--shell-hover)] text-[var(--shell-muted)]',
+              'flex h-5 w-5 shrink-0 items-center justify-center',
+              isActive ? 'text-[var(--shell-text)]' : 'text-[var(--shell-muted)]',
             )}
+            aria-hidden
           >
             <ChannelIcon type={channel.type} />
           </span>
-        )}
-        <span className="min-w-0 flex-1 pt-0.5">
+        ) : null}
+        <span className="min-w-0 flex-1">
           <span className="flex items-center gap-2">
             <span
               className={cn(
@@ -181,8 +176,12 @@ function ChannelButton({
                   : 'font-medium text-[var(--shell-muted)]',
               )}
             >
-              {showHash ? '#' : ''}
               {label}
+              {peer?.statusEmoji ? (
+                <span className="ml-1 font-normal" aria-hidden>
+                  {peer.statusEmoji}
+                </span>
+              ) : null}
             </span>
             {unreadCount > 0 ? (
               <span className="shrink-0 rounded-full bg-[var(--shell-badge)] px-1.5 py-0.5 text-[10px] font-semibold text-[var(--shell-badge-text)]">
@@ -190,15 +189,6 @@ function ChannelButton({
               </span>
             ) : null}
           </span>
-          {channel.clientOrganizationName && channel.type === 'client_shared' ? (
-            <span className="mt-0.5 block truncate text-[11px] text-[var(--shell-muted)]">
-              {channel.clientOrganizationName}
-            </span>
-          ) : channel.type === 'public' || channel.type === 'private' ? (
-            <span className="mt-0.5 block truncate text-[11px] capitalize text-[var(--shell-muted)]">
-              {channel.type} channel
-            </span>
-          ) : null}
         </span>
       </button>
       {hovering && isDirect && peer ? <DmHoverCard peer={peer} /> : null}
@@ -208,62 +198,72 @@ function ChannelButton({
 
 function SidebarSection({
   title,
+  unreadCount = 0,
   action,
   collapsed,
   onToggle,
   children,
 }: {
   title: string;
+  unreadCount?: number;
   action?: ReactNode;
   collapsed: boolean;
   onToggle: () => void;
   children: ReactNode;
 }) {
   return (
-    <div className="mb-4">
-      <div className="mb-2 flex items-center justify-between px-2">
+    <div className="mb-3">
+      <div className="mb-1.5 flex items-center justify-between px-1.5">
         <button
           type="button"
           onClick={onToggle}
-          className="flex items-center gap-1 text-xs font-semibold uppercase tracking-wide text-[var(--shell-muted)] transition-colors hover:text-[var(--shell-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--shell-focus-ring)]"
+          className="flex min-w-0 items-center gap-1 text-[11px] font-semibold uppercase tracking-wide text-[var(--shell-muted)] transition-colors hover:text-[var(--shell-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--shell-focus-ring)]"
         >
           <ChevronDown
-            className={cn('h-3.5 w-3.5 transition-transform', collapsed && '-rotate-90')}
+            className={cn('h-3.5 w-3.5 shrink-0 transition-transform', collapsed && '-rotate-90')}
           />
-          {title}
+          <span className="truncate">{title}</span>
+          {unreadCount > 0 ? (
+            <span className="shrink-0 rounded-full bg-[var(--shell-badge)] px-1.5 text-[10px] font-semibold normal-case tracking-normal text-[var(--shell-badge-text)]">
+              {unreadCount > 99 ? '99+' : unreadCount}
+            </span>
+          ) : null}
         </button>
         {action}
       </div>
-      {!collapsed ? <div className="space-y-1">{children}</div> : null}
+      {!collapsed ? <div className="space-y-0.5">{children}</div> : null}
     </div>
   );
 }
 
-function SectionAddButton({
-  label,
-  onClick,
-}: {
-  label: string;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className="rounded-[var(--radius-sm)] p-1 text-[var(--shell-muted)] hover:bg-[var(--shell-hover)] hover:text-[var(--shell-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--shell-focus-ring)]"
-      aria-label={label}
-      title={label}
-    >
-      <Plus className="h-4 w-4" />
-    </button>
-  );
-}
-
-function sortByLabel(left: ChatChannel, right: ChatChannel) {
-  return getChannelLabel(left).localeCompare(getChannelLabel(right));
-}
-
 type SidebarFilter = 'all' | 'channels' | 'dms' | 'unread';
+
+function uniqueChannels(channels: ChatChannel[]) {
+  const seen = new Set<string>();
+  return channels.filter((channel) => {
+    if (seen.has(channel.id)) return false;
+    seen.add(channel.id);
+    return true;
+  });
+}
+
+function unreadTotal(channels: ChatChannel[]) {
+  return channels.reduce((sum, channel) => sum + (channel.unreadCount ?? 0), 0);
+}
+
+function sortConversations(channels: ChatChannel[]) {
+  return [...channels].sort((left, right) => {
+    const leftUnread = (left.unreadCount ?? 0) > 0 ? 1 : 0;
+    const rightUnread = (right.unreadCount ?? 0) > 0 ? 1 : 0;
+    if (leftUnread !== rightUnread) return rightUnread - leftUnread;
+
+    const leftTime = left.latestMessage?.createdAt ?? '';
+    const rightTime = right.latestMessage?.createdAt ?? '';
+    if (leftTime !== rightTime) return rightTime.localeCompare(leftTime);
+
+    return getChannelLabel(left).localeCompare(getChannelLabel(right));
+  });
+}
 
 export function ChannelSidebar({
   channels,
@@ -271,9 +271,12 @@ export function ChannelSidebar({
   pendingInvites,
   acceptingInviteId,
   canCreateChannel,
+  canAddConnection,
+  showInternalSections,
+  internalEmptyText = 'No internal connections yet.',
   onSelectChannel,
   onCreateChannel,
-  onCreateExternalConnection,
+  onAddConnection,
   onStartDirectMessage,
   onAcceptInvite,
   className,
@@ -303,66 +306,54 @@ export function ChannelSidebar({
     );
   };
 
-  const unreadChannels = channels.filter(
-    (channel) => (channel.unreadCount ?? 0) > 0 && matchesSearch(channel),
+  const visibleChannels = uniqueChannels(channels).filter(matchesSearch);
+  const includeUnread = (channel: ChatChannel) =>
+    filter !== 'unread' || (channel.unreadCount ?? 0) > 0;
+
+  const clientChannels = sortConversations(
+    visibleChannels.filter(
+      (channel) => channel.type === 'client_shared' && includeUnread(channel),
+    ),
   );
-  const unreadIds = new Set(unreadChannels.map((channel) => channel.id));
-
-  const externalChannels = channels
-    .filter(
+  const teamChannels = sortConversations(
+    visibleChannels.filter(
       (channel) =>
-        channel.type === 'client_shared' &&
-        !unreadIds.has(channel.id) &&
-        matchesSearch(channel),
-    )
-    .sort(sortByLabel);
-
-  const internalChannels = channels
-    .filter(
-      (channel) =>
+        showInternalSections &&
         (channel.type === 'public' || channel.type === 'private') &&
-        !unreadIds.has(channel.id) &&
-        matchesSearch(channel),
-    )
-    .sort(sortByLabel);
-
-  const directMessages = channels
-    .filter(
-      (channel) =>
-        channel.type === 'direct' &&
-        !unreadIds.has(channel.id) &&
-        matchesSearch(channel),
-    )
-    .sort(sortByLabel);
-
-  const groupMessages = channels
-    .filter(
-      (channel) =>
-        channel.type === 'group' &&
-        !unreadIds.has(channel.id) &&
-        matchesSearch(channel),
-    )
-    .sort(sortByLabel);
+        includeUnread(channel),
+    ),
+  );
+  const directMessages = sortConversations(
+    visibleChannels.filter(
+      (channel) => channel.type === 'direct' && includeUnread(channel),
+    ),
+  );
+  const groupMessages = sortConversations(
+    visibleChannels.filter(
+      (channel) => channel.type === 'group' && includeUnread(channel),
+    ),
+  );
 
   const hasVisibleResults =
-    unreadChannels.length > 0 ||
-    externalChannels.length > 0 ||
-    internalChannels.length > 0 ||
+    clientChannels.length > 0 ||
+    teamChannels.length > 0 ||
     directMessages.length > 0 ||
     groupMessages.length > 0;
 
-  const showChannels = filter === 'all' || filter === 'channels';
-  const showDms = filter === 'all' || filter === 'dms';
-  const showUnreadOnly = filter === 'unread';
+  const showChannels =
+    filter === 'all' || filter === 'channels' || filter === 'unread';
+  const showDms = filter === 'all' || filter === 'dms' || filter === 'unread';
+  const showSection = (count: number) =>
+    filter === 'unread' || Boolean(normalizedQuery) ? count > 0 : true;
 
   return (
-    <div
+    <aside
       className={cn(
-        'shell-chrome flex h-full min-h-0 flex-col overflow-hidden rounded-[var(--radius-lg)] border border-[var(--shell-border)] bg-[#1d2353] text-[var(--shell-text)]',
+        'chat-sidebar flex h-full min-h-0 flex-col overflow-hidden border-r border-[var(--shell-border)] bg-[var(--chat-sidebar-bg)] text-[var(--shell-text)]',
         className,
       )}
     >
-      <div className="shrink-0 space-y-3 border-b border-[var(--shell-border)] p-3">
+      <div className="chat-inset shrink-0 space-y-2.5 border-b border-[var(--shell-border)]">
         <Button
           type="button"
           className="w-full"
@@ -408,14 +399,14 @@ export function ChannelSidebar({
             onChange={(event) => setSearchQuery(event.target.value)}
             placeholder="Search channels..."
             aria-label="Search channels and direct messages"
-            className="shell-chrome-input h-10 w-full rounded-[var(--radius-md)] border pl-9 pr-3 text-sm"
+            className="shell-chrome-input h-9 w-full rounded-[var(--radius-md)] border pl-9 pr-3 text-sm"
           />
         </div>
       </div>
-      <div className="min-h-0 flex-1 overflow-y-auto overscroll-y-contain scroll-smooth px-2 py-3">
+      <div className="shell-scroll min-h-0 flex-1 overflow-y-auto overscroll-y-contain px-1.5 py-2 sm:px-2 sm:py-2.5">
         {pendingInvites.length > 0 ? (
-          <div className="mb-4 space-y-2 border-b border-[var(--shell-border)] px-2 pb-4">
-            <p className="text-xs font-semibold uppercase tracking-wide text-[var(--shell-muted)]">
+          <div className="mb-3 space-y-1.5 border-b border-[var(--shell-border)] px-1.5 pb-3">
+            <p className="text-[11px] font-semibold uppercase tracking-wide text-[var(--shell-muted)]">
               Pending invites
             </p>
             {pendingInvites.map((invite) => (
@@ -439,60 +430,41 @@ export function ChannelSidebar({
           </div>
         ) : null}
 
-        {!hasVisibleResults ? (
-          <p className="px-3 py-4 text-sm text-[var(--shell-muted)]">
+        {!hasVisibleResults && (filter === 'unread' || Boolean(normalizedQuery)) ? (
+          <p className="px-2 py-3 text-sm text-[var(--shell-muted)]">
             {normalizedQuery
               ? 'No channels or direct messages match your search.'
-              : 'No conversations yet.'}
+              : filter === 'unread'
+                ? 'No unread conversations.'
+                : 'No conversations yet.'}
           </p>
         ) : null}
 
-        {(showUnreadOnly || unreadChannels.length > 0) &&
-        (showUnreadOnly || filter === 'all') ? (
-          <SidebarSection
-            title={showUnreadOnly ? 'Unread' : 'Pinned'}
-            collapsed={false}
-            onToggle={() => undefined}
-          >
-            {(showUnreadOnly ? unreadChannels : unreadChannels.slice(0, 4)).map(
-              (channel) => (
-                <ChannelButton
-                  key={channel.id}
-                  channel={channel}
-                  isActive={channel.id === selectedChannelId}
-                  emphasize
-                  onSelect={onSelectChannel}
-                />
-              ),
-            )}
-            {showUnreadOnly && unreadChannels.length === 0 ? (
-              <p className="px-3 py-2 text-xs text-[var(--shell-muted)]">
-                No unread conversations.
-              </p>
-            ) : null}
-          </SidebarSection>
-        ) : null}
-
-        {showChannels && !showUnreadOnly ? (
+        {showChannels && showSection(clientChannels.length) ? (
           <SidebarSection
             title="External Connections"
+            unreadCount={unreadTotal(clientChannels)}
             collapsed={clientsCollapsed}
             onToggle={() => setClientsCollapsed((current) => !current)}
             action={
-              canCreateChannel && onCreateExternalConnection ? (
-                <SectionAddButton
-                  label="Create external connection"
-                  onClick={onCreateExternalConnection}
-                />
+              canAddConnection ? (
+                <button
+                  type="button"
+                  onClick={onAddConnection}
+                  className="rounded-[var(--radius-sm)] p-1 text-[var(--shell-muted)] hover:bg-[var(--shell-hover)] hover:text-[var(--shell-text)]"
+                  aria-label="Add external connection"
+                >
+                  <Plus className="h-4 w-4" />
+                </button>
               ) : null
             }
           >
-            {externalChannels.length === 0 ? (
-              <p className="px-3 py-2 text-xs text-[var(--shell-muted)]">
+            {clientChannels.length === 0 ? (
+              <p className="px-2 py-1.5 text-xs text-[var(--shell-muted)]">
                 Client connections appear here.
               </p>
             ) : (
-              externalChannels.map((channel) => (
+              clientChannels.map((channel) => (
                 <ChannelButton
                   key={channel.id}
                   channel={channel}
@@ -504,26 +476,33 @@ export function ChannelSidebar({
           </SidebarSection>
         ) : null}
 
-        {showChannels && !showUnreadOnly ? (
+        {showInternalSections &&
+        showChannels &&
+        showSection(teamChannels.length) ? (
           <SidebarSection
             title="Internal Connections"
+            unreadCount={unreadTotal(teamChannels)}
             collapsed={teamCollapsed}
             onToggle={() => setTeamCollapsed((current) => !current)}
             action={
               canCreateChannel ? (
-                <SectionAddButton
-                  label="Create internal connection"
+                <button
+                  type="button"
                   onClick={onCreateChannel}
-                />
+                  className="rounded-[var(--radius-sm)] p-1 text-[var(--shell-muted)] hover:bg-[var(--shell-hover)] hover:text-[var(--shell-text)]"
+                  aria-label="Create channel"
+                >
+                  <Plus className="h-4 w-4" />
+                </button>
               ) : null
             }
           >
-            {internalChannels.length === 0 ? (
-              <p className="px-3 py-2 text-xs text-[var(--shell-muted)]">
-                No internal connections yet.
+            {teamChannels.length === 0 ? (
+              <p className="px-2 py-1.5 text-xs text-[var(--shell-muted)]">
+                {internalEmptyText}
               </p>
             ) : (
-              internalChannels.map((channel) => (
+              teamChannels.map((channel) => (
                 <ChannelButton
                   key={channel.id}
                   channel={channel}
@@ -535,20 +514,25 @@ export function ChannelSidebar({
           </SidebarSection>
         ) : null}
 
-        {showDms && !showUnreadOnly ? (
+        {showDms && showSection(directMessages.length) ? (
           <SidebarSection
             title="Direct messages"
+            unreadCount={unreadTotal(directMessages)}
             collapsed={dmsCollapsed}
             onToggle={() => setDmsCollapsed((current) => !current)}
             action={
-              <SectionAddButton
-                label="Start direct message"
+              <button
+                type="button"
                 onClick={onStartDirectMessage}
-              />
+                className="rounded-[var(--radius-sm)] p-1 text-[var(--shell-muted)] hover:bg-[var(--shell-hover)] hover:text-[var(--shell-text)]"
+                aria-label="Start direct message"
+              >
+                <Plus className="h-4 w-4" />
+              </button>
             }
           >
             {directMessages.length === 0 ? (
-              <p className="px-3 py-2 text-xs text-[var(--shell-muted)]">
+              <p className="px-2 py-1.5 text-xs text-[var(--shell-muted)]">
                 No direct messages yet.
               </p>
             ) : (
@@ -564,7 +548,7 @@ export function ChannelSidebar({
           </SidebarSection>
         ) : null}
 
-        {showDms && !showUnreadOnly && groupMessages.length > 0 ? (
+        {showDms && groupMessages.length > 0 ? (
           <SidebarSection
             title="Group messages"
             collapsed={false}
@@ -581,6 +565,6 @@ export function ChannelSidebar({
           </SidebarSection>
         ) : null}
       </div>
-    </div>
+    </aside>
   );
 }

@@ -1,11 +1,15 @@
 'use client';
 
 import { useState } from 'react';
-import { UserPlus } from 'lucide-react';
+import { MoreHorizontal, UserPlus } from 'lucide-react';
 import { apiRequest } from '@/lib/api-client';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
+import {
+  DropdownMenu,
+  DropdownMenuItem,
+} from '@/components/ui/DropdownMenu';
 
 export interface PortalMember {
   id: string;
@@ -18,6 +22,8 @@ export interface PortalMember {
     fullName: string;
     email: string;
     status: string;
+    lastLoginAt?: string | null;
+    mustChangePassword?: boolean;
   };
 }
 
@@ -37,6 +43,7 @@ interface ContactRow {
 interface ClientPortalUsersProps {
   clientId: string;
   clientName: string;
+  clientStatus?: string;
   primaryContactName?: string | null;
   primaryContactEmail?: string | null;
   contacts: ContactRow[];
@@ -61,9 +68,23 @@ function statusLabel(status: string) {
   return status.replaceAll('_', ' ');
 }
 
+function isNotOnboarded(member: PortalMember) {
+  return member.user.mustChangePassword === true;
+}
+
+function formatLastLogin(value?: string | null) {
+  if (!value) return 'Never logged in';
+  return `Last login: ${new Date(value).toLocaleString()}`;
+}
+
+function resendLabel(member: PortalMember) {
+  return isNotOnboarded(member) ? 'Resend onboarding' : 'Resend';
+}
+
 export function ClientPortalUsers({
   clientId,
   clientName,
+  clientStatus,
   primaryContactName,
   primaryContactEmail,
   contacts,
@@ -76,6 +97,7 @@ export function ClientPortalUsers({
   onInvite,
 }: ClientPortalUsersProps) {
   const [busyId, setBusyId] = useState<string | null>(null);
+  const orgDisabled = clientStatus === 'inactive';
 
   const savedContacts = buildSavedContacts(
     clientName,
@@ -99,6 +121,12 @@ export function ClientPortalUsers({
   }
 
   async function resend(member: PortalMember) {
+    if (orgDisabled) {
+      onError(
+        'This client organization is disabled. Activate it before resending portal login emails.',
+      );
+      return;
+    }
     const turningOn = member.user.status === 'inactive';
     const confirmed = window.confirm(
       turningOn
@@ -230,6 +258,12 @@ export function ClientPortalUsers({
 
   return (
     <div className="space-y-4">
+      {orgDisabled ? (
+        <p className="rounded-[var(--radius-md)] border border-[var(--danger)]/30 bg-[var(--danger)]/5 px-3 py-2 text-sm text-[var(--danger)]">
+          This client organization is disabled. Portal logins are blocked until
+          you activate the client again.
+        </p>
+      ) : null}
       <Card>
         <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div>
@@ -245,7 +279,7 @@ export function ClientPortalUsers({
             <Button
               size="sm"
               variant="secondary"
-              disabled={seats.used >= seats.max}
+              disabled={seats.used >= seats.max || orgDisabled}
               onClick={() => onInvite()}
             >
               <UserPlus className="h-4 w-4" />
@@ -287,7 +321,7 @@ export function ClientPortalUsers({
                       <Button
                         size="sm"
                         variant="secondary"
-                        disabled={seats.used >= seats.max}
+                        disabled={seats.used >= seats.max || orgDisabled}
                         onClick={() =>
                           onInvite({
                             fullName: contact.name,
@@ -352,6 +386,11 @@ export function ClientPortalUsers({
                         ? 'Only chat (1:1)'
                         : 'Chat and Order update'}
                     </p>
+                    <p className="mt-1 text-xs text-[var(--muted)]">
+                      {isNotOnboarded(member) ? 'Not onboarded' : 'Onboarded'}
+                      {' · '}
+                      {formatLastLogin(member.user.lastLoginAt)}
+                    </p>
                   </div>
                   <Badge
                     variant={statusVariant(member.user.status)}
@@ -361,10 +400,10 @@ export function ClientPortalUsers({
                   </Badge>
                 </div>
                 {canManage ? (
-                  <div className="flex flex-wrap items-center gap-2">
+                  <div className="flex items-center gap-2">
                     {!member.isOrgAdmin ? (
                       <select
-                        className="h-9 rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface)] px-2 text-xs text-[var(--foreground)]"
+                        className="h-9 min-w-0 flex-1 rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface)] px-2 text-xs text-[var(--foreground)] lg:max-w-xs lg:flex-none"
                         value={member.accessLevel ?? 'chat_and_orders'}
                         disabled={busyId === member.user.id}
                         onChange={(event) =>
@@ -382,52 +421,106 @@ export function ClientPortalUsers({
                           Chat and Order update
                         </option>
                       </select>
-                    ) : null}
-                    <Button
-                      size="sm"
-                      variant="secondary"
-                      disabled={busyId === member.user.id}
-                      onClick={() => void resend(member)}
-                    >
-                      Resend
-                    </Button>
-                    {member.user.status === 'inactive' ? (
-                      <Button
-                        size="sm"
-                        variant="secondary"
-                        disabled={
-                          busyId === member.user.id || seats.used >= seats.max
-                        }
-                        onClick={() => void setStatus(member, 'active')}
-                      >
-                        Enable
-                      </Button>
                     ) : (
+                      <span className="flex-1" />
+                    )}
+                    <div className="hidden flex-wrap items-center gap-2 lg:flex">
                       <Button
                         size="sm"
                         variant="secondary"
-                        disabled={busyId === member.user.id}
-                        onClick={() => void setStatus(member, 'inactive')}
+                        disabled={busyId === member.user.id || orgDisabled}
+                        onClick={() => void resend(member)}
+                        title={
+                          orgDisabled
+                            ? 'Activate the client organization before resending'
+                            : undefined
+                        }
                       >
-                        Disable
+                        {resendLabel(member)}
                       </Button>
-                    )}
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      disabled={busyId === member.user.id}
-                      onClick={() => void toggleOrgAdmin(member)}
+                      {member.user.status === 'inactive' ? (
+                        <Button
+                          size="sm"
+                          variant="secondary"
+                          disabled={
+                            busyId === member.user.id ||
+                            seats.used >= seats.max ||
+                            orgDisabled
+                          }
+                          onClick={() => void setStatus(member, 'active')}
+                        >
+                          Enable
+                        </Button>
+                      ) : (
+                        <Button
+                          size="sm"
+                          variant="secondary"
+                          disabled={busyId === member.user.id}
+                          onClick={() => void setStatus(member, 'inactive')}
+                        >
+                          Disable
+                        </Button>
+                      )}
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        disabled={busyId === member.user.id}
+                        onClick={() => void toggleOrgAdmin(member)}
+                      >
+                        {member.isOrgAdmin ? 'Demote' : 'Make admin'}
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="danger"
+                        disabled={busyId === member.user.id}
+                        onClick={() => void remove(member)}
+                      >
+                        Delete
+                      </Button>
+                    </div>
+                    <DropdownMenu
+                      className="lg:hidden"
+                      trigger={
+                        <Button
+                          size="sm"
+                          variant="secondary"
+                          aria-label={`Actions for ${member.user.fullName}`}
+                          disabled={busyId === member.user.id}
+                        >
+                          <MoreHorizontal className="h-4 w-4" />
+                        </Button>
+                      }
                     >
-                      {member.isOrgAdmin ? 'Demote' : 'Make admin'}
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="danger"
-                      disabled={busyId === member.user.id}
-                      onClick={() => void remove(member)}
-                    >
-                      Delete
-                    </Button>
+                      <DropdownMenuItem
+                        disabled={orgDisabled}
+                        onClick={() => void resend(member)}
+                      >
+                        {resendLabel(member)}
+                      </DropdownMenuItem>
+                      {member.user.status === 'inactive' ? (
+                        <DropdownMenuItem
+                          disabled={seats.used >= seats.max}
+                          onClick={() => void setStatus(member, 'active')}
+                        >
+                          Enable
+                        </DropdownMenuItem>
+                      ) : (
+                        <DropdownMenuItem
+                          onClick={() => void setStatus(member, 'inactive')}
+                        >
+                          Disable
+                        </DropdownMenuItem>
+                      )}
+                      <DropdownMenuItem onClick={() => void toggleOrgAdmin(member)}>
+                        {member.isOrgAdmin ? 'Demote' : 'Make admin'}
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        destructive
+                        onClick={() => void remove(member)}
+                      >
+                        Delete
+                      </DropdownMenuItem>
+                    </DropdownMenu>
                   </div>
                 ) : null}
               </li>

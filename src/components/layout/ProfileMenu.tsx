@@ -7,13 +7,16 @@ import {
   Compass,
   KeyRound,
   LogOut,
+  Moon,
   Settings,
+  Sun,
   UserRound,
+  Volume2,
+  VolumeX,
   X,
 } from 'lucide-react';
 import { AuthenticatedUser } from '@/lib/auth';
 import { UserAvatar } from '@/components/ui/UserAvatar';
-import { getRoleLabel } from '@/lib/navigation';
 import { apiRequest } from '@/lib/api-client';
 import { ApiResponse } from '@/lib/auth';
 import {
@@ -24,6 +27,21 @@ import {
 import { Button } from '@/components/ui/Button';
 import { cn } from '@/lib/cn';
 import { useProductTour } from '@/components/tour/ProductTourProvider';
+import { useTheme } from '@/components/providers/ThemeProvider';
+import {
+  isNotificationSoundMuted,
+  playNotificationSound,
+  setNotificationSoundMuted,
+  unlockNotificationSound,
+} from '@/lib/notification-sound';
+import { useRealtime } from '@/components/providers/RealtimeProvider';
+import {
+  applyPresenceUpdate,
+  CUSTOM_STATUS_PRESETS,
+  formatCustomStatus,
+  isAway as isPresenceAway,
+  presenceSubtitle,
+} from '@/lib/user-presence';
 
 interface ProfileMenuProps {
   user: AuthenticatedUser;
@@ -38,20 +56,8 @@ interface UserProfileState {
   notificationsPaused?: boolean;
 }
 
-const STATUS_PRESETS: Array<{ emoji: string; text: string }> = [
-  { emoji: '📅', text: 'In a meeting' },
-  { emoji: '📞', text: 'On a call' },
-  { emoji: '🎯', text: 'Focusing' },
-  { emoji: '🤒', text: 'Out sick' },
-  { emoji: '🌴', text: 'On vacation' },
-  { emoji: '⏳', text: 'Be right back' },
-];
-
 function formatStatusDraft(profile: UserProfileState) {
-  return [profile.statusEmoji, profile.statusText]
-    .filter(Boolean)
-    .join(' ')
-    .trim();
+  return formatCustomStatus(profile);
 }
 
 function parseStatusInput(value: string): {
@@ -77,12 +83,18 @@ export function ProfileMenu({ user, onLogout, tone = 'default' }: ProfileMenuPro
   const isShell = tone === 'shell';
   const containerRef = useRef<HTMLDivElement>(null);
   const { startTour } = useProductTour();
+  const { theme, toggleTheme } = useTheme();
+  const { subscribePresenceUpdated } = useRealtime();
   const [open, setOpen] = useState(false);
+  const [soundMuted, setSoundMuted] = useState(false);
   const [profile, setProfile] = useState<UserProfileState>({});
   const [statusDraft, setStatusDraft] = useState('');
   const [statusBusy, setStatusBusy] = useState(false);
   const [statusError, setStatusError] = useState<string | null>(null);
-  const roleLabel = getRoleLabel(user.userType, user.roleCodes);
+
+  useEffect(() => {
+    setSoundMuted(isNotificationSoundMuted());
+  }, [open]);
 
   useEffect(() => {
     apiRequest<ApiResponse<UserProfileState>>('/users/me')
@@ -92,6 +104,21 @@ export function ProfileMenu({ user, onLogout, tone = 'default' }: ProfileMenuPro
       })
       .catch(() => undefined);
   }, []);
+
+  useEffect(() => {
+    return subscribePresenceUpdated((payload) => {
+      if (payload.userId !== user.id) {
+        return;
+      }
+      setProfile((current) => applyPresenceUpdate(current, payload));
+      setStatusDraft(
+        formatStatusDraft({
+          statusEmoji: payload.statusEmoji,
+          statusText: payload.statusText,
+        }),
+      );
+    });
+  }, [subscribePresenceUpdated, user.id]);
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
@@ -133,39 +160,95 @@ export function ProfileMenu({ user, onLogout, tone = 'default' }: ProfileMenuPro
 
   async function saveCustomStatus(event?: FormEvent) {
     event?.preventDefault();
+    const previous = profile;
     const { statusEmoji, statusText } = parseStatusInput(statusDraft);
+    setProfile((current) => ({ ...current, statusEmoji, statusText }));
+    setStatusDraft(formatStatusDraft({ statusEmoji, statusText }));
     try {
       await patchProfile({ statusEmoji, statusText });
     } catch {
-      // error already set
+      setProfile(previous);
+      setStatusDraft(formatStatusDraft(previous));
     }
   }
 
   async function applyPreset(preset: { emoji: string; text: string }) {
+    if (
+      profile.statusEmoji === preset.emoji &&
+      profile.statusText === preset.text
+    ) {
+      return;
+    }
+    const previous = profile;
+    const next = {
+      statusEmoji: preset.emoji,
+      statusText: preset.text,
+    };
+    setProfile((current) => ({ ...current, ...next }));
+    setStatusDraft(formatStatusDraft(next));
     try {
-      await patchProfile({
-        statusEmoji: preset.emoji,
-        statusText: preset.text,
-      });
+      await patchProfile(next);
     } catch {
-      // error already set
+      setProfile(previous);
+      setStatusDraft(formatStatusDraft(previous));
     }
   }
 
   async function clearStatus() {
+    if (!profile.statusEmoji && !profile.statusText) {
+      return;
+    }
+    const previous = profile;
+    setProfile((current) => ({
+      ...current,
+      statusEmoji: null,
+      statusText: null,
+    }));
+    setStatusDraft('');
     try {
       await patchProfile({ statusEmoji: null, statusText: null });
     } catch {
-      // error already set
+      setProfile(previous);
+      setStatusDraft(formatStatusDraft(previous));
     }
   }
 
-  async function toggleAway() {
-    const next = profile.presenceStatus === 'away' ? 'active' : 'away';
+  async function setPresence(next: 'active' | 'away') {
+    const alreadySelected =
+      profile.presenceStatus === next &&
+      !profile.statusEmoji &&
+      !profile.statusText;
+    if (alreadySelected) {
+      return;
+    }
+    const previous = profile;
+    // Active/Away replaces any custom status so only one label shows.
+    setProfile((current) => ({
+      ...current,
+      presenceStatus: next,
+      statusEmoji: null,
+      statusText: null,
+    }));
+    setStatusDraft('');
     try {
-      await patchProfile({ presenceStatus: next });
+      await patchProfile({
+        presenceStatus: next,
+        statusEmoji: null,
+        statusText: null,
+      });
     } catch {
-      // error already set
+      setProfile(previous);
+      setStatusDraft(formatStatusDraft(previous));
+    }
+  }
+
+  function toggleSound() {
+    const next = !soundMuted;
+    setSoundMuted(next);
+    setNotificationSoundMuted(next);
+    if (!next) {
+      unlockNotificationSound();
+      playNotificationSound();
     }
   }
 
@@ -183,7 +266,8 @@ export function ProfileMenu({ user, onLogout, tone = 'default' }: ProfileMenuPro
   }
 
   const hasStatus = Boolean(profile.statusEmoji || profile.statusText);
-  const currentStatusLabel = formatStatusDraft(profile) || 'No status set';
+  const isAway = isPresenceAway(profile.presenceStatus);
+  const statusSubtitle = presenceSubtitle(profile);
 
   return (
     <div ref={containerRef} className="relative">
@@ -192,7 +276,7 @@ export function ProfileMenu({ user, onLogout, tone = 'default' }: ProfileMenuPro
         data-tour="profile-menu"
         onClick={() => setOpen((value) => !value)}
         className={cn(
-          'inline-flex min-h-touch min-w-touch items-center gap-2 rounded-[var(--radius-md)] border px-1.5 py-1.5 transition-colors focus-visible:outline-none focus-visible:ring-2 sm:min-h-0 sm:min-w-0 sm:px-2',
+          'inline-flex min-h-touch min-w-touch max-w-full items-center gap-2 rounded-[var(--radius-md)] border px-1.5 py-1.5 transition-colors focus-visible:outline-none focus-visible:ring-2 lg:min-h-0 lg:min-w-0 lg:px-2',
           isShell
             ? 'border-[var(--shell-border)] hover:bg-[var(--shell-hover)] focus-visible:ring-[var(--shell-focus-ring)]'
             : 'border-[var(--border)] hover:bg-[var(--surface-muted)] focus-visible:ring-[var(--primary-soft)]',
@@ -200,13 +284,13 @@ export function ProfileMenu({ user, onLogout, tone = 'default' }: ProfileMenuPro
         aria-label="Open profile menu"
         aria-expanded={open}
       >
-        <div className="relative">
+        <div className="relative shrink-0">
           <UserAvatar user={user} size="sm" />
           <span
             className={cn(
               'absolute bottom-0 right-0 h-2.5 w-2.5 rounded-full border-2',
               isShell ? 'border-[var(--shell-brand)]' : 'border-[var(--surface)]',
-              profile.presenceStatus === 'away'
+              isAway
                 ? isShell
                   ? 'bg-[var(--shell-muted)]'
                   : 'bg-[var(--muted)]'
@@ -214,52 +298,99 @@ export function ProfileMenu({ user, onLogout, tone = 'default' }: ProfileMenuPro
             )}
           />
         </div>
-        <div className="hidden min-w-0 text-left md:block">
+        <div className="hidden min-w-0 max-w-[9rem] text-left lg:block xl:max-w-[18rem]">
           <p
             className={cn(
-              'truncate text-xs font-medium',
-              isShell ? 'text-[var(--shell-text)]' : 'text-[var(--foreground)]',
+              'truncate text-xs font-medium leading-tight',
+              isShell ? 'text-white' : 'text-[var(--foreground)]',
             )}
+            title={user.fullName}
           >
             {user.fullName}
           </p>
           <p
             className={cn(
-              'truncate text-[10px]',
-              isShell ? 'text-[var(--shell-muted)]' : 'text-[var(--muted)]',
+              'truncate text-[11px] leading-tight',
+              isShell ? 'text-[#e7e9ff]' : 'text-[var(--muted)]',
             )}
+            title={statusSubtitle}
           >
-            {roleLabel}
+            {statusSubtitle}
           </p>
         </div>
       </button>
 
       {open ? (
-        <div className="fixed inset-x-2 top-[3.75rem] z-30 max-h-[min(32rem,calc(100dvh-5rem))] w-auto overflow-y-auto rounded-[var(--radius-lg)] border border-[var(--border)] bg-[var(--surface)] p-3 shadow-[var(--shadow-md)] sm:absolute sm:inset-x-auto sm:right-0 sm:top-[calc(100%+8px)] sm:max-h-[min(32rem,70dvh)] sm:w-80">
+        <div className="shell-overlay-panel shell-menu w-auto overflow-y-auto rounded-[var(--radius-lg)] border border-[var(--border)] bg-[var(--surface)] p-3 text-[var(--foreground)] shadow-[var(--shadow-md)] lg:w-80">
           <div className="flex items-center gap-3 border-b border-[var(--border)] pb-3">
-            <div className="relative">
+            <div className="relative shrink-0">
               <UserAvatar user={user} size="md" />
               <span
                 className={cn(
                   'absolute bottom-0 right-0 h-2.5 w-2.5 rounded-full border-2 border-[var(--surface)]',
-                  profile.presenceStatus === 'away'
-                    ? 'bg-[var(--muted)]'
-                    : 'bg-[var(--success)]',
+                  isAway ? 'bg-[var(--muted)]' : 'bg-[var(--success)]',
                 )}
               />
             </div>
-            <div className="min-w-0">
+            <div className="min-w-0 flex-1">
               <p className="truncate text-sm font-semibold text-[var(--foreground)]">
                 {user.fullName}
               </p>
-              <p className="text-xs capitalize text-[var(--muted)]">
-                {profile.presenceStatus === 'away' ? 'Away' : 'Active'}
-                {hasStatus ? ` · ${currentStatusLabel}` : ''}
+              <p className="truncate text-xs text-[var(--muted)]">
+                {statusSubtitle}
               </p>
             </div>
           </div>
 
           <div className="space-y-3 border-b border-[var(--border)] py-3">
+            <div>
+              <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">
+                Availability
+              </p>
+              <div
+                className="grid grid-cols-2 rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface-muted)] p-0.5"
+                role="group"
+                aria-label="Availability"
+              >
+                <button
+                  type="button"
+                  disabled={statusBusy}
+                  aria-pressed={!isAway}
+                  onClick={() => void setPresence('active')}
+                  className={cn(
+                    'inline-flex items-center justify-center gap-2 rounded-[calc(var(--radius-md)-2px)] px-3 py-2 text-sm font-medium transition-colors disabled:opacity-60',
+                    !isAway
+                      ? 'bg-[var(--surface)] text-[var(--foreground)] shadow-sm'
+                      : 'text-[var(--muted)] hover:text-[var(--foreground)]',
+                  )}
+                >
+                  <span
+                    className="h-2.5 w-2.5 rounded-full bg-[var(--success)]"
+                    aria-hidden
+                  />
+                  Online
+                </button>
+                <button
+                  type="button"
+                  disabled={statusBusy}
+                  aria-pressed={isAway}
+                  onClick={() => void setPresence('away')}
+                  className={cn(
+                    'inline-flex items-center justify-center gap-2 rounded-[calc(var(--radius-md)-2px)] px-3 py-2 text-sm font-medium transition-colors disabled:opacity-60',
+                    isAway
+                      ? 'bg-[var(--surface)] text-[var(--foreground)] shadow-sm'
+                      : 'text-[var(--muted)] hover:text-[var(--foreground)]',
+                  )}
+                >
+                  <span
+                    className="h-2.5 w-2.5 rounded-full bg-[var(--muted)]"
+                    aria-hidden
+                  />
+                  Offline
+                </button>
+              </div>
+            </div>
+
             <div className="flex items-center justify-between gap-2">
               <p className="text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">
                 Status
@@ -278,8 +409,8 @@ export function ProfileMenu({ user, onLogout, tone = 'default' }: ProfileMenuPro
             </div>
 
             <div className="flex flex-wrap gap-1.5">
-              {STATUS_PRESETS.map((preset) => {
-                const isActive =
+              {CUSTOM_STATUS_PRESETS.map((preset) => {
+                const isSelected =
                   profile.statusEmoji === preset.emoji &&
                   profile.statusText === preset.text;
                 return (
@@ -289,20 +420,21 @@ export function ProfileMenu({ user, onLogout, tone = 'default' }: ProfileMenuPro
                     disabled={statusBusy}
                     onClick={() => void applyPreset(preset)}
                     className={cn(
-                      'rounded-full border px-2.5 py-1 text-xs transition-colors disabled:opacity-60',
-                      isActive
+                      'max-w-full rounded-full border px-2.5 py-1 text-left text-xs transition-colors disabled:opacity-60',
+                      isSelected
                         ? 'border-[var(--primary)] bg-[var(--primary-soft)] text-[var(--primary)]'
                         : 'border-[var(--border)] text-[var(--foreground)] hover:bg-[var(--surface-muted)]',
                     )}
                   >
-                    <span aria-hidden>{preset.emoji}</span> {preset.text}
+                    <span aria-hidden>{preset.emoji}</span>{' '}
+                    <span className="whitespace-normal">{preset.text}</span>
                   </button>
                 );
               })}
             </div>
 
             <form
-              className="flex gap-2"
+              className="flex min-w-0 gap-2"
               onSubmit={(event) => void saveCustomStatus(event)}
             >
               <input
@@ -310,7 +442,7 @@ export function ProfileMenu({ user, onLogout, tone = 'default' }: ProfileMenuPro
                 onChange={(event) => setStatusDraft(event.target.value)}
                 placeholder="Custom status…"
                 disabled={statusBusy}
-                className="h-9 min-w-0 flex-1 rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface-muted)] px-3 text-sm outline-none focus:border-[var(--primary)] disabled:opacity-60"
+                className="h-9 min-w-0 flex-1 rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface-muted)] px-3 text-sm text-[var(--foreground)] outline-none placeholder:text-[var(--muted)] focus:border-[var(--primary)] disabled:opacity-60"
               />
               <Button
                 type="submit"
@@ -327,22 +459,40 @@ export function ProfileMenu({ user, onLogout, tone = 'default' }: ProfileMenuPro
             ) : null}
           </div>
 
-          <div className="space-y-1 border-b border-[var(--border)] py-2">
+          <div className="space-y-1 border-b border-[var(--border)] py-2 lg:hidden">
             <button
               type="button"
-              disabled={statusBusy}
-              onClick={() => void toggleAway()}
-              className="w-full rounded-[var(--radius-md)] px-3 py-2 text-left text-sm hover:bg-[var(--surface-muted)] disabled:opacity-60"
+              onClick={toggleTheme}
+              className="flex min-h-touch w-full items-center gap-2 rounded-[var(--radius-md)] px-3 py-2 text-left text-sm text-[var(--foreground)] hover:bg-[var(--surface-muted)]"
             >
-              {profile.presenceStatus === 'away'
-                ? 'Set yourself as active'
-                : 'Set yourself as away'}
+              {theme === 'light' ? (
+                <Moon className="h-4 w-4" />
+              ) : (
+                <Sun className="h-4 w-4" />
+              )}
+              {theme === 'light' ? 'Dark theme' : 'Light theme'}
             </button>
+            <button
+              type="button"
+              onClick={toggleSound}
+              className="flex min-h-touch w-full items-center gap-2 rounded-[var(--radius-md)] px-3 py-2 text-left text-sm text-[var(--foreground)] hover:bg-[var(--surface-muted)]"
+            >
+              {soundMuted ? (
+                <VolumeX className="h-4 w-4" />
+              ) : (
+                <Volume2 className="h-4 w-4" />
+              )}
+              {soundMuted ? 'Unmute notification sound' : 'Mute notification sound'}
+            </button>
+          </div>
+
+          <div className="space-y-1 border-b border-[var(--border)] py-2">
             <DropdownMenu
+              menuClassName="shell-overlay-panel text-[var(--foreground)]"
               trigger={
                 <button
                   type="button"
-                  className="flex w-full items-center justify-between rounded-[var(--radius-md)] px-3 py-2 text-left text-sm hover:bg-[var(--surface-muted)]"
+                  className="flex w-full items-center justify-between gap-2 rounded-[var(--radius-md)] px-3 py-2 text-left text-sm text-[var(--foreground)] hover:bg-[var(--surface-muted)]"
                 >
                   <span className="inline-flex items-center gap-2">
                     <Bell className="h-4 w-4" />
@@ -359,8 +509,13 @@ export function ProfileMenu({ user, onLogout, tone = 'default' }: ProfileMenuPro
                   ? 'Resume notifications'
                   : 'Pause notifications'}
               </DropdownMenuItem>
-              <DropdownMenuItem>
-                <Link href="/inbox">Open inbox</Link>
+              <DropdownMenuItem
+                onClick={() => {
+                  setOpen(false);
+                  window.location.assign('/inbox');
+                }}
+              >
+                Open inbox
               </DropdownMenuItem>
             </DropdownMenu>
           </div>

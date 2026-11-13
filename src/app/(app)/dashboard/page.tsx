@@ -19,16 +19,16 @@ import {
   userIsExternal,
 } from '@/lib/auth';
 import { ListSkeleton } from '@/components/ui/Skeleton';
-import { EmptyState, ErrorState } from '@/components/ui/StatePanels';
+import { ErrorState } from '@/components/ui/StatePanels';
 import { useWorkspace } from '@/components/providers/WorkspaceProvider';
 import { useNotifications } from '@/components/providers/NotificationProvider';
 import { getRoleLabel } from '@/lib/navigation';
 import {
   clientLifecycleStage,
-  OrderLifecycleSummary,
   OrderSummary,
 } from '@/lib/orders';
 import { DashboardMetricCard } from '@/components/dashboard/DashboardMetricCard';
+import { ClientPortalDashboard } from '@/components/dashboard/ClientPortalDashboard';
 import {
   buildWeekSeries,
   OrderStatusDonut,
@@ -38,7 +38,6 @@ import { RecentActivityPanel } from '@/components/dashboard/RecentActivityPanel'
 import { RecentMessagesPanel } from '@/components/dashboard/RecentMessagesPanel';
 import { RecentOrdersTable } from '@/components/dashboard/RecentOrdersTable';
 import { TasksScheduleWidgets } from '@/components/dashboard/TasksScheduleWidgets';
-import { StatCard } from '@/components/ui/StatCard';
 
 function boardStage(code: string | null | undefined) {
   if (!code || code === 'cancelled' || code === 'completed') {
@@ -63,7 +62,6 @@ export default function DashboardPage() {
   const { notifications } = useNotifications();
   const [orders, setOrders] = useState<OrderSummary[]>([]);
   const [clientOrders, setClientOrders] = useState<OrderSummary[]>([]);
-  const [lifecycle, setLifecycle] = useState<OrderLifecycleSummary | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
@@ -82,12 +80,9 @@ export default function DashboardPage() {
 
     if (isExternal && canViewOrders) {
       tasks.push(
-        apiRequest<ApiResponse<OrderLifecycleSummary>>('/orders/lifecycle-summary')
-          .then((response) => setLifecycle(response.data))
-          .catch(() => setLifecycle(null)),
-      );
-      tasks.push(
-        apiRequest<ApiResponse<{ items: OrderSummary[] }>>('/orders?pageSize=8')
+        apiRequest<ApiResponse<{ items: OrderSummary[] }>>(
+          '/orders?pageSize=100',
+        )
           .then((response) => setClientOrders(response.data.items))
           .catch((error: Error) => {
             setClientOrders([]);
@@ -131,16 +126,23 @@ export default function DashboardPage() {
     };
     for (const order of activeOrders) {
       const stage = boardStage(order.workflowStatus?.code);
-      if (stage) counts[stage] += 1;
+      if (!stage || stage === 'delivered') {
+        if (stage === 'delivered') counts.delivered += 1;
+        continue;
+      }
+      counts[stage] += 1;
     }
     return counts;
   }, [activeOrders]);
 
-  const totalActive =
-    stageCounts.order_received +
-    stageCounts.in_progress +
-    stageCounts.quality_check +
-    stageCounts.delivered;
+  const totalActive = useMemo(
+    () =>
+      stageCounts.order_received +
+      stageCounts.in_progress +
+      stageCounts.quality_check +
+      stageCounts.delivered,
+    [stageCounts],
+  );
 
   const weekSeries = useMemo(
     () =>
@@ -200,15 +202,15 @@ export default function DashboardPage() {
     <div className="space-y-6">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <h1 className="text-xl font-semibold tracking-tight text-[var(--foreground)] sm:text-2xl">
+          <h1 className="break-words text-xl font-semibold tracking-tight text-[var(--foreground)] sm:text-2xl">
             Welcome back, {firstName}
           </h1>
           <p className="mt-1 text-sm text-[var(--muted)]">
             Here&apos;s what&apos;s happening in your workspace today · {roleLabel}
           </p>
         </div>
-        <div className="inline-flex items-center rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm text-[var(--muted)] shadow-[var(--shadow-sm)]">
-          {today}
+        <div className="inline-flex max-w-full items-center rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-xs text-[var(--muted)] shadow-[var(--shadow-sm)] sm:text-sm">
+          <span className="break-words">{today}</span>
         </div>
       </div>
 
@@ -239,24 +241,29 @@ export default function DashboardPage() {
       ) : null}
 
       {!isLoading && !errorMessage && isExternal ? (
-        <ClientPortal
-          newOrders={lifecycle?.newOrders ?? 0}
-          revisionOrders={lifecycle?.revisionOrders ?? 0}
-          activeOrders={
-            lifecycle?.activeOrders ??
-            clientOrders.filter(
-              (order) =>
-                !['completed', 'cancelled', 'delivered'].includes(order.status),
-            ).length
-          }
-          recentOrders={clientOrders}
-        />
+        canViewOrders ? (
+          <ClientPortalDashboard orders={clientOrders} />
+        ) : (
+          <Card>
+            <p className="text-sm text-[var(--muted)]">
+              Order metrics are hidden for your access level. Use Messages from the
+              sidebar to stay in touch with your studio.
+            </p>
+            <Link
+              href="/chat"
+              className="mt-3 inline-flex items-center gap-2 text-sm font-medium text-[var(--primary)]"
+            >
+              <MessageSquare className="h-4 w-4" />
+              Open messages
+            </Link>
+          </Card>
+        )
       ) : null}
 
       {!isLoading && !errorMessage && !isExternal ? (
         <div className="space-y-6">
           {canViewOrders ? (
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
+            <div className="grid grid-cols-2 gap-2 sm:gap-3 lg:grid-cols-3 xl:grid-cols-5">
               <DashboardMetricCard
                 label="Total orders"
                 value={totalActive}
@@ -318,7 +325,7 @@ export default function DashboardPage() {
           )}
 
           {canViewOrders ? (
-            <div className="grid gap-4 xl:grid-cols-[1.4fr_0.85fr]">
+            <div className="grid min-w-0 gap-4 xl:grid-cols-[1.4fr_0.85fr]">
               <RecentOrdersTable
                 orders={activeOrders}
                 hideClientIdentity={hideClientIdentity}
@@ -328,81 +335,6 @@ export default function DashboardPage() {
           ) : null}
         </div>
       ) : null}
-    </div>
-  );
-}
-
-function ClientPortal({
-  newOrders,
-  revisionOrders,
-  activeOrders,
-  recentOrders,
-}: {
-  newOrders: number;
-  revisionOrders: number;
-  activeOrders: number;
-  recentOrders: OrderSummary[];
-}) {
-  return (
-    <div className="space-y-6">
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 sm:gap-4">
-        <StatCard
-          label="New orders"
-          value={String(newOrders)}
-          trend="Original requests"
-          trendDirection="up"
-          icon={ClipboardList}
-        />
-        <StatCard
-          label="Revisions"
-          value={String(revisionOrders)}
-          trend="Follow-up orders"
-          trendDirection="up"
-          icon={ClipboardList}
-        />
-        <StatCard
-          label="Active orders"
-          value={String(activeOrders)}
-          trend="Not in history"
-          trendDirection="up"
-          icon={ClipboardList}
-        />
-      </div>
-
-      <Card>
-        <div className="mb-3 flex items-center justify-between">
-          <h2 className="text-base font-semibold text-[var(--foreground)]">
-            Recent orders
-          </h2>
-          <Link
-            href="/orders"
-            className="text-sm font-medium text-[var(--primary)]"
-          >
-            View all
-          </Link>
-        </div>
-        {recentOrders.length === 0 ? (
-          <EmptyState
-            title="No orders yet"
-            description="When your studio creates a job for you, it will show up here."
-          />
-        ) : (
-          <div className="space-y-2">
-            {recentOrders.slice(0, 6).map((order) => (
-              <Link
-                key={order.id}
-                href={`/orders/${order.id}`}
-                className="block rounded-[var(--radius-md)] border border-[var(--border)] px-3 py-2 hover:bg-[var(--surface-muted)]"
-              >
-                <p className="text-sm font-medium text-[var(--foreground)]">
-                  {order.name}
-                </p>
-                <p className="text-xs text-[var(--muted)]">{order.code}</p>
-              </Link>
-            ))}
-          </div>
-        )}
-      </Card>
     </div>
   );
 }

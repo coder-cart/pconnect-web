@@ -2,23 +2,17 @@
 
 import type { ReactNode } from 'react';
 import {
-  ArrowLeft,
   Copy,
   Hash,
   Headphones,
   Info,
   MessageCircle,
-  MoreVertical,
+  MessagesSquare,
   PanelLeftClose,
   PanelLeftOpen,
   UserPlus,
   Users,
 } from 'lucide-react';
-import { Button } from '@/components/ui/Button';
-import {
-  DropdownMenu,
-  DropdownMenuItem,
-} from '@/components/ui/DropdownMenu';
 import { ClientOrgLogo } from '@/components/ui/ClientOrgLogo';
 import { UserAvatar } from '@/components/ui/UserAvatar';
 import { ChannelNotificationMenu } from '@/components/chat/ChannelNotificationMenu';
@@ -28,8 +22,18 @@ import {
   ChannelMemberOption,
   ChannelNotificationPreference,
 } from '@/lib/channelMembers';
-import { ChannelContext, getChannelLabel, isDirectOrGroupChannel } from '@/lib/chat-types';
+import {
+  ChannelContext,
+  ChatDmPeer,
+  getChannelLabel,
+  isDirectOrGroupChannel,
+} from '@/lib/chat-types';
 import { cn } from '@/lib/cn';
+import { CHAT_HUDDLE_ENABLED } from '@/lib/chat-release';
+import {
+  isAway,
+  presenceSubtitle,
+} from '@/lib/user-presence';
 
 type ChannelTab = 'messages' | 'canvas' | 'pins';
 
@@ -40,6 +44,7 @@ interface ChannelHeaderProps {
   clientOrganizationId?: string | null;
   clientOrganizationLogoUpdatedAt?: string | null;
   channelContext: ChannelContext | null;
+  dmPeer?: ChatDmPeer | null;
   members?: ChannelMemberOption[];
   activeTab: ChannelTab;
   onTabChange: (tab: ChannelTab) => void;
@@ -68,6 +73,7 @@ export function ChannelHeader({
   clientOrganizationId,
   clientOrganizationLogoUpdatedAt,
   channelContext,
+  dmPeer = null,
   members = [],
   activeTab,
   onTabChange,
@@ -113,21 +119,25 @@ export function ChannelHeader({
     channelContext?.projectName ?? null,
   ].filter(Boolean);
 
-  const previewMembers = members.slice(0, 4);
-  const extraMembers = Math.max(0, members.length - previewMembers.length);
+  const channelMembers = members.filter((member) => member.inChannel !== false);
+  const previewMembers = channelMembers.slice(0, 4);
+  const extraMembers = Math.max(0, channelMembers.length - previewMembers.length);
+  const dmSubtitle =
+    channelType === 'direct' && dmPeer ? presenceSubtitle(dmPeer) : null;
 
   return (
     <div className="shrink-0 border-b border-[var(--border)]">
-      <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 sm:px-5 sm:py-3.5">
-        <div className="flex min-w-0 items-center gap-3">
+      <div className="chat-inset flex flex-wrap items-center justify-between gap-2 sm:gap-3">
+        <div className="flex min-w-0 items-center gap-2.5">
           {onBack ? (
             <button
               type="button"
               onClick={onBack}
-              className="inline-flex min-h-touch min-w-touch shrink-0 items-center justify-center rounded-[var(--radius-md)] text-[var(--muted)] hover:bg-[var(--surface-muted)] hover:text-[var(--foreground)] lg:hidden"
-              aria-label="Back to conversations"
+              className="inline-flex min-h-touch shrink-0 items-center gap-1.5 rounded-[var(--radius-md)] px-2 text-[var(--muted)] hover:bg-[var(--surface-muted)] hover:text-[var(--foreground)] lg:hidden"
+              aria-label="Chats"
             >
-              <ArrowLeft className="h-5 w-5" />
+              <MessagesSquare className="h-4 w-4 shrink-0" />
+              <span className="text-sm font-medium">Chats</span>
             </button>
           ) : null}
           {onToggleSidebar ? (
@@ -156,19 +166,43 @@ export function ChannelHeader({
                 'Client'
               }
               logoUpdatedAt={clientOrganizationLogoUpdatedAt}
-              className="h-10 w-10"
+              className="h-9 w-9"
             />
+          ) : channelType === 'direct' && dmPeer ? (
+            <span className="relative shrink-0">
+              <UserAvatar
+                user={{
+                  id: dmPeer.id,
+                  fullName: dmPeer.fullName,
+                  avatarUpdatedAt: dmPeer.avatarUpdatedAt,
+                }}
+                size="sm"
+              />
+              <span
+                className={cn(
+                  'absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full border-2 border-[var(--surface)]',
+                  isAway(dmPeer.presenceStatus)
+                    ? 'bg-[var(--muted)]'
+                    : 'bg-[var(--success)]',
+                )}
+                aria-hidden
+              />
+            </span>
           ) : (
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[var(--radius-md)] bg-[var(--primary-soft)] text-[var(--primary)]">
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[var(--radius-md)] bg-[var(--primary-soft)] text-[var(--primary)]">
               <ChannelIcon className="h-4 w-4" />
             </div>
           )}
           <div className="min-w-0">
-            <h2 className="truncate text-base font-semibold text-[var(--foreground)]">
+            <h2 className="truncate text-sm font-semibold text-[var(--foreground)] sm:text-base">
               {showHashPrefix ? '#' : ''}
               {label}
             </h2>
-            {breadcrumb.length > 0 ? (
+            {dmSubtitle ? (
+              <p className="mt-0.5 truncate text-xs text-[var(--muted)]">
+                {dmSubtitle}
+              </p>
+            ) : breadcrumb.length > 0 ? (
               <p className="mt-0.5 truncate text-xs text-[var(--muted)]">
                 {breadcrumb.join(' › ')}
               </p>
@@ -182,26 +216,38 @@ export function ChannelHeader({
 
         <div className="flex flex-wrap items-center gap-2">
           {previewMembers.length > 0 ? (
-            <div className="hidden items-center sm:flex">
-              {previewMembers.map((member, index) => (
-                <span
-                  key={member.id}
-                  className={cn(
-                    'relative inline-flex rounded-full ring-2 ring-[var(--surface)]',
-                    index > 0 && '-ml-2',
-                  )}
-                  title={member.fullName}
-                >
-                  <UserAvatar
-                    user={{
-                      id: member.id,
-                      fullName: member.fullName,
-                      avatarUpdatedAt: member.avatarUpdatedAt,
-                    }}
-                    size="xs"
-                  />
-                </span>
-              ))}
+            <div className="hidden items-center lg:flex">
+              {previewMembers.map((member, index) => {
+                const title = `${member.fullName} · ${presenceSubtitle(member)}`;
+                return (
+                  <span
+                    key={member.id}
+                    className={cn(
+                      'relative inline-flex rounded-full ring-2 ring-[var(--surface)]',
+                      index > 0 && '-ml-2',
+                    )}
+                    title={title}
+                  >
+                    <UserAvatar
+                      user={{
+                        id: member.id,
+                        fullName: member.fullName,
+                        avatarUpdatedAt: member.avatarUpdatedAt,
+                      }}
+                      size="xs"
+                    />
+                    <span
+                      className={cn(
+                        'absolute -bottom-0.5 -right-0.5 h-2 w-2 rounded-full border border-[var(--surface)]',
+                        isAway(member.presenceStatus)
+                          ? 'bg-[var(--muted)]'
+                          : 'bg-[var(--success)]',
+                      )}
+                      aria-hidden
+                    />
+                  </span>
+                );
+              })}
               {extraMembers > 0 ? (
                 <span className="-ml-2 inline-flex h-6 min-w-6 items-center justify-center rounded-full bg-[var(--surface-muted)] px-1.5 text-[10px] font-semibold text-[var(--muted)] ring-2 ring-[var(--surface)]">
                   +{extraMembers}
@@ -234,38 +280,34 @@ export function ChannelHeader({
             </HeaderIconButton>
           ) : null}
 
-          <DropdownMenu
-            trigger={
-              <Button type="button" variant="ghost" size="sm" aria-label="More actions">
-                <MoreVertical className="h-4 w-4" />
-              </Button>
-            }
-          >
-            <DropdownMenuItem onClick={onStartHuddle}>
-              <Headphones className="h-4 w-4" />
-              Start huddle
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={onCopyHuddleLink} disabled={!huddleLink}>
-              <Copy className="h-4 w-4" />
-              Copy huddle link
-            </DropdownMenuItem>
-            {onNotificationChange ? (
-              <div className="border-t border-[var(--border)] px-2 py-1">
-                <ChannelNotificationMenu
-                  preference={notificationPreference}
-                  isUpdating={isUpdatingNotification}
-                  onChange={onNotificationChange}
-                />
-              </div>
-            ) : null}
-          </DropdownMenu>
+          {CHAT_HUDDLE_ENABLED ? (
+            <>
+              <HeaderIconButton label="Start huddle" onClick={onStartHuddle}>
+                <Headphones className="h-4 w-4" />
+              </HeaderIconButton>
+              <HeaderIconButton
+                label="Copy huddle link"
+                onClick={onCopyHuddleLink}
+              >
+                <Copy className="h-4 w-4" />
+              </HeaderIconButton>
+            </>
+          ) : null}
+
+          {onNotificationChange ? (
+            <ChannelNotificationMenu
+              preference={notificationPreference}
+              isUpdating={isUpdatingNotification}
+              onChange={onNotificationChange}
+            />
+          ) : null}
         </div>
       </div>
 
       <Tabs
         activeId={activeTab}
         onChange={(id) => onTabChange(id as ChannelTab)}
-        className="px-4 sm:px-5"
+        className="chat-inset-x"
         items={[
           { id: 'messages', label: 'Messages' },
           { id: 'pins', label: 'Pins' },
@@ -294,7 +336,7 @@ function HeaderIconButton({
       onClick={onClick}
       aria-label={label}
       title={label}
-      className="group relative inline-flex h-8 w-8 items-center justify-center rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface)] text-[var(--muted)] transition-colors hover:bg-[var(--surface-muted)] hover:text-[var(--foreground)]"
+      className="group relative inline-flex h-11 w-11 items-center justify-center rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface)] text-[var(--muted)] transition-colors hover:bg-[var(--surface-muted)] hover:text-[var(--foreground)] lg:h-8 lg:w-8"
       {...props}
     >
       {children}
@@ -318,13 +360,13 @@ export function ChannelHeaderSimple({
   channelContext: ChannelContext | null;
 }) {
   return (
-    <div className="border-b border-[var(--border)] px-4 py-4 sm:px-6">
-      <div className="flex items-center gap-3">
-        <div className="flex h-10 w-10 items-center justify-center rounded-[var(--radius-md)] bg-[var(--primary-soft)] text-[var(--primary)]">
+    <div className="chat-inset border-b border-[var(--border)]">
+      <div className="flex items-center gap-2.5">
+        <div className="flex h-9 w-9 items-center justify-center rounded-[var(--radius-md)] bg-[var(--primary-soft)] text-[var(--primary)]">
           <Hash className="h-4 w-4" />
         </div>
         <div>
-          <h2 className="text-base font-semibold text-[var(--foreground)]">
+          <h2 className="text-sm font-semibold text-[var(--foreground)] sm:text-base">
             #{channelName}
           </h2>
           <p className={cn('text-xs capitalize text-[var(--muted)]')}>

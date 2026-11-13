@@ -2,18 +2,54 @@
   "id": "/",
   "name": "Colabdeck",
   "short_name": "Colabdeck",
-  "description": "Chat, orders, files, and delivery for the studio.",
+  "description": "Colabdeck workspace for chat, projects, files, and finance",
   "lang": "en",
   "dir": "ltr",
-  "start_url": "/dashboard",
+  "start_url": "/login",
   "scope": "/",
   "display": "standalone",
   "display_override": ["standalone", "minimal-ui", "browser"],
   "orientation": "any",
-  "background_color": "#0f1115",
-  "theme_color": "#3d3adf",
+  "background_color": "#1d2353",
+  "theme_color": "#1d2353",
   "categories": ["business", "productivity"],
   "icons": [
+    {
+      "src": "/icons/icon-72.png",
+      "sizes": "72x72",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-96.png",
+      "sizes": "96x96",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-128.png",
+      "sizes": "128x128",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-144.png",
+      "sizes": "144x144",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-152.png",
+      "sizes": "152x152",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-180.png",
+      "sizes": "180x180",
+      "type": "image/png",
+      "purpose": "any"
+    },
     {
       "src": "/icons/icon-192.png",
       "sizes": "192x192",

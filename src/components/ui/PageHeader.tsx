@@ -18,12 +18,12 @@ export function PageHeader({
   className,
 }: PageHeaderProps) {
   return (
-    <div className={cn('mb-4 space-y-3 animate-fade-in sm:mb-6 sm:space-y-4', className)}>
+    <div className={cn('mb-3 space-y-2 animate-fade-in sm:mb-5 sm:space-y-3', className)}>
       {breadcrumbs ? <Breadcrumbs items={breadcrumbs} /> : null}
 
       <div className="flex flex-col gap-3 sm:gap-4 lg:flex-row lg:items-start lg:justify-between">
         <div className="min-w-0">
-          <h1 className="truncate text-lg font-semibold tracking-tight text-[var(--foreground)] sm:text-xl md:text-2xl">
+          <h1 className="break-words text-base font-semibold tracking-tight text-[var(--foreground)] sm:text-xl">
             {title}
           </h1>
           {description ? (

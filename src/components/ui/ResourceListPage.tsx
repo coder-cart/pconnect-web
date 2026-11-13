@@ -138,20 +138,20 @@ export function ResourceListPage<T>({
         />
       ) : null}
 
-      <Card padding="sm" className="mb-4">
-        <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
+      <Card padding="sm" className="mb-3">
+        <div className="flex items-center gap-2">
           <SearchInput
             placeholder={searchPlaceholder}
             value={searchQuery}
             onChange={(event) => setSearchQuery(event.target.value)}
-            containerClassName="flex-1"
+            containerClassName="min-w-0 flex-1"
           />
 
-          <div className="relative w-full lg:w-auto">
+          <div className="relative shrink-0">
             <Button
               variant="secondary"
-              size="md"
-              className="w-full lg:w-auto"
+              size="sm"
+              className="max-w-[9.5rem] sm:max-w-none"
               onClick={() => setFilterOpen((value) => !value)}
             >
               <Filter className="h-4 w-4" />
@@ -216,7 +216,7 @@ export function ResourceListPage<T>({
             {filteredItems.map((item) => (
               <li
                 key={getItemKey(item)}
-                className="px-4 py-3 transition-colors hover:bg-[var(--surface-muted)]"
+                className="px-3 py-2.5 transition-colors hover:bg-[var(--surface-muted)] sm:px-4 sm:py-3"
               >
                 {renderItem(item)}
               </li>
@@ -230,7 +230,7 @@ export function ResourceListPage<T>({
       !errorMessage &&
       filteredItems.length > 0 &&
       layout === 'grid' ? (
-        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
           {filteredItems.map((item) => (
             <div key={getItemKey(item)}>
               {renderGridItem ? renderGridItem(item) : renderItem(item)}

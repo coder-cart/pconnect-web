@@ -1,6 +1,5 @@
 'use client';
 
-import Link from 'next/link';
 import {
   Building2,
   CreditCard,
@@ -18,13 +17,16 @@ import {
 export function AdminToolsMenu({
   showSettings,
   showStaff,
+  onNavigate,
 }: {
   showSettings: boolean;
   showStaff: boolean;
+  onNavigate?: () => void;
 }) {
   return (
     <DropdownMenu
       align="left"
+      side="top"
       menuClassName="min-w-60"
       trigger={
         <button
@@ -40,17 +42,15 @@ export function AdminToolsMenu({
       <div className="flex items-center justify-between px-3 py-2 text-sm">
         <div>
           <p className="text-xs text-[var(--muted)]">Current plan</p>
-          <p className="font-semibold">Free</p>
+          <p className="font-semibold text-[var(--foreground)]">Free</p>
         </div>
         <span className="text-xs text-[var(--primary)]">Manage billing</span>
       </div>
       <DropdownMenuSeparator />
       {showSettings ? (
-        <DropdownMenuItem>
-          <Link href="/admin" className="flex items-center gap-2">
-            <Building2 className="h-4 w-4" />
-            Workspace settings
-          </Link>
+        <DropdownMenuItem href="/admin" onClick={onNavigate}>
+          <Building2 className="h-4 w-4" />
+          Workspace settings
         </DropdownMenuItem>
       ) : null}
       <DropdownMenuItem disabled>
@@ -59,11 +59,9 @@ export function AdminToolsMenu({
       </DropdownMenuItem>
       <DropdownMenuSeparator />
       {showStaff ? (
-        <DropdownMenuItem>
-          <Link href="/staff" className="flex items-center gap-2">
-            <Users className="h-4 w-4" />
-            Manage staff
-          </Link>
+        <DropdownMenuItem href="/staff" onClick={onNavigate}>
+          <Users className="h-4 w-4" />
+          Manage staff
         </DropdownMenuItem>
       ) : null}
       <DropdownMenuItem disabled>

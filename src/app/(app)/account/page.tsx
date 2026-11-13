@@ -45,6 +45,7 @@ export default function AccountProfilePage() {
   const { user, refreshUser } = useWorkspace();
   const {
     pushStatus,
+    sendTestPush,
     pushBusy,
     enablePush,
     disablePush,
@@ -542,7 +543,8 @@ export default function AccountProfilePage() {
         open={Boolean(logoCropSrc)}
         imageSrc={logoCropSrc}
         title="Adjust company logo"
-        description="Crop, zoom, and reposition. Cancel to discard changes."
+        description="Choose a shape that matches your logo (square or wide), then crop and save."
+        mode="logo"
         isSaving={logoBusy}
         onClose={closeLogoCrop}
         onSave={handleLogoSave}
@@ -586,6 +588,16 @@ export default function AccountProfilePage() {
                     : 'Enable device alerts'}
               </Button>
             )}
+            {pushStatus === 'on' ? (
+              <Button
+                size="sm"
+                variant="secondary"
+                disabled={pushBusy}
+                onClick={() => void sendTestPush()}
+              >
+                Send system push test
+              </Button>
+            ) : null}
             <Button
               size="sm"
               variant="secondary"
