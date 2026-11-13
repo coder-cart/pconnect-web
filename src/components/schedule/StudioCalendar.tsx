@@ -10,6 +10,7 @@ export interface CalendarEvent {
   endsAt: string;
   status: string;
   location?: string | null;
+  description?: string | null;
   clientOrganization?: { id: string; name: string } | null;
   order?: { id: string; code: string; name: string } | null;
   assignees: Array<{ user: { id: string; fullName: string } }>;
@@ -108,17 +109,13 @@ export function StudioCalendar({
               eventTouchesDay(event, day),
             );
             const inMonth = day.getMonth() === anchor.getMonth();
-            return (
-              <button
-                key={day.toISOString()}
-                type="button"
-                onClick={() => onSelectSlot?.(day)}
-                className={cn(
-                  'min-h-[7.5rem] border-b border-r border-[var(--border)] p-1.5 text-left align-top',
-                  !inMonth && 'bg-[var(--surface-muted)]/50 text-[var(--muted)]',
-                  sameDay(day, today) && 'bg-[var(--primary-soft)]/40',
-                )}
-              >
+            const cellClassName = cn(
+              'min-h-[7.5rem] border-b border-r border-[var(--border)] p-1.5 text-left align-top',
+              !inMonth && 'bg-[var(--surface-muted)]/50 text-[var(--muted)]',
+              sameDay(day, today) && 'bg-[var(--primary-soft)]/40',
+            );
+            const dayBody = (
+              <>
                 <span
                   className={cn(
                     'inline-flex h-6 w-6 items-center justify-center rounded-full text-xs font-semibold',
@@ -153,7 +150,24 @@ export function StudioCalendar({
                     </p>
                   ) : null}
                 </div>
-              </button>
+              </>
+            );
+            if (onSelectSlot) {
+              return (
+                <button
+                  key={day.toISOString()}
+                  type="button"
+                  onClick={() => onSelectSlot(day)}
+                  className={cellClassName}
+                >
+                  {dayBody}
+                </button>
+              );
+            }
+            return (
+              <div key={day.toISOString()} className={cellClassName}>
+                {dayBody}
+              </div>
             );
           })}
         </div>
@@ -199,13 +213,19 @@ export function StudioCalendar({
               >
                 <div className="space-y-1.5">
                   {dayEvents.length === 0 ? (
-                    <button
-                      type="button"
-                      onClick={() => onSelectSlot?.(day)}
-                      className="w-full rounded border border-dashed border-[var(--border)] px-2 py-6 text-xs text-[var(--muted)] hover:bg-[var(--surface-muted)]"
-                    >
-                      Add event
-                    </button>
+                    onSelectSlot ? (
+                      <button
+                        type="button"
+                        onClick={() => onSelectSlot(day)}
+                        className="w-full rounded border border-dashed border-[var(--border)] px-2 py-6 text-xs text-[var(--muted)] hover:bg-[var(--surface-muted)]"
+                      >
+                        Add event
+                      </button>
+                    ) : (
+                      <p className="px-2 py-6 text-center text-xs text-[var(--muted)]">
+                        No events
+                      </p>
+                    )
                   ) : (
                     dayEvents.map((event) => (
                       <button
@@ -270,16 +290,20 @@ export function StudioCalendar({
               <p className="pt-1 text-xs text-[var(--muted)]">{hourLabel(hour)}</p>
               <div className="min-h-[2.5rem] space-y-1">
                 {slotEvents.length === 0 ? (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const slot = new Date(anchor);
-                      slot.setHours(hour, 0, 0, 0);
-                      onSelectSlot?.(slot);
-                    }}
-                    className="h-full w-full rounded border border-transparent hover:border-dashed hover:border-[var(--border)]"
-                    aria-label={`Add event at ${hourLabel(hour)}`}
-                  />
+                  onSelectSlot ? (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const slot = new Date(anchor);
+                        slot.setHours(hour, 0, 0, 0);
+                        onSelectSlot(slot);
+                      }}
+                      className="h-full w-full rounded border border-transparent hover:border-dashed hover:border-[var(--border)]"
+                      aria-label={`Add event at ${hourLabel(hour)}`}
+                    />
+                  ) : (
+                    <div className="h-full w-full" />
+                  )
                 ) : (
                   slotEvents.map((event) => (
                     <button

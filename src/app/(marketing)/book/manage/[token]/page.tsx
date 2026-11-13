@@ -15,36 +15,52 @@ function statusLabel(status: string) {
   return status.replaceAll('_', ' ');
 }
 
+function paramValue(value: string | string[] | undefined) {
+  if (Array.isArray(value)) return value[0] ?? '';
+  return value ?? '';
+}
+
 export default function ManageBookingPage() {
   const params = useParams<{ token: string }>();
-  const token = params.token;
+  const token = paramValue(params.token);
   const [request, setRequest] = useState<GuestBookingRequest | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isBusy, setIsBusy] = useState(false);
 
   async function reload() {
-    const data = await fetchManagedBooking(token);
-    setRequest(data);
+    setIsBusy(true);
+    setErrorMessage(null);
+    try {
+      const data = await fetchManagedBooking(token);
+      setRequest(data);
+    } catch (error) {
+      setErrorMessage(
+        error instanceof Error ? error.message : 'Unable to refresh',
+      );
+    } finally {
+      setIsBusy(false);
+    }
   }
 
   useEffect(() => {
     let cancelled = false;
-    void Promise.resolve().then(async () => {
-      setIsLoading(true);
-      try {
-        const data = await fetchManagedBooking(token);
+    setIsLoading(true);
+    setRequest(null);
+    void fetchManagedBooking(token)
+      .then((data) => {
         if (!cancelled) setRequest(data);
-      } catch (error) {
+      })
+      .catch((error: unknown) => {
         if (!cancelled) {
           setErrorMessage(
             error instanceof Error ? error.message : 'Request not found',
           );
         }
-      } finally {
+      })
+      .finally(() => {
         if (!cancelled) setIsLoading(false);
-      }
-    });
+      });
     return () => {
       cancelled = true;
     };

@@ -188,6 +188,25 @@ export default function TasksPage() {
 
   const calendarTasks = activeTab === 'calendar' ? filteredTasks : [];
 
+  const assigneeFilterLabel = useMemo(() => {
+    if (!assigneeFilter) return null;
+    const match = tasks.find(
+      (task) =>
+        task.assigneeUserId === assigneeFilter ||
+        task.assignee?.id === assigneeFilter,
+    );
+    return match?.assignee?.fullName ?? 'Selected teammate';
+  }, [assigneeFilter, tasks]);
+
+  function clearAssigneeFilter() {
+    setAssigneeFilter('');
+    if (typeof window !== 'undefined') {
+      const url = new URL(window.location.href);
+      url.searchParams.delete('assigneeUserId');
+      window.history.replaceState({}, '', `${url.pathname}${url.search}`);
+    }
+  }
+
   return (
     <div className="space-y-4">
       <PageHeader
@@ -226,6 +245,20 @@ export default function TasksPage() {
             : []),
         ]}
       />
+
+      {assigneeFilter ? (
+        <Card
+          padding="sm"
+          className="flex flex-wrap items-center justify-between gap-2"
+        >
+          <p className="text-sm text-[var(--muted)]">
+            Filtered by {assigneeFilterLabel}.
+          </p>
+          <Button size="sm" variant="secondary" onClick={clearAssigneeFilter}>
+            Clear filter
+          </Button>
+        </Card>
+      ) : null}
 
       {activeTab === 'templates' ? (
         <TaskTemplatesPanel canManage={canManageTemplates} />

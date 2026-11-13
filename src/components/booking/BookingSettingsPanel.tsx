@@ -31,10 +31,12 @@ export function BookingSettingsPanel({
 }: BookingSettingsPanelProps) {
   const [settings, setSettings] = useState<BookingSettings | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [copied, setCopied] = useState(false);
 
   async function load() {
+    setIsLoading(true);
     setErrorMessage(null);
     try {
       const response = await apiRequest<ApiResponse<BookingSettings>>(
@@ -42,11 +44,14 @@ export function BookingSettingsPanel({
       );
       setSettings(response.data);
     } catch (error) {
+      setSettings(null);
       setErrorMessage(
         error instanceof Error
           ? error.message
           : 'Unable to load booking settings',
       );
+    } finally {
+      setIsLoading(false);
     }
   }
 
@@ -94,12 +99,25 @@ export function BookingSettingsPanel({
     }
   }
 
-  if (!settings) {
+  if (isLoading) {
     return (
       <Card padding="sm">
         <p className="text-sm text-[var(--muted)]">
-          {errorMessage ?? 'Loading public booking settings…'}
+          Loading public booking settings…
         </p>
+      </Card>
+    );
+  }
+
+  if (!settings) {
+    return (
+      <Card padding="sm" className="space-y-3">
+        <p className="text-sm text-[var(--danger)]">
+          {errorMessage ?? 'Unable to load booking settings'}
+        </p>
+        <Button size="sm" variant="secondary" onClick={() => void load()}>
+          Retry
+        </Button>
       </Card>
     );
   }

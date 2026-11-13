@@ -45,7 +45,8 @@ export function BookingRequestsPanel({
   const [proposeStartsAt, setProposeStartsAt] = useState('');
   const [proposeEndsAt, setProposeEndsAt] = useState('');
 
-  async function load() {
+  async function load(options?: { quiet?: boolean }) {
+    if (!options?.quiet) setIsLoading(true);
     setErrorMessage(null);
     try {
       const response = await apiRequest<
@@ -73,7 +74,7 @@ export function BookingRequestsPanel({
     setBusyId(id);
     try {
       await apiRequest(`/booking-requests/${id}/approve`, { method: 'POST' });
-      await load();
+      await load({ quiet: true });
       onChanged?.();
     } catch (error) {
       setErrorMessage(
@@ -91,7 +92,7 @@ export function BookingRequestsPanel({
         method: 'POST',
         body: JSON.stringify({}),
       });
-      await load();
+      await load({ quiet: true });
       onChanged?.();
     } catch (error) {
       setErrorMessage(
@@ -114,7 +115,7 @@ export function BookingRequestsPanel({
         }),
       });
       setProposeForId(null);
-      await load();
+      await load({ quiet: true });
       onChanged?.();
     } catch (error) {
       setErrorMessage(
