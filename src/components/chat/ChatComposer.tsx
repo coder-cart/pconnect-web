@@ -56,11 +56,13 @@ import {
 } from '@/lib/chatMarkdown';
 import {
   collectClipboardImageFiles,
+  ensureImageFileType,
   prepareChatImageFile,
   screenshotFileName,
   validateChatImageFile,
 } from '@/lib/chat-image-upload';
 import { API_BASE_URL, AUTH_TOKEN_KEY } from '@/lib/config';
+import { prefersGalleryImagePicker } from '@/lib/device';
 import {
   AnnotatableFile,
   IMAGE_ANNOTATION_ACCEPT,
@@ -521,11 +523,19 @@ export function ChatComposer({
       const files = Array.from(fileList);
       for (let index = 0; index < files.length; index += 1) {
         let file = files[index];
+        const treatAsImage =
+          file.type.startsWith('image/') ||
+          Boolean(options?.fromClipboard) ||
+          purpose === 'annotation';
 
-        if (file.type.startsWith('image/')) {
+        if (treatAsImage) {
+          file = await ensureImageFileType(file);
           if (
             options?.fromClipboard &&
-            (!file.name || file.name === 'image.png' || file.name === 'image.jpg')
+            (!file.name ||
+              file.name === 'image.png' ||
+              file.name === 'image.jpg' ||
+              !/\.[^.]+$/.test(file.name))
           ) {
             file = new File([file], screenshotFileName(index), {
               type: file.type || 'image/png',
@@ -648,12 +658,25 @@ export function ChatComposer({
   }
 
   function handleEditorPaste(event: ClipboardEvent<HTMLDivElement>) {
-    if (!CHAT_MEDIA_UPLOADS_ENABLED || !channelId || hasUploadingAttachments) {
+    if (!CHAT_MEDIA_UPLOADS_ENABLED || !channelId) {
       return;
     }
 
     const imageFiles = collectClipboardImageFiles(event.clipboardData);
     if (imageFiles.length === 0) {
+      // Android/PWA often cannot paste images — guide users to the gallery picker
+      // instead of leaving a cryptic browser clipboard error.
+      if (prefersGalleryImagePicker()) {
+        const hasFileItem = Array.from(
+          event.clipboardData?.items ?? [],
+        ).some((item) => item.kind === 'file');
+        if (hasFileItem) {
+          event.preventDefault();
+          setErrorMessage(
+            'Image paste is limited on this device. Use the attachment button to choose photos from your gallery.',
+          );
+        }
+      }
       return;
     }
 
@@ -846,7 +869,7 @@ export function ChatComposer({
   return (
     <form
       onSubmit={(event) => void handleSubmit(event)}
-      className="flex max-h-[min(46vh,420px)] flex-col gap-2"
+      className="flex max-h-[min(52vh,480px)] flex-col gap-2"
     >
       {imageAttachments.length > 0 ? (
         <div className="shrink-0 space-y-1.5">
@@ -858,7 +881,7 @@ export function ChatComposer({
               <span className="hidden sm:inline"> · tap to preview</span>
             </p>
           </div>
-          <div className="max-h-[112px] overflow-x-auto overflow-y-hidden pb-0.5">
+          <div className="max-h-[100px] overflow-x-auto overflow-y-hidden pb-0.5">
             <div className="flex w-max gap-2">
               {imageAttachments.map((attachment, index) => (
                 <div
@@ -1161,7 +1184,9 @@ export function ChatComposer({
               {CHAT_MEDIA_UPLOADS_ENABLED ? (
                 <DropdownMenuItem onClick={() => fileInputRef.current?.click()}>
                   <Paperclip className="h-4 w-4" />
-                  Upload image / file
+                  {prefersGalleryImagePicker()
+                    ? 'Choose from gallery / files'
+                    : 'Upload image / file'}
                 </DropdownMenuItem>
               ) : null}
               {CHAT_MEDIA_UPLOADS_ENABLED ? (

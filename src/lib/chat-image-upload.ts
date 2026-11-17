@@ -62,6 +62,9 @@ function canvasToBlob(
  * upload limit while keeping quality reasonable for screenshots.
  */
 export async function prepareChatImageFile(file: File): Promise<File> {
+  const normalized = await ensureImageFileType(file);
+  file = normalized;
+
   if (!file.type.startsWith('image/')) {
     return file;
   }
@@ -143,13 +146,32 @@ export async function prepareChatImageFile(file: File): Promise<File> {
  * with different `lastModified` values — dedupe by type+size within the paste,
  * and prefer `files` when present so we do not double-attach.
  */
+function isLikelyClipboardImageFile(file: File) {
+  if (file.type.startsWith('image/')) return true;
+  // Some Android / Windows pastes use empty or generic MIME with an image name.
+  if (
+    (!file.type ||
+      file.type === 'application/octet-stream' ||
+      file.type === 'binary/octet-stream') &&
+    /\.(png|jpe?g|webp|gif)$/i.test(file.name || '')
+  ) {
+    return true;
+  }
+  // Untitled clipboard blobs with no extension still often carry image MIME later;
+  // accept empty-type files under a reasonable screenshot size for paste only.
+  if (!file.type && file.size > 0 && file.size <= IMAGE_ANNOTATION_MAX_BYTES) {
+    return true;
+  }
+  return false;
+}
+
 export function collectClipboardImageFiles(
   clipboardData: DataTransfer | null,
 ): File[] {
   if (!clipboardData) return [];
 
-  const fromFiles = Array.from(clipboardData.files ?? []).filter((file) =>
-    file.type.startsWith('image/'),
+  const fromFiles = Array.from(clipboardData.files ?? []).filter(
+    isLikelyClipboardImageFile,
   );
 
   if (fromFiles.length > 0) {
@@ -158,13 +180,68 @@ export function collectClipboardImageFiles(
 
   const fromItems: File[] = [];
   for (const item of Array.from(clipboardData.items ?? [])) {
-    if (item.kind === 'file' && item.type.startsWith('image/')) {
-      const file = item.getAsFile();
-      if (file) fromItems.push(file);
+    if (item.kind !== 'file') continue;
+    const typeLooksImage =
+      item.type.startsWith('image/') ||
+      !item.type ||
+      item.type === 'application/octet-stream';
+    if (!typeLooksImage) continue;
+    const file = item.getAsFile();
+    if (file && isLikelyClipboardImageFile(file)) {
+      fromItems.push(file);
     }
   }
 
   return dedupeClipboardImages(fromItems);
+}
+
+/** Normalize empty/generic clipboard MIME so preview + upload treat it as an image. */
+export async function ensureImageFileType(file: File): Promise<File> {
+  if (file.type.startsWith('image/')) {
+    return file;
+  }
+
+  const header = new Uint8Array(await file.slice(0, 12).arrayBuffer());
+  const sniffed = sniffImageMime(header);
+  if (!sniffed) {
+    // Fall back so prepareChatImageFile / canvas can still attempt decode.
+    return new File([file], file.name || 'screenshot.png', {
+      type: 'image/png',
+      lastModified: file.lastModified || Date.now(),
+    });
+  }
+
+  return new File([file], file.name || `screenshot.${extensionForMime(sniffed)}`, {
+    type: sniffed,
+    lastModified: file.lastModified || Date.now(),
+  });
+}
+
+function sniffImageMime(bytes: Uint8Array): string | null {
+  if (
+    bytes.length >= 8 &&
+    bytes[0] === 0x89 &&
+    bytes[1] === 0x50 &&
+    bytes[2] === 0x4e &&
+    bytes[3] === 0x47
+  ) {
+    return 'image/png';
+  }
+  if (bytes.length >= 3 && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) {
+    return 'image/jpeg';
+  }
+  if (
+    bytes.length >= 12 &&
+    String.fromCharCode(...bytes.slice(0, 4)) === 'RIFF' &&
+    String.fromCharCode(...bytes.slice(8, 12)) === 'WEBP'
+  ) {
+    return 'image/webp';
+  }
+  if (bytes.length >= 6) {
+    const header = String.fromCharCode(...bytes.slice(0, 6));
+    if (header === 'GIF87a' || header === 'GIF89a') return 'image/gif';
+  }
+  return null;
 }
 
 function dedupeClipboardImages(files: File[]) {

@@ -25,6 +25,7 @@ interface ThreadPanelProps {
   isInternalUser: boolean;
   members: ChannelMemberOption[];
   canManageChannel: boolean;
+  canDeleteForEveryone?: boolean;
   isLoading: boolean;
   isSending: boolean;
   onClose: () => void;
@@ -41,7 +42,7 @@ interface ThreadPanelProps {
   }) => Promise<void>;
   onReact: (messageId: string, emoji: string) => Promise<void>;
   onEdit: (messageId: string, body: string) => Promise<void>;
-  onDelete: (messageId: string) => Promise<void>;
+  onDelete: (messageId: string) => void;
   onPin: (messageId: string) => Promise<void>;
   onCopyMessage: (body: string) => void;
   onCopyLink: (channelId: string, messageId: string) => void;
@@ -59,6 +60,7 @@ export function ThreadPanel({
   isInternalUser,
   members,
   canManageChannel,
+  canDeleteForEveryone = false,
   isLoading,
   isSending,
   onClose,
@@ -160,6 +162,7 @@ export function ThreadPanel({
                 channelId={channelId}
                 currentUserId={currentUserId}
                 canManageChannel={canManageChannel}
+                canDeleteForEveryone={canDeleteForEveryone}
                 memberNames={memberNames}
                 onReply={() => {}}
                 onReact={onReact}

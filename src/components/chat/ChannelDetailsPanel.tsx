@@ -2,6 +2,8 @@
 
 import { type ReactNode, useEffect, useMemo } from 'react';
 import {
+  Eraser,
+  EyeOff,
   FileText,
   Hash,
   Link2,
@@ -46,6 +48,10 @@ interface ChannelDetailsPanelProps {
   canDeleteGroup?: boolean;
   onDeleteGroup?: () => void;
   isDeletingGroup?: boolean;
+  onClearChat?: () => void;
+  isClearingChat?: boolean;
+  canHideConversation?: boolean;
+  onHideConversation?: () => void;
   onJumpToPin: (messageId: string) => void;
   onClose: () => void;
   className?: string;
@@ -87,6 +93,10 @@ export function ChannelDetailsPanel({
   canDeleteGroup = false,
   onDeleteGroup,
   isDeletingGroup = false,
+  onClearChat,
+  isClearingChat = false,
+  canHideConversation = false,
+  onHideConversation,
   onJumpToPin,
   onClose,
   className,
@@ -223,7 +233,10 @@ export function ChannelDetailsPanel({
           />
         </section>
 
-        {canInvite || (canDeleteGroup && onDeleteGroup) ? (
+        {canInvite ||
+        (canDeleteGroup && onDeleteGroup) ||
+        onClearChat ||
+        (canHideConversation && onHideConversation) ? (
           <section className="space-y-2">
             {canInvite ? (
               <Button
@@ -235,6 +248,31 @@ export function ChannelDetailsPanel({
               >
                 <Plus className="h-4 w-4" />
                 Add teammates
+              </Button>
+            ) : null}
+            {onClearChat ? (
+              <Button
+                type="button"
+                size="sm"
+                variant="secondary"
+                className="w-full"
+                disabled={isClearingChat}
+                onClick={onClearChat}
+              >
+                <Eraser className="h-4 w-4" />
+                {isClearingChat ? 'Clearing…' : 'Clear chat for me'}
+              </Button>
+            ) : null}
+            {canHideConversation && onHideConversation ? (
+              <Button
+                type="button"
+                size="sm"
+                variant="secondary"
+                className="w-full"
+                onClick={onHideConversation}
+              >
+                <EyeOff className="h-4 w-4" />
+                Remove from my list
               </Button>
             ) : null}
             {canDeleteGroup && onDeleteGroup ? (

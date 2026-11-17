@@ -18,6 +18,7 @@ interface MessageListProps {
   currentUserId: string;
   unreadSince?: string | null;
   canManageChannel: boolean;
+  canDeleteForEveryone?: boolean;
   memberNames?: ReactionMemberDirectory;
   isLoading: boolean;
   activeThreadMessageId: string | null;
@@ -25,7 +26,7 @@ interface MessageListProps {
   onReply: (messageId: string) => void;
   onReact: (messageId: string, emoji: string) => Promise<void>;
   onEdit: (messageId: string, body: string) => Promise<void>;
-  onDelete: (messageId: string) => Promise<void>;
+  onDelete: (messageId: string) => void;
   onPin: (messageId: string) => Promise<void>;
   onCopyMessage: (body: string) => void;
   onCopyLink: (channelId: string, messageId: string) => void;
@@ -50,6 +51,7 @@ export function MessageList({
   currentUserId,
   unreadSince = null,
   canManageChannel,
+  canDeleteForEveryone = false,
   memberNames,
   isLoading,
   activeThreadMessageId,
@@ -108,6 +110,7 @@ export function MessageList({
           channelId={channelId}
           currentUserId={currentUserId}
           canManageChannel={canManageChannel}
+          canDeleteForEveryone={canDeleteForEveryone}
           memberNames={memberNames}
           unread={unread}
           isActive={activeThreadMessageId === entry.message.id}

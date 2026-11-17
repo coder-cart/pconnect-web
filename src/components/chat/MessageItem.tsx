@@ -25,6 +25,7 @@ import {
   ContextMenuSeparator,
 } from '@/components/ui/ContextMenu';
 import { ChatMessage } from '@/lib/chat-types';
+import { canDeleteMessageForEveryone } from '@/lib/chat-message-permissions';
 import { formatMessageTime } from '@/lib/formatMessageDate';
 import { useViewerTimeZone } from '@/hooks/useViewerTimeZone';
 import { cn } from '@/lib/cn';
@@ -34,6 +35,8 @@ interface MessageItemProps {
   channelId: string;
   currentUserId: string;
   canManageChannel: boolean;
+  /** Owner/Admin may delete others' messages for everyone. */
+  canDeleteForEveryone?: boolean;
   memberNames?: ReactionMemberDirectory;
   isActive?: boolean;
   unread?: boolean;
@@ -41,7 +44,7 @@ interface MessageItemProps {
   onReply: (messageId: string) => void;
   onReact: (messageId: string, emoji: string) => Promise<void>;
   onEdit: (messageId: string, body: string) => Promise<void>;
-  onDelete: (messageId: string) => Promise<void>;
+  onDelete: (messageId: string) => void;
   onPin: (messageId: string) => Promise<void>;
   onCopyMessage: (body: string) => void;
   onCopyLink: (channelId: string, messageId: string) => void;
@@ -53,6 +56,7 @@ export function MessageItem({
   channelId,
   currentUserId,
   canManageChannel,
+  canDeleteForEveryone = false,
   memberNames,
   isActive,
   unread = false,
@@ -81,8 +85,11 @@ export function MessageItem({
 
   const isOwnMessage = message.sender.id === currentUserId;
   const canEdit = isOwnMessage && !message.deletedAt;
-  const canDelete =
-    (isOwnMessage || canManageChannel) && !message.deletedAt;
+  const canDelete = !message.deletedAt;
+  const showDeleteForEveryoneLabel = canDeleteMessageForEveryone(message, {
+    currentUserId,
+    isWorkspaceAdmin: canDeleteForEveryone,
+  });
   const showToolbar =
     !editing && (hovered || toolbarLocked || touchActive);
 
@@ -190,10 +197,12 @@ export function MessageItem({
           <ContextMenuItem
             destructive
             shortcut="delete"
-            onClick={() => void onDelete(message.id)}
+            onClick={() => onDelete(message.id)}
           >
             <Trash2 className="h-4 w-4" />
-            Delete message...
+            {showDeleteForEveryoneLabel
+              ? 'Delete message…'
+              : 'Delete for me…'}
           </ContextMenuItem>
         </>
       ) : null}
