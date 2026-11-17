@@ -547,8 +547,6 @@ export function ChatComposer({
           if (validationError) {
             throw new Error(validationError);
           }
-        } else if (purpose === 'annotation') {
-          throw new Error('Only PNG, JPG, JPEG, and WEBP images can be annotated');
         }
 
         const localId = createLocalId();
