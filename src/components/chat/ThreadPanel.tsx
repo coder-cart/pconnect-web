@@ -160,6 +160,7 @@ export function ThreadPanel({
                 key={reply.id}
                 message={reply}
                 channelId={channelId}
+                channelType={channelType}
                 currentUserId={currentUserId}
                 canManageChannel={canManageChannel}
                 canDeleteForEveryone={canDeleteForEveryone}
