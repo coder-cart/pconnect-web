@@ -1471,6 +1471,7 @@ export function ChatWorkspace({
                   <MessageList
                     messages={messages}
                     channelId={selectedChannelId}
+                    channelType={selectedChannel?.type}
                     currentUserId={user.id}
                     unreadSince={unreadSince}
                     canManageChannel={canManageMembers}

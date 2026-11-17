@@ -79,8 +79,22 @@ export interface ChatMessage {
   isThreadReply?: boolean;
   isEdited?: boolean;
   deletedAt?: string | null;
+  deletedByUserId?: string | null;
+  deletedBy?: MessageUser | null;
   attachments?: MessageAttachment[];
   reactions?: MessageReactionSummary[];
+}
+
+/** Tombstone copy: name the deleter in multi-party chats; keep DMs anonymous. */
+export function getDeletedMessageLabel(
+  message: Pick<ChatMessage, 'deletedBy'>,
+  channelType?: string | null,
+): string {
+  const deleterName = message.deletedBy?.fullName?.trim();
+  if (channelType === 'direct' || !deleterName) {
+    return 'This message was deleted.';
+  }
+  return `This message was deleted by ${deleterName}.`;
 }
 
 export interface PendingChannelInvite {

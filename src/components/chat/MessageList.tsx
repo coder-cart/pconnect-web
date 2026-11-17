@@ -15,6 +15,7 @@ import { useViewerTimeZone } from '@/hooks/useViewerTimeZone';
 interface MessageListProps {
   messages: ChatMessage[];
   channelId: string;
+  channelType?: string;
   currentUserId: string;
   unreadSince?: string | null;
   canManageChannel: boolean;
@@ -48,6 +49,7 @@ function isUnreadMessage(
 export function MessageList({
   messages,
   channelId,
+  channelType,
   currentUserId,
   unreadSince = null,
   canManageChannel,
@@ -108,6 +110,7 @@ export function MessageList({
         <MessageItem
           message={entry.message}
           channelId={channelId}
+          channelType={channelType}
           currentUserId={currentUserId}
           canManageChannel={canManageChannel}
           canDeleteForEveryone={canDeleteForEveryone}

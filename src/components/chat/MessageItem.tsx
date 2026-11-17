@@ -24,7 +24,7 @@ import {
   ContextMenuItem,
   ContextMenuSeparator,
 } from '@/components/ui/ContextMenu';
-import { ChatMessage } from '@/lib/chat-types';
+import { ChatMessage, getDeletedMessageLabel } from '@/lib/chat-types';
 import { canDeleteMessageForEveryone } from '@/lib/chat-message-permissions';
 import { formatMessageTime } from '@/lib/formatMessageDate';
 import { useViewerTimeZone } from '@/hooks/useViewerTimeZone';
@@ -33,6 +33,7 @@ import { cn } from '@/lib/cn';
 interface MessageItemProps {
   message: ChatMessage;
   channelId: string;
+  channelType?: string;
   currentUserId: string;
   canManageChannel: boolean;
   /** Owner/Admin may delete others' messages for everyone. */
@@ -54,6 +55,7 @@ interface MessageItemProps {
 export function MessageItem({
   message,
   channelId,
+  channelType,
   currentUserId,
   canManageChannel,
   canDeleteForEveryone = false,
@@ -144,7 +146,7 @@ export function MessageItem({
           highlighted && 'ring-2 ring-[var(--primary)] ring-offset-2',
         )}
       >
-        This message was deleted.
+        {getDeletedMessageLabel(message, channelType)}
       </div>
     );
   }
