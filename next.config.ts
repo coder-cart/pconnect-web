@@ -37,6 +37,7 @@ function buildContentSecurityPolicy(): string {
     "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://js.stripe.com",
     "style-src 'self' 'unsafe-inline'",
     "img-src 'self' data: blob: https://*.stripe.com",
+    "media-src 'self' blob:",
     "font-src 'self' data:",
     `connect-src ${buildConnectSrc()} https://api.stripe.com https://m.stripe.network`,
     "frame-src https://js.stripe.com https://hooks.stripe.com",

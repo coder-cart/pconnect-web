@@ -1,8 +1,24 @@
 'use client';
 
 import { ReactNode, useState } from 'react';
-import { ChevronDown, Hash, Lock, Plus, Search, Users } from 'lucide-react';
+import {
+  ChevronDown,
+  Hash,
+  Lock,
+  Mail,
+  MailOpen,
+  MoreHorizontal,
+  Plus,
+  Search,
+  Trash2,
+  Users,
+} from 'lucide-react';
 import { Button } from '@/components/ui/Button';
+import {
+  ContextMenu,
+  ContextMenuItem,
+  ContextMenuSeparator,
+} from '@/components/ui/ContextMenu';
 import { UserAvatar } from '@/components/ui/UserAvatar';
 import {
   ChatChannel,
@@ -27,6 +43,9 @@ interface ChannelSidebarProps {
   onAddConnection: () => void;
   onStartDirectMessage: () => void;
   onAcceptInvite: (invite: PendingChannelInvite) => void;
+  onHideDm?: (channelId: string) => void;
+  onMarkDmRead?: (channelId: string) => void;
+  onMarkDmUnread?: (channelId: string) => void;
   className?: string;
 }
 
@@ -112,20 +131,32 @@ function ChannelButton({
   isActive,
   emphasize = false,
   onSelect,
+  onHideDm,
+  onMarkDmRead,
+  onMarkDmUnread,
 }: {
   channel: ChatChannel;
   isActive: boolean;
   emphasize?: boolean;
   onSelect: (channelId: string) => void;
+  onHideDm?: (channelId: string) => void;
+  onMarkDmRead?: (channelId: string) => void;
+  onMarkDmUnread?: (channelId: string) => void;
 }) {
   const [hovering, setHovering] = useState(false);
+  const [menuSignal, setMenuSignal] = useState<{
+    x: number;
+    y: number;
+    key: number;
+  } | null>(null);
   const unreadCount = channel.unreadCount ?? 0;
   const label = getChannelLabel(channel);
   const isDirect = channel.type === 'direct';
   const peer = channel.dmPeer ?? null;
   const showTypeIcon = !isDirect;
+  const showDmMenu = isDirect && Boolean(onHideDm || onMarkDmRead || onMarkDmUnread);
 
-  return (
+  const row = (
     <div
       className="relative min-w-0"
       onMouseEnter={() => {
@@ -133,66 +164,132 @@ function ChannelButton({
       }}
       onMouseLeave={() => setHovering(false)}
     >
-      <button
-        type="button"
-        onClick={() => onSelect(channel.id)}
+      <div
         className={cn(
-          'flex min-h-9 w-full min-w-0 items-center gap-2 rounded-[var(--radius-md)] px-2 py-1.5 text-left text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--shell-focus-ring)]',
+          'group flex min-h-9 w-full min-w-0 items-center gap-0.5 rounded-[var(--radius-md)] transition-colors',
           isActive
             ? 'bg-[var(--shell-active)] text-[var(--shell-text)] shadow-[inset_3px_0_0_0_rgba(255,255,255,0.45)]'
             : 'text-[var(--shell-muted)] hover:bg-[var(--shell-hover)] hover:text-[var(--shell-text)]',
         )}
         title={label}
       >
-        {isDirect && peer ? (
-          <DmPeerAvatar peer={peer} />
-        ) : isDirect ? (
-          <UserAvatar
-            user={{
-              id: channel.dmPeerUserId ?? channel.id,
-              fullName: label,
-            }}
-            size="xs"
-            className="shrink-0"
-          />
-        ) : showTypeIcon ? (
-          <span
-            className={cn(
-              'flex h-5 w-5 shrink-0 items-center justify-center',
-              isActive ? 'text-[var(--shell-text)]' : 'text-[var(--shell-muted)]',
-            )}
-            aria-hidden
-          >
-            <ChannelIcon type={channel.type} />
-          </span>
-        ) : null}
-        <span className="min-w-0 flex-1">
-          <span className="flex items-center gap-2">
+        <button
+          type="button"
+          onClick={() => onSelect(channel.id)}
+          className="flex min-h-9 min-w-0 flex-1 items-center gap-2 rounded-[var(--radius-md)] px-2 py-1.5 text-left text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--shell-focus-ring)]"
+        >
+          {isDirect && peer ? (
+            <DmPeerAvatar peer={peer} />
+          ) : isDirect ? (
+            <UserAvatar
+              user={{
+                id: channel.dmPeerUserId ?? channel.id,
+                fullName: label,
+              }}
+              size="xs"
+              className="shrink-0"
+            />
+          ) : showTypeIcon ? (
             <span
               className={cn(
-                'block min-w-0 flex-1 truncate',
-                emphasize || isActive || unreadCount > 0
-                  ? 'font-semibold text-[var(--shell-text)]'
-                  : 'font-medium text-[var(--shell-muted)]',
+                'flex h-5 w-5 shrink-0 items-center justify-center',
+                isActive
+                  ? 'text-[var(--shell-text)]'
+                  : 'text-[var(--shell-muted)]',
               )}
+              aria-hidden
             >
-              {label}
-              {peer?.statusEmoji ? (
-                <span className="ml-1 font-normal" aria-hidden>
-                  {peer.statusEmoji}
+              <ChannelIcon type={channel.type} />
+            </span>
+          ) : null}
+          <span className="min-w-0 flex-1">
+            <span className="flex items-center gap-2">
+              <span
+                className={cn(
+                  'block min-w-0 flex-1 truncate',
+                  emphasize || isActive || unreadCount > 0
+                    ? 'font-semibold text-[var(--shell-text)]'
+                    : 'font-medium text-[var(--shell-muted)]',
+                )}
+              >
+                {label}
+                {peer?.statusEmoji ? (
+                  <span className="ml-1 font-normal" aria-hidden>
+                    {peer.statusEmoji}
+                  </span>
+                ) : null}
+              </span>
+              {unreadCount > 0 ? (
+                <span className="shrink-0 rounded-full bg-[var(--shell-badge)] px-1.5 py-0.5 text-[10px] font-semibold text-[var(--shell-badge-text)]">
+                  {unreadCount}
                 </span>
               ) : null}
             </span>
-            {unreadCount > 0 ? (
-              <span className="shrink-0 rounded-full bg-[var(--shell-badge)] px-1.5 py-0.5 text-[10px] font-semibold text-[var(--shell-badge-text)]">
-                {unreadCount}
-              </span>
-            ) : null}
           </span>
-        </span>
-      </button>
+        </button>
+        {showDmMenu ? (
+          <button
+            type="button"
+            className={cn(
+              'mr-1 inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-[var(--radius-sm)] text-[var(--shell-muted)] hover:bg-[var(--shell-hover)] hover:text-[var(--shell-text)]',
+              'opacity-100 [@media(pointer:fine)]:opacity-0 [@media(pointer:fine)]:group-hover:opacity-100 [@media(pointer:fine)]:focus-visible:opacity-100',
+            )}
+            aria-label={`Actions for ${label}`}
+            onClick={(event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              setMenuSignal({
+                x: event.clientX,
+                y: event.clientY,
+                key: Date.now(),
+              });
+            }}
+          >
+            <MoreHorizontal className="h-4 w-4" />
+          </button>
+        ) : null}
+      </div>
       {hovering && isDirect && peer ? <DmHoverCard peer={peer} /> : null}
     </div>
+  );
+
+  if (!showDmMenu) {
+    return row;
+  }
+
+  const menu = (
+    <>
+      {unreadCount > 0 && onMarkDmRead ? (
+        <ContextMenuItem onClick={() => onMarkDmRead(channel.id)}>
+          <MailOpen className="h-4 w-4" />
+          Mark as read
+        </ContextMenuItem>
+      ) : null}
+      {unreadCount === 0 && onMarkDmUnread ? (
+        <ContextMenuItem onClick={() => onMarkDmUnread(channel.id)}>
+          <Mail className="h-4 w-4" />
+          Mark as unread
+        </ContextMenuItem>
+      ) : null}
+      {(onMarkDmRead || onMarkDmUnread) && onHideDm ? (
+        <ContextMenuSeparator />
+      ) : null}
+      {onHideDm ? (
+        <ContextMenuItem
+          destructive
+          onClick={() => onHideDm(channel.id)}
+        >
+          <Trash2 className="h-4 w-4" />
+          Delete conversation
+        </ContextMenuItem>
+      ) : null}
+    </>
+  );
+
+  return (
+    <ContextMenu menu={menu} openSignal={menuSignal} className="min-w-0">
+      {row}
+    </ContextMenu>
   );
 }
 
@@ -279,6 +376,9 @@ export function ChannelSidebar({
   onAddConnection,
   onStartDirectMessage,
   onAcceptInvite,
+  onHideDm,
+  onMarkDmRead,
+  onMarkDmUnread,
   className,
 }: ChannelSidebarProps) {
   const [teamCollapsed, setTeamCollapsed] = useState(false);
@@ -542,6 +642,9 @@ export function ChannelSidebar({
                   channel={channel}
                   isActive={channel.id === selectedChannelId}
                   onSelect={onSelectChannel}
+                  onHideDm={onHideDm}
+                  onMarkDmRead={onMarkDmRead}
+                  onMarkDmUnread={onMarkDmUnread}
                 />
               ))
             )}

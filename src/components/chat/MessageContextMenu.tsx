@@ -21,14 +21,16 @@ import {
 } from '@/components/ui/DropdownMenu';
 import { Button } from '@/components/ui/Button';
 import { ChatMessage } from '@/lib/chat-types';
+import { canDeleteMessageForEveryone } from '@/lib/chat-message-permissions';
 
 interface MessageContextMenuProps {
   message: ChatMessage;
   channelId: string;
   currentUserId: string;
   canManageChannel: boolean;
+  canDeleteForEveryone?: boolean;
   onEdit: (messageId: string, body: string) => Promise<void>;
-  onDelete: (messageId: string) => Promise<void>;
+  onDelete: (messageId: string) => void;
   onPin: (messageId: string) => Promise<void>;
   onCopyMessage: (body: string) => void;
   onCopyLink: (channelId: string, messageId: string) => void;
@@ -42,6 +44,7 @@ export function MessageContextMenu({
   channelId,
   currentUserId,
   canManageChannel,
+  canDeleteForEveryone = false,
   onEdit,
   onDelete,
   onPin,
@@ -56,7 +59,11 @@ export function MessageContextMenu({
   const [saving, setSaving] = useState(false);
   const isOwnMessage = message.sender.id === currentUserId;
   const canEdit = isOwnMessage && !message.deletedAt;
-  const canDelete = (isOwnMessage || canManageChannel) && !message.deletedAt;
+  const canDelete = !message.deletedAt;
+  const showDeleteForEveryoneLabel = canDeleteMessageForEveryone(message, {
+    currentUserId,
+    isWorkspaceAdmin: canDeleteForEveryone,
+  });
 
   const menuItems = (
     <>
@@ -114,11 +121,13 @@ export function MessageContextMenu({
           <MenuItemWrapper
             mode={mode}
             destructive
-            onClick={() => void onDelete(message.id)}
+            onClick={() => onDelete(message.id)}
             shortcut="delete"
           >
             <Trash2 className="h-4 w-4" />
-            Delete message...
+            {showDeleteForEveryoneLabel
+              ? 'Delete message…'
+              : 'Delete for me…'}
           </MenuItemWrapper>
         </>
       ) : null}
@@ -243,8 +252,11 @@ export function MessageContextMenuWrapper({
   const [saving, setSaving] = useState(false);
   const isOwnMessage = props.message.sender.id === props.currentUserId;
   const canEdit = isOwnMessage && !props.message.deletedAt;
-  const canDelete =
-    (isOwnMessage || props.canManageChannel) && !props.message.deletedAt;
+  const canDelete = !props.message.deletedAt;
+  const showDeleteForEveryoneLabel = canDeleteMessageForEveryone(props.message, {
+    currentUserId: props.currentUserId,
+    isWorkspaceAdmin: Boolean(props.canDeleteForEveryone),
+  });
 
   async function handleSaveEdit() {
     if (!editBody.trim()) return;
@@ -305,10 +317,12 @@ export function MessageContextMenuWrapper({
           <ContextMenuItem
             destructive
             shortcut="delete"
-            onClick={() => void props.onDelete(props.message.id)}
+            onClick={() => props.onDelete(props.message.id)}
           >
             <Trash2 className="h-4 w-4" />
-            Delete message...
+            {showDeleteForEveryoneLabel
+              ? 'Delete message…'
+              : 'Delete for me…'}
           </ContextMenuItem>
         </>
       ) : null}

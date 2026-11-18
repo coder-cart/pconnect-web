@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { apiDownload } from '@/lib/api-client';
 import { API_BASE_URL, AUTH_TOKEN_KEY } from '@/lib/config';
 import { renderMarkdownBody } from '@/lib/chatMarkdown';
 import { cn } from '@/lib/cn';
@@ -98,7 +99,13 @@ export function ChatMessageBody({
           const fileName =
             attachment.file?.fileName ?? attachment.fileName ?? 'Attachment';
           const mimeType = attachment.file?.mimeType ?? attachment.mimeType ?? '';
-          const isImage = mimeType.startsWith('image/');
+          const looksLikeImageName = /\.(png|jpe?g|webp|gif|tiff?)$/i.test(
+            fileName,
+          );
+          const isImage =
+            mimeType.startsWith('image/') ||
+            (!mimeType && looksLikeImageName) ||
+            (mimeType === 'application/octet-stream' && looksLikeImageName);
           const isAudio = mimeType.startsWith('audio/');
           const isVideo = mimeType.startsWith('video/');
 
@@ -142,17 +149,32 @@ export function ChatMessageBody({
             );
           }
 
-          const downloadUrl = fileId
-            ? `${API_BASE_URL}/files/${fileId}/download`
-            : undefined;
+          if (!fileId) {
+            return (
+              <div
+                key={attachment.id}
+                className="mt-1 flex max-w-md items-center gap-3 rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface-muted)] px-3 py-2.5"
+              >
+                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[var(--radius-sm)] bg-[var(--surface)] text-[var(--primary)] shadow-sm">
+                  <FileText className="h-4 w-4" />
+                </span>
+                <span className="min-w-0 flex-1 truncate text-sm font-medium text-[var(--foreground)]">
+                  {fileName}
+                </span>
+              </div>
+            );
+          }
 
           return (
-            <a
+            <button
               key={attachment.id}
-              href={downloadUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="mt-1 flex max-w-md items-center gap-3 rounded-[var(--radius-md)] border border-[var(--primary)]/20 bg-[var(--primary-soft)]/40 px-3 py-2.5 hover:bg-[var(--primary-soft)]/70"
+              type="button"
+              onClick={() => {
+                void apiDownload(`/files/${fileId}/download`, fileName).catch(
+                  () => undefined,
+                );
+              }}
+              className="mt-1 flex max-w-md items-center gap-3 rounded-[var(--radius-md)] border border-[var(--primary)]/20 bg-[var(--primary-soft)]/40 px-3 py-2.5 text-left hover:bg-[var(--primary-soft)]/70"
             >
               <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[var(--radius-sm)] bg-[var(--surface)] text-[var(--primary)] shadow-sm">
                 <FileText className="h-4 w-4" />
@@ -161,9 +183,11 @@ export function ChatMessageBody({
                 <span className="block truncate text-sm font-medium text-[var(--foreground)]">
                   {fileName}
                 </span>
-                <span className="block text-xs text-[var(--muted)]">Attachment</span>
+                <span className="block text-xs text-[var(--muted)]">
+                  Download attachment
+                </span>
               </span>
-            </a>
+            </button>
           );
         }
 
@@ -209,6 +233,7 @@ function AuthenticatedImage({
   onOpen?: () => void;
 }) {
   const [src, setSrc] = useState<string | null>(null);
+  const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading');
 
   useEffect(() => {
     let objectUrl: string | null = null;
@@ -219,6 +244,8 @@ function AuthenticatedImage({
       : (['webp', 'original'] as const);
 
     async function loadImage() {
+      setStatus('loading');
+      setSrc(null);
       for (const variant of variants) {
         try {
           const response = await fetch(
@@ -232,12 +259,16 @@ function AuthenticatedImage({
           if (cancelled) return;
           objectUrl = URL.createObjectURL(blob);
           setSrc(objectUrl);
+          setStatus('ready');
           return;
         } catch {
           // try next variant
         }
       }
-      if (!cancelled) setSrc(null);
+      if (!cancelled) {
+        setSrc(null);
+        setStatus('error');
+      }
     }
 
     void loadImage();
@@ -250,11 +281,13 @@ function AuthenticatedImage({
     };
   }, [fileId, preferThumbnail]);
 
-  if (!src) {
+  if (status === 'loading' || !src) {
     return (
-      <div className="flex items-center gap-2 rounded-[var(--radius-md)] border border-[var(--border)] p-3 text-sm text-[var(--muted)]">
-        <ImageIcon className="h-4 w-4" />
-        {alt}
+      <div className="flex min-h-[96px] min-w-[120px] max-w-xs items-center gap-2 rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface-muted)] p-3 text-sm text-[var(--muted)]">
+        <ImageIcon className="h-4 w-4 shrink-0" />
+        <span className="truncate">
+          {status === 'error' ? `Couldn’t load ${alt}` : 'Loading image…'}
+        </span>
       </div>
     );
   }
@@ -266,7 +299,7 @@ function AuthenticatedImage({
       className="block max-w-full overflow-hidden rounded-[var(--radius-md)] border border-[var(--border)] text-left"
     >
       {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img src={src} alt={alt} className="max-h-64 w-full object-cover" />
+      <img src={src} alt={alt} className="max-h-64 w-auto max-w-full object-contain" />
     </button>
   );
 }

@@ -37,6 +37,10 @@ import { PinnedMessagesPanel } from '@/components/chat/PinnedMessagesPanel';
 import { MessageList } from '@/components/chat/MessageList';
 import { ThreadPanel } from '@/components/chat/ThreadPanel';
 import { ChatScrollArea } from '@/components/chat/ChatScrollArea';
+import { DeleteMessageDialog } from '@/components/chat/DeleteMessageDialog';
+import { DeleteConversationDialog } from '@/components/chat/DeleteConversationDialog';
+import { ClearChatDialog } from '@/components/chat/ClearChatDialog';
+import { DeleteChannelDialog } from '@/components/chat/DeleteChannelDialog';
 import { useRealtime } from '@/components/providers/RealtimeProvider';
 import { useUnreadMessages } from '@/components/providers/UnreadMessagesProvider';
 import { cn } from '@/lib/cn';
@@ -45,6 +49,7 @@ import { CHAT_HUDDLE_ENABLED } from '@/lib/chat-release';
 import { ChannelMemberOption, ChannelNotificationPreference } from '@/lib/channelMembers';
 import { applyPresenceUpdate } from '@/lib/user-presence';
 import { isWorkspaceAdmin } from '@/lib/navigation';
+import { canDeleteMessageForEveryone } from '@/lib/chat-message-permissions';
 
 interface ChatWorkspaceProps {
   user: AuthenticatedUser;
@@ -195,6 +200,21 @@ export function ChatWorkspace({
   const [isSending, setIsSending] = useState(false);
   const [isSendingThreadReply, setIsSendingThreadReply] = useState(false);
   const [isDeletingGroup, setIsDeletingGroup] = useState(false);
+  const [pendingDeleteMessageId, setPendingDeleteMessageId] = useState<
+    string | null
+  >(null);
+  const [deleteDialogNowMs, setDeleteDialogNowMs] = useState(() => Date.now());
+  const [isDeletingMessage, setIsDeletingMessage] = useState(false);
+  const [pendingHideChannelId, setPendingHideChannelId] = useState<
+    string | null
+  >(null);
+  const [isHidingConversation, setIsHidingConversation] = useState(false);
+  const [clearChatConfirmOpen, setClearChatConfirmOpen] = useState(false);
+  const [isClearingChat, setIsClearingChat] = useState(false);
+  const [deleteChannelConfirmOpen, setDeleteChannelConfirmOpen] =
+    useState(false);
+  /** When set, keep unread badge on the selected channel (mark-as-unread). */
+  const preserveSelectedUnreadRef = useRef(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [createChannelOpen, setCreateChannelOpen] = useState(false);
   const [channelPreset, setChannelPreset] = useState<{
@@ -237,8 +257,12 @@ export function ChatWorkspace({
     subscribeChannelEvents,
     subscribePresenceUpdated,
   } = useRealtime();
-  const { unreadByChannel, loaded: unreadLoaded, setActiveChannel } =
-    useUnreadMessages();
+  const {
+    unreadByChannel,
+    loaded: unreadLoaded,
+    setActiveChannel,
+    refreshUnread,
+  } = useUnreadMessages();
   const isExternalUser = userIsExternal(user);
   const canCreateStaffChannel =
     !isExternalUser && userHasPermission(user, 'channels.create_internal');
@@ -346,13 +370,18 @@ export function ChatWorkspace({
       return;
     }
     setChannels((current) =>
-      current.map((channel) => ({
-        ...channel,
-        unreadCount:
-          channel.id === selectedChannelIdRef.current
-            ? 0
-            : (unreadByChannel[channel.id] ?? 0),
-      })),
+      current.map((channel) => {
+        const fromProvider = unreadByChannel[channel.id] ?? 0;
+        if (channel.id === selectedChannelIdRef.current) {
+          // Keep intentional unread on the open conversation until the user
+          // opens/reads it again (mark-as-unread from the sidebar).
+          if (preserveSelectedUnreadRef.current) {
+            return { ...channel, unreadCount: Math.max(fromProvider, 1) };
+          }
+          return { ...channel, unreadCount: 0 };
+        }
+        return { ...channel, unreadCount: fromProvider };
+      }),
     );
   }, [unreadByChannel, unreadLoaded]);
 
@@ -518,6 +547,8 @@ export function ChatWorkspace({
     if (!selectedChannelId || isLoadingChannels) return;
 
     const requestChannelId = selectedChannelId;
+    // Opening/reading a channel clears intentional unread preservation.
+    preserveSelectedUnreadRef.current = false;
     joinChannel(requestChannelId);
     setChannelTab('messages');
     setIsLoadingMessages(true);
@@ -860,16 +891,189 @@ export function ChatWorkspace({
     setThreadReplies((current) => updateMessageInList(current, response.data));
   }
 
-  async function handleDelete(messageId: string) {
+  function handleDeleteRequest(messageId: string) {
+    setDeleteDialogNowMs(Date.now());
+    setPendingDeleteMessageId(messageId);
+  }
+
+  useEffect(() => {
+    if (!pendingDeleteMessageId) return;
+    setDeleteDialogNowMs(Date.now());
+    const intervalId = window.setInterval(() => {
+      setDeleteDialogNowMs(Date.now());
+    }, 1000);
+    return () => window.clearInterval(intervalId);
+  }, [pendingDeleteMessageId]);
+
+  async function handleDeleteForMe() {
+    if (!selectedChannelId || !pendingDeleteMessageId) return;
+    setIsDeletingMessage(true);
+    setErrorMessage(null);
+    try {
+      await apiRequest(
+        `/channels/${selectedChannelId}/messages/${pendingDeleteMessageId}/hide`,
+        { method: 'POST' },
+      );
+      const messageId = pendingDeleteMessageId;
+      setMessages((current) =>
+        current.filter((message) => message.id !== messageId),
+      );
+      setThreadReplies((current) =>
+        current.filter((message) => message.id !== messageId),
+      );
+      setPendingDeleteMessageId(null);
+    } catch (error) {
+      setErrorMessage(
+        error instanceof Error ? error.message : 'Unable to delete message',
+      );
+    } finally {
+      setIsDeletingMessage(false);
+    }
+  }
+
+  async function handleDeleteForEveryone() {
+    if (!selectedChannelId || !pendingDeleteMessageId) return;
+    setIsDeletingMessage(true);
+    setErrorMessage(null);
+    try {
+      const response = await apiRequest<ApiResponse<ChatMessage>>(
+        `/channels/${selectedChannelId}/messages/${pendingDeleteMessageId}`,
+        { method: 'DELETE' },
+      );
+      setMessages((current) => updateMessageInList(current, response.data));
+      setThreadReplies((current) =>
+        updateMessageInList(current, response.data),
+      );
+      setPendingDeleteMessageId(null);
+    } catch (error) {
+      setErrorMessage(
+        error instanceof Error ? error.message : 'Unable to delete message',
+      );
+    } finally {
+      setIsDeletingMessage(false);
+    }
+  }
+
+  function handleClearChatHistory() {
+    if (!selectedChannelId) return;
+    setClearChatConfirmOpen(true);
+  }
+
+  async function confirmClearChatHistory() {
     if (!selectedChannelId) return;
 
-    const response = await apiRequest<ApiResponse<ChatMessage>>(
-      `/channels/${selectedChannelId}/messages/${messageId}`,
-      { method: 'DELETE' },
-    );
+    setIsClearingChat(true);
+    setErrorMessage(null);
+    try {
+      await apiRequest(`/channels/${selectedChannelId}/clear-history`, {
+        method: 'POST',
+      });
+      setMessages([]);
+      setThreadReplies([]);
+      setThreadMessageId(null);
+      setClearChatConfirmOpen(false);
+      void refreshUnread();
+    } catch (error) {
+      setErrorMessage(
+        error instanceof Error ? error.message : 'Unable to clear chat',
+      );
+    } finally {
+      setIsClearingChat(false);
+    }
+  }
 
-    setMessages((current) => updateMessageInList(current, response.data));
-    setThreadReplies((current) => updateMessageInList(current, response.data));
+  function handleHideConversation(channelId?: string) {
+    const targetId = channelId ?? selectedChannelId;
+    if (!targetId) return;
+    const channel = channels.find((row) => row.id === targetId);
+    if (!channel || channel.type === 'public') return;
+    setPendingHideChannelId(targetId);
+  }
+
+  async function confirmHideConversation() {
+    const targetId = pendingHideChannelId;
+    if (!targetId) return;
+
+    setIsHidingConversation(true);
+    setErrorMessage(null);
+    try {
+      await apiRequest(`/channels/${targetId}/hide`, {
+        method: 'POST',
+      });
+      setChannels((current) =>
+        current.filter((row) => row.id !== targetId),
+      );
+      if (selectedChannelId === targetId) {
+        setSelectedChannelId(null);
+        setDetailsOpen(false);
+        setMessages([]);
+        setThreadMessageId(null);
+        setThreadReplies([]);
+      }
+      setPendingHideChannelId(null);
+      void refreshUnread();
+    } catch (error) {
+      setErrorMessage(
+        error instanceof Error
+          ? error.message
+          : 'Unable to remove conversation',
+      );
+    } finally {
+      setIsHidingConversation(false);
+    }
+  }
+
+  async function handleMarkDmRead(channelId: string) {
+    setErrorMessage(null);
+    if (channelId === selectedChannelIdRef.current) {
+      preserveSelectedUnreadRef.current = false;
+    }
+    try {
+      await apiRequest(`/channels/${channelId}/read`, { method: 'POST' });
+      setChannels((current) =>
+        current.map((channel) =>
+          channel.id === channelId
+            ? { ...channel, unreadCount: 0, lastReadAt: new Date().toISOString() }
+            : channel,
+        ),
+      );
+      void refreshUnread();
+    } catch (error) {
+      setErrorMessage(
+        error instanceof Error ? error.message : 'Unable to mark as read',
+      );
+    }
+  }
+
+  async function handleMarkDmUnread(channelId: string) {
+    setErrorMessage(null);
+    if (channelId === selectedChannelIdRef.current) {
+      preserveSelectedUnreadRef.current = true;
+    }
+    try {
+      await apiRequest(`/channels/${channelId}/mark-unread`, {
+        method: 'POST',
+        body: JSON.stringify({}),
+      });
+      setChannels((current) =>
+        current.map((channel) =>
+          channel.id === channelId
+            ? {
+                ...channel,
+                unreadCount: Math.max(channel.unreadCount ?? 0, 1),
+              }
+            : channel,
+        ),
+      );
+      void refreshUnread();
+    } catch (error) {
+      if (channelId === selectedChannelIdRef.current) {
+        preserveSelectedUnreadRef.current = false;
+      }
+      setErrorMessage(
+        error instanceof Error ? error.message : 'Unable to mark as unread',
+      );
+    }
   }
 
   async function handlePin(messageId: string) {
@@ -980,32 +1184,6 @@ export function ChatWorkspace({
     setSelectedChannelId(channel.id);
   }
 
-  async function handleDeleteGroup() {
-    if (!selectedChannelId || selectedChannel?.type !== 'group') return;
-    const confirmed = window.confirm(
-      `Delete channel “${getChannelLabel(selectedChannel)}”? This cannot be undone.`,
-    );
-    if (!confirmed) return;
-
-    setIsDeletingGroup(true);
-    setErrorMessage(null);
-    try {
-      await apiRequest(`/channels/${selectedChannelId}`, { method: 'DELETE' });
-      setChannels((current) =>
-        current.filter((channel) => channel.id !== selectedChannelId),
-      );
-      setSelectedChannelId(null);
-      setDetailsOpen(false);
-      setMessages([]);
-    } catch (error) {
-      setErrorMessage(
-        error instanceof Error ? error.message : 'Unable to delete channel',
-      );
-    } finally {
-      setIsDeletingGroup(false);
-    }
-  }
-
   const selectedChannel = channels.find(
     (channel) => channel.id === selectedChannelId,
   );
@@ -1021,7 +1199,59 @@ export function ChatWorkspace({
   const canDeleteGroup =
     isWorkspaceAdmin(user.roleCodes) &&
     Boolean(selectedChannel) &&
-    selectedChannel?.type !== 'public';
+    (selectedChannel?.type === 'group' ||
+      selectedChannel?.type === 'private' ||
+      selectedChannel?.type === 'client_shared' ||
+      selectedChannel?.type === 'direct');
+
+  function handleDeleteGroup() {
+    if (!selectedChannelId || !canDeleteGroup) return;
+    setDeleteChannelConfirmOpen(true);
+  }
+
+  async function confirmDeleteGroup() {
+    if (!selectedChannelId || !canDeleteGroup) return;
+
+    setIsDeletingGroup(true);
+    setErrorMessage(null);
+    try {
+      await apiRequest(`/channels/${selectedChannelId}`, { method: 'DELETE' });
+      setChannels((current) =>
+        current.filter((channel) => channel.id !== selectedChannelId),
+      );
+      setSelectedChannelId(null);
+      setDetailsOpen(false);
+      setMessages([]);
+      setDeleteChannelConfirmOpen(false);
+    } catch (error) {
+      setErrorMessage(
+        error instanceof Error ? error.message : 'Unable to delete channel',
+      );
+    } finally {
+      setIsDeletingGroup(false);
+    }
+  }
+  const canDeleteForEveryone = isWorkspaceAdmin(user.roleCodes);
+  const pendingDeleteMessage = pendingDeleteMessageId
+    ? messages.find((message) => message.id === pendingDeleteMessageId) ??
+      threadReplies.find((message) => message.id === pendingDeleteMessageId) ??
+      null
+    : null;
+  const pendingDeleteAllowsEveryone = Boolean(
+    pendingDeleteMessage &&
+      canDeleteMessageForEveryone(pendingDeleteMessage, {
+        currentUserId: user.id,
+        isWorkspaceAdmin: canDeleteForEveryone,
+        nowMs: deleteDialogNowMs,
+      }),
+  );
+  const canHideConversation =
+    Boolean(selectedChannel) &&
+    selectedChannel?.type !== 'public' &&
+    selectedChannel?.type !== undefined;
+  const pendingHideChannel = pendingHideChannelId
+    ? channels.find((channel) => channel.id === pendingHideChannelId) ?? null
+    : null;
   const activeThreadMessage = messages.find(
     (message) => message.id === threadMessageId,
   );
@@ -1163,6 +1393,9 @@ export function ChatWorkspace({
           onAddConnection={() => setAddConnectionOpen(true)}
           onStartDirectMessage={() => setStartDmOpen(true)}
           onAcceptInvite={(invite) => void handleAcceptInvite(invite)}
+          onHideDm={(channelId) => void handleHideConversation(channelId)}
+          onMarkDmRead={(channelId) => void handleMarkDmRead(channelId)}
+          onMarkDmUnread={(channelId) => void handleMarkDmUnread(channelId)}
           className={cn(
             'order-1 h-full min-h-0 w-full lg:col-start-1',
             showMobileChat ? 'hidden' : 'flex',
@@ -1238,9 +1471,11 @@ export function ChatWorkspace({
                   <MessageList
                     messages={messages}
                     channelId={selectedChannelId}
+                    channelType={selectedChannel?.type}
                     currentUserId={user.id}
                     unreadSince={unreadSince}
                     canManageChannel={canManageMembers}
+                    canDeleteForEveryone={canDeleteForEveryone}
                     memberNames={memberNames}
                     isLoading={isLoadingMessages}
                     activeThreadMessageId={threadMessageId}
@@ -1248,7 +1483,7 @@ export function ChatWorkspace({
                     onReply={handleOpenThread}
                     onReact={handleReact}
                     onEdit={handleEdit}
-                    onDelete={handleDelete}
+                    onDelete={handleDeleteRequest}
                     onPin={handlePin}
                     onCopyMessage={handleCopyMessage}
                     onCopyLink={handleCopyLink}
@@ -1290,8 +1525,12 @@ export function ChatWorkspace({
             canInvite={canInvite}
             onInvite={() => setManageMembersOpen(true)}
             canDeleteGroup={canDeleteGroup}
-            onDeleteGroup={() => void handleDeleteGroup()}
+            onDeleteGroup={handleDeleteGroup}
             isDeletingGroup={isDeletingGroup}
+            onClearChat={handleClearChatHistory}
+            isClearingChat={isClearingChat}
+            canHideConversation={canHideConversation}
+            onHideConversation={() => void handleHideConversation()}
             onJumpToPin={handleJumpToPinnedMessage}
             onClose={() => setDetailsOpen(false)}
             className={cn(
@@ -1315,13 +1554,14 @@ export function ChatWorkspace({
             isInternalUser={!userIsExternal(user)}
             members={channelMembers}
             canManageChannel={canManageMembers}
+            canDeleteForEveryone={canDeleteForEveryone}
             isLoading={isLoadingThread}
             isSending={isSendingThreadReply}
             onClose={() => setThreadMessageId(null)}
             onSubmitReply={handleSendThreadReply}
             onReact={handleReact}
             onEdit={handleEdit}
-            onDelete={handleDelete}
+            onDelete={handleDeleteRequest}
             onPin={handlePin}
             onCopyMessage={handleCopyMessage}
             onCopyLink={handleCopyLink}
@@ -1366,6 +1606,42 @@ export function ChatWorkspace({
         }
         onClose={() => setManageMembersOpen(false)}
         onUpdated={() => void loadChannels()}
+      />
+      <DeleteMessageDialog
+        open={Boolean(pendingDeleteMessageId)}
+        canDeleteForEveryone={pendingDeleteAllowsEveryone}
+        busy={isDeletingMessage}
+        onDeleteForMe={() => void handleDeleteForMe()}
+        onDeleteForEveryone={() => void handleDeleteForEveryone()}
+        onCancel={() => setPendingDeleteMessageId(null)}
+      />
+      <DeleteConversationDialog
+        open={Boolean(pendingHideChannel)}
+        conversationName={
+          pendingHideChannel ? getChannelLabel(pendingHideChannel) : ''
+        }
+        isDirect={pendingHideChannel?.type === 'direct'}
+        busy={isHidingConversation}
+        onConfirm={() => void confirmHideConversation()}
+        onCancel={() => setPendingHideChannelId(null)}
+      />
+      <ClearChatDialog
+        open={clearChatConfirmOpen}
+        conversationName={
+          selectedChannel ? getChannelLabel(selectedChannel) : 'this chat'
+        }
+        busy={isClearingChat}
+        onConfirm={() => void confirmClearChatHistory()}
+        onCancel={() => setClearChatConfirmOpen(false)}
+      />
+      <DeleteChannelDialog
+        open={deleteChannelConfirmOpen}
+        channelName={
+          selectedChannel ? getChannelLabel(selectedChannel) : 'this channel'
+        }
+        busy={isDeletingGroup}
+        onConfirm={() => void confirmDeleteGroup()}
+        onCancel={() => setDeleteChannelConfirmOpen(false)}
       />
     </>
   );

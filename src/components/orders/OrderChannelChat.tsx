@@ -13,7 +13,10 @@ import { ErrorState } from '@/components/ui/StatePanels';
 import { MessageList } from '@/components/chat/MessageList';
 import { ChatComposer } from '@/components/chat/ChatComposer';
 import { ChatScrollArea } from '@/components/chat/ChatScrollArea';
+import { DeleteMessageDialog } from '@/components/chat/DeleteMessageDialog';
 import { useRealtime } from '@/components/providers/RealtimeProvider';
+import { isWorkspaceAdmin } from '@/lib/navigation';
+import { canDeleteMessageForEveryone } from '@/lib/chat-message-permissions';
 
 interface OrderChannelChatProps {
   channelId: string;
@@ -33,6 +36,32 @@ export function OrderChannelChat({
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [pendingDeleteMessageId, setPendingDeleteMessageId] = useState<
+    string | null
+  >(null);
+  const [deleteDialogNowMs, setDeleteDialogNowMs] = useState(() => Date.now());
+  const [isDeletingMessage, setIsDeletingMessage] = useState(false);
+  const canDeleteForEveryone = isWorkspaceAdmin(user.roleCodes);
+  const pendingDeleteMessage = pendingDeleteMessageId
+    ? messages.find((message) => message.id === pendingDeleteMessageId) ?? null
+    : null;
+  const pendingDeleteAllowsEveryone = Boolean(
+    pendingDeleteMessage &&
+      canDeleteMessageForEveryone(pendingDeleteMessage, {
+        currentUserId: user.id,
+        isWorkspaceAdmin: canDeleteForEveryone,
+        nowMs: deleteDialogNowMs,
+      }),
+  );
+
+  useEffect(() => {
+    if (!pendingDeleteMessageId) return;
+    setDeleteDialogNowMs(Date.now());
+    const intervalId = window.setInterval(() => {
+      setDeleteDialogNowMs(Date.now());
+    }, 1000);
+    return () => window.clearInterval(intervalId);
+  }, [pendingDeleteMessageId]);
 
   const loadMessages = useCallback(async () => {
     setIsLoading(true);
@@ -119,13 +148,48 @@ export function OrderChannelChat({
     );
   }
 
-  async function handleDelete(messageId: string) {
-    await apiRequest(`/channels/${channelId}/messages/${messageId}`, {
-      method: 'DELETE',
-    });
-    setMessages((current) =>
-      current.filter((message) => message.id !== messageId),
-    );
+  function handleDeleteRequest(messageId: string) {
+    setDeleteDialogNowMs(Date.now());
+    setPendingDeleteMessageId(messageId);
+  }
+
+  async function handleDeleteForMe() {
+    if (!pendingDeleteMessageId) return;
+    setIsDeletingMessage(true);
+    try {
+      await apiRequest(
+        `/channels/${channelId}/messages/${pendingDeleteMessageId}/hide`,
+        { method: 'POST' },
+      );
+      const messageId = pendingDeleteMessageId;
+      setMessages((current) =>
+        current.filter((message) => message.id !== messageId),
+      );
+      setPendingDeleteMessageId(null);
+    } finally {
+      setIsDeletingMessage(false);
+    }
+  }
+
+  async function handleDeleteForEveryone() {
+    if (!pendingDeleteMessageId) return;
+    setIsDeletingMessage(true);
+    try {
+      const response = await apiRequest<ApiResponse<ChatMessage>>(
+        `/channels/${channelId}/messages/${pendingDeleteMessageId}`,
+        { method: 'DELETE' },
+      );
+      setMessages((current) =>
+        current.map((message) =>
+          message.id === pendingDeleteMessageId
+            ? { ...message, ...response.data }
+            : message,
+        ),
+      );
+      setPendingDeleteMessageId(null);
+    } finally {
+      setIsDeletingMessage(false);
+    }
   }
 
   if (errorMessage && messages.length === 0) {
@@ -149,12 +213,13 @@ export function OrderChannelChat({
           channelId={channelId}
           currentUserId={user.id}
           canManageChannel={false}
+          canDeleteForEveryone={canDeleteForEveryone}
           isLoading={isLoading}
           activeThreadMessageId={null}
           onReply={() => undefined}
           onReact={handleReact}
           onEdit={handleEdit}
-          onDelete={handleDelete}
+          onDelete={handleDeleteRequest}
           onPin={async () => undefined}
           onCopyMessage={(body) => void navigator.clipboard.writeText(body)}
           onCopyLink={() => undefined}
@@ -171,6 +236,14 @@ export function OrderChannelChat({
           onSubmit={handleSubmit}
         />
       </div>
+      <DeleteMessageDialog
+        open={Boolean(pendingDeleteMessageId)}
+        canDeleteForEveryone={pendingDeleteAllowsEveryone}
+        busy={isDeletingMessage}
+        onDeleteForMe={() => void handleDeleteForMe()}
+        onDeleteForEveryone={() => void handleDeleteForEveryone()}
+        onCancel={() => setPendingDeleteMessageId(null)}
+      />
     </Card>
   );
 }
