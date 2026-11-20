@@ -1,12 +1,13 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useId, useState } from 'react';
 import { apiRequest } from '@/lib/api-client';
 import { ApiResponse } from '@/lib/auth';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Modal, ModalActions } from '@/components/ui/Modal';
 import { OrderSummary, toExternalHref } from '@/lib/orders';
+import { usePwaWorkHold } from '@/lib/use-pwa-work-hold';
 
 interface RequestRevisionModalProps {
   open: boolean;
@@ -29,6 +30,8 @@ export function RequestRevisionModal({
   const [priority, setPriority] = useState<'medium' | 'high' | 'urgent'>('medium');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const revisionHoldId = useId();
+  usePwaWorkHold(open || isSaving, revisionHoldId, 'order-edit');
 
   useEffect(() => {
     if (!open) return;

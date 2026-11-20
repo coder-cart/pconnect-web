@@ -8,6 +8,14 @@ import { Card } from '@/components/ui/Card';
 import { Input } from '@/components/ui/Input';
 import { Select } from '@/components/ui/Select';
 
+interface SessionType {
+  id: string;
+  name: string;
+  durationMinutes: number;
+}
+
+type WorkingHoursMap = Record<string, { start: string; end: string } | null>;
+
 interface BookingSettings {
   exists: boolean;
   enabled: boolean;
@@ -18,6 +26,8 @@ interface BookingSettings {
   bufferMinutes: number;
   minNoticeHours: number;
   maxAdvanceDays: number;
+  workingHoursJson?: WorkingHoursMap;
+  sessionTypes?: SessionType[];
   title: string | null;
   description: string | null;
 }
@@ -25,6 +35,32 @@ interface BookingSettings {
 interface BookingSettingsPanelProps {
   clientOrganizationId: string;
 }
+
+const WEEKDAYS = [
+  { key: '1', label: 'Mon' },
+  { key: '2', label: 'Tue' },
+  { key: '3', label: 'Wed' },
+  { key: '4', label: 'Thu' },
+  { key: '5', label: 'Fri' },
+  { key: '6', label: 'Sat' },
+  { key: '0', label: 'Sun' },
+] as const;
+
+const DEFAULT_HOURS: WorkingHoursMap = {
+  '0': null,
+  '1': { start: '09:00', end: '17:00' },
+  '2': { start: '09:00', end: '17:00' },
+  '3': { start: '09:00', end: '17:00' },
+  '4': { start: '09:00', end: '17:00' },
+  '5': { start: '09:00', end: '17:00' },
+  '6': null,
+};
+
+const DEFAULT_SESSION_TYPES: SessionType[] = [
+  { id: 'portrait', name: 'Portrait session', durationMinutes: 60 },
+  { id: 'mini', name: 'Mini session', durationMinutes: 30 },
+  { id: 'wedding', name: 'Wedding consult', durationMinutes: 30 },
+];
 
 export function BookingSettingsPanel({
   clientOrganizationId,
@@ -42,7 +78,15 @@ export function BookingSettingsPanel({
       const response = await apiRequest<ApiResponse<BookingSettings>>(
         `/clients/${clientOrganizationId}/booking-settings`,
       );
-      setSettings(response.data);
+      const data = response.data;
+      setSettings({
+        ...data,
+        workingHoursJson: data.workingHoursJson ?? DEFAULT_HOURS,
+        sessionTypes:
+          data.sessionTypes && data.sessionTypes.length > 0
+            ? data.sessionTypes
+            : DEFAULT_SESSION_TYPES,
+      });
     } catch (error) {
       setSettings(null);
       setErrorMessage(
@@ -68,7 +112,14 @@ export function BookingSettingsPanel({
         `/clients/${clientOrganizationId}/booking-settings/enable`,
         { method: 'POST' },
       );
-      setSettings(response.data);
+      setSettings({
+        ...response.data,
+        workingHoursJson: response.data.workingHoursJson ?? DEFAULT_HOURS,
+        sessionTypes:
+          response.data.sessionTypes && response.data.sessionTypes.length > 0
+            ? response.data.sessionTypes
+            : DEFAULT_SESSION_TYPES,
+      });
     } catch (error) {
       setErrorMessage(
         error instanceof Error ? error.message : 'Unable to enable booking',
@@ -78,7 +129,7 @@ export function BookingSettingsPanel({
     }
   }
 
-  async function save(patch: Partial<BookingSettings>) {
+  async function save(patch: Record<string, unknown>) {
     setIsSaving(true);
     setErrorMessage(null);
     try {
@@ -89,7 +140,14 @@ export function BookingSettingsPanel({
           body: JSON.stringify(patch),
         },
       );
-      setSettings(response.data);
+      setSettings({
+        ...response.data,
+        workingHoursJson: response.data.workingHoursJson ?? DEFAULT_HOURS,
+        sessionTypes:
+          response.data.sessionTypes && response.data.sessionTypes.length > 0
+            ? response.data.sessionTypes
+            : DEFAULT_SESSION_TYPES,
+      });
     } catch (error) {
       setErrorMessage(
         error instanceof Error ? error.message : 'Unable to save settings',
@@ -122,6 +180,9 @@ export function BookingSettingsPanel({
     );
   }
 
+  const workingHours = settings.workingHoursJson ?? DEFAULT_HOURS;
+  const sessionTypes = settings.sessionTypes ?? DEFAULT_SESSION_TYPES;
+
   return (
     <Card padding="md" className="space-y-4">
       <div>
@@ -129,8 +190,8 @@ export function BookingSettingsPanel({
           Public booking link
         </h3>
         <p className="mt-1 text-xs text-[var(--muted)]">
-          Share a Colabdeck-branded page so visitors can request studio time.
-          Requests need your approval before a calendar event is created.
+          Share a studio-branded page so visitors can request time. Requests need
+          your approval before a calendar event is created.
         </p>
       </div>
 
@@ -182,7 +243,7 @@ export function BookingSettingsPanel({
                   }
                 }}
               >
-                Open page
+                Preview as client
               </Button>
               <Button
                 size="sm"
@@ -203,8 +264,10 @@ export function BookingSettingsPanel({
                 setSettings({ ...settings, title: event.target.value })
               }
             />
-            <Select
-              label="Slot duration (minutes)"
+            <Input
+              label="Fallback duration (minutes)"
+              type="number"
+              min={15}
               value={String(settings.slotDurationMinutes)}
               onChange={(event) =>
                 setSettings({
@@ -212,12 +275,6 @@ export function BookingSettingsPanel({
                   slotDurationMinutes: Number(event.target.value),
                 })
               }
-              options={[
-                { value: '30', label: '30' },
-                { value: '60', label: '60' },
-                { value: '90', label: '90' },
-                { value: '120', label: '120' },
-              ]}
             />
             <Input
               label="Buffer (minutes)"
@@ -244,6 +301,7 @@ export function BookingSettingsPanel({
               }
             />
           </div>
+
           <label className="block space-y-1.5">
             <span className="text-sm font-medium text-[var(--foreground)]">
               Public description
@@ -257,6 +315,168 @@ export function BookingSettingsPanel({
               }
             />
           </label>
+
+          <div className="space-y-2">
+            <div className="flex items-center justify-between gap-2">
+              <h4 className="text-sm font-semibold text-[var(--foreground)]">
+                Session types
+              </h4>
+              <Button
+                size="sm"
+                variant="secondary"
+                onClick={() =>
+                  setSettings({
+                    ...settings,
+                    sessionTypes: [
+                      ...sessionTypes,
+                      {
+                        id: `session-${Date.now()}`,
+                        name: 'New session',
+                        durationMinutes: 60,
+                      },
+                    ],
+                  })
+                }
+              >
+                Add type
+              </Button>
+            </div>
+            <ul className="space-y-2">
+              {sessionTypes.map((type, index) => (
+                <li
+                  key={type.id}
+                  className="grid gap-2 rounded-[var(--radius-md)] border border-[var(--border)] p-3 sm:grid-cols-[1fr_7rem_auto]"
+                >
+                  <Input
+                    label="Name"
+                    value={type.name}
+                    onChange={(event) => {
+                      const next = [...sessionTypes];
+                      next[index] = { ...type, name: event.target.value };
+                      setSettings({ ...settings, sessionTypes: next });
+                    }}
+                  />
+                  <Select
+                    label="Minutes"
+                    value={String(type.durationMinutes)}
+                    onChange={(event) => {
+                      const next = [...sessionTypes];
+                      next[index] = {
+                        ...type,
+                        durationMinutes: Number(event.target.value),
+                      };
+                      setSettings({ ...settings, sessionTypes: next });
+                    }}
+                    options={[
+                      { value: '30', label: '30' },
+                      { value: '60', label: '60' },
+                      { value: '90', label: '90' },
+                      { value: '120', label: '120' },
+                    ]}
+                  />
+                  <div className="flex items-end">
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      disabled={sessionTypes.length <= 1}
+                      onClick={() =>
+                        setSettings({
+                          ...settings,
+                          sessionTypes: sessionTypes.filter(
+                            (item) => item.id !== type.id,
+                          ),
+                        })
+                      }
+                    >
+                      Remove
+                    </Button>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </div>
+
+          <div className="space-y-2">
+            <h4 className="text-sm font-semibold text-[var(--foreground)]">
+              Weekly availability
+            </h4>
+            <p className="text-xs text-[var(--muted)]">
+              Open windows generate bookable slots. Closed days stay empty on the
+              public calendar.
+            </p>
+            <ul className="space-y-2">
+              {WEEKDAYS.map((day) => {
+                const hours = workingHours[day.key];
+                const open = Boolean(hours);
+                return (
+                  <li
+                    key={day.key}
+                    className="flex flex-wrap items-center gap-2 rounded-[var(--radius-md)] bg-[var(--surface-muted)] px-3 py-2"
+                  >
+                    <label className="flex min-w-[4.5rem] items-center gap-2 text-sm font-medium">
+                      <input
+                        type="checkbox"
+                        checked={open}
+                        onChange={(event) => {
+                          const next: WorkingHoursMap = {
+                            ...workingHours,
+                            [day.key]: event.target.checked
+                              ? { start: '09:00', end: '17:00' }
+                              : null,
+                          };
+                          setSettings({
+                            ...settings,
+                            workingHoursJson: next,
+                          });
+                        }}
+                      />
+                      {day.label}
+                    </label>
+                    {open && hours ? (
+                      <>
+                        <Input
+                          type="time"
+                          value={hours.start}
+                          onChange={(event) =>
+                            setSettings({
+                              ...settings,
+                              workingHoursJson: {
+                                ...workingHours,
+                                [day.key]: {
+                                  ...hours,
+                                  start: event.target.value,
+                                },
+                              },
+                            })
+                          }
+                        />
+                        <span className="text-xs text-[var(--muted)]">to</span>
+                        <Input
+                          type="time"
+                          value={hours.end}
+                          onChange={(event) =>
+                            setSettings({
+                              ...settings,
+                              workingHoursJson: {
+                                ...workingHours,
+                                [day.key]: {
+                                  ...hours,
+                                  end: event.target.value,
+                                },
+                              },
+                            })
+                          }
+                        />
+                      </>
+                    ) : (
+                      <span className="text-xs text-[var(--muted)]">Closed</span>
+                    )}
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
+
           <Button
             disabled={isSaving}
             onClick={() =>
@@ -266,6 +486,8 @@ export function BookingSettingsPanel({
                 slotDurationMinutes: settings.slotDurationMinutes,
                 bufferMinutes: settings.bufferMinutes,
                 minNoticeHours: settings.minNoticeHours,
+                sessionTypes,
+                workingHoursJson: workingHours,
               })
             }
           >

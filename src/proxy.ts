@@ -24,6 +24,8 @@ const PUBLIC_PATHS = [
   '/terms',
   '/health',
   '/sw.js',
+  '/pwa-release.js',
+  '/version.json',
   '/manifest.webmanifest',
 ];
 
@@ -64,6 +66,6 @@ export function proxy(request: NextRequest) {
 export const config = {
   // Run on app routes only; skip API and socket proxy paths.
   matcher: [
-    '/((?!api|socket\\.io|_next/static|_next/image|favicon.ico|sw\\.js|manifest\\.webmanifest|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|webmanifest)$).*)',
+    '/((?!api|socket\\.io|_next/static|_next/image|favicon.ico|sw\\.js|pwa-release\\.js|version\\.json|manifest\\.webmanifest|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|webmanifest)$).*)',
   ],
 };

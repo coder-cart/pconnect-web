@@ -1,6 +1,6 @@
 'use client';
 
-import { type ReactNode, useEffect, useMemo, useState } from 'react';
+import { type ReactNode, useEffect, useId, useMemo, useState } from 'react';
 import { Trash2 } from 'lucide-react';
 import { apiRequest } from '@/lib/api-client';
 import { ApiResponse, userHasAnyPermission } from '@/lib/auth';
@@ -17,6 +17,7 @@ import { ServiceMultiSelect } from '@/components/orders/ServiceMultiSelect';
 import { OUTPUT_FORMATS, toExternalHref } from '@/lib/orders';
 import { cn } from '@/lib/cn';
 import { isHiddenOrderService } from '@/lib/orders';
+import { usePwaWorkHold } from '@/lib/use-pwa-work-hold';
 
 interface ClientOption {
   id: string;
@@ -142,6 +143,8 @@ export function OrderCreateModal({
   const [workLines, setWorkLines] = useState<WorkLineDraft[]>([emptyWorkLine()]);
   const [assignedTeamLeadUserId, setAssignedTeamLeadUserId] = useState('');
   const [assignedQaUserId, setAssignedQaUserId] = useState('');
+  const orderCreateHoldId = useId();
+  usePwaWorkHold(open || isSaving, orderCreateHoldId, 'order-create');
 
   const clientLocked = Boolean(defaultClientId) || isExternal;
   const selectedClientName =

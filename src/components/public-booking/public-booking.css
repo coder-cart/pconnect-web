@@ -1,0 +1,362 @@
+.sb-root {
+  --sb-bg: #f5f5fb;
+  --sb-card: #ffffff;
+  --sb-ink: #12163a;
+  --sb-mut: #5e6388;
+  --sb-line: #e3e4f2;
+  --sb-br: #4b3fe0;
+  --sb-soft: #ecebfd;
+  --sb-am: #ffb020;
+  --sb-tl: #19b6a6;
+  --sb-rd: #e5484d;
+  color-scheme: light;
+  min-height: 100vh;
+  background: var(--sb-bg);
+  color: var(--sb-ink);
+  font-family: var(--font-studio-booking), system-ui, -apple-system, 'Segoe UI',
+    sans-serif;
+  line-height: 1.45;
+}
+
+@media (prefers-color-scheme: dark) {
+  .sb-root:not([data-theme='light']) {
+    --sb-bg: #0e1127;
+    --sb-card: #171b3d;
+    --sb-ink: #edeefa;
+    --sb-mut: #a3a7cc;
+    --sb-line: #2a2f5e;
+    --sb-soft: #232866;
+    color-scheme: dark;
+  }
+}
+
+.sb-root[data-theme='dark'] {
+  --sb-bg: #0e1127;
+  --sb-card: #171b3d;
+  --sb-ink: #edeefa;
+  --sb-mut: #a3a7cc;
+  --sb-line: #2a2f5e;
+  --sb-soft: #232866;
+  color-scheme: dark;
+}
+
+.sb-wrap {
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 28px 16px 56px;
+}
+
+.sb-wrap--embed {
+  max-width: 100%;
+  padding: 12px 12px 28px;
+  min-height: auto;
+}
+
+.sb-banner {
+  display: block;
+  width: calc(100% + 44px);
+  max-width: none;
+  height: 140px;
+  object-fit: cover;
+  margin: -22px -22px 16px;
+  border-radius: 20px 20px 0 0;
+}
+
+.sb-logo {
+  width: 56px;
+  height: 56px;
+  object-fit: cover;
+  border-radius: 14px;
+  border: 1px solid var(--sb-line);
+  margin-bottom: 8px;
+}
+
+.sb-card {
+  background: var(--sb-card);
+  border: 1px solid var(--sb-line);
+  border-radius: 20px;
+  padding: 22px;
+  overflow: hidden;
+}
+
+.sb-hero {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  border-bottom: 1px solid var(--sb-line);
+  padding-bottom: 16px;
+  margin-bottom: 18px;
+}
+
+.sb-hero h1 {
+  margin: 0;
+  font-size: 1.5rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+.sb-hero p {
+  margin: 0;
+  color: var(--sb-mut);
+  font-size: 0.95rem;
+}
+
+.sb-lead {
+  margin: 0 0 16px;
+  color: var(--sb-mut);
+  font-size: 0.95rem;
+}
+
+.sb-section-label {
+  margin: 0 0 10px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--sb-mut);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.sb-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 18px;
+}
+
+.sb-chip {
+  border: 1px solid var(--sb-line);
+  background: var(--sb-card);
+  color: var(--sb-ink);
+  border-radius: 12px;
+  padding: 10px 14px;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  text-align: left;
+}
+
+.sb-chip small {
+  font-weight: 400;
+  color: var(--sb-mut);
+}
+
+.sb-chip[aria-pressed='true'],
+.sb-chip.on {
+  background: var(--sb-br);
+  border-color: var(--sb-br);
+  color: #fff;
+}
+
+.sb-chip[aria-pressed='true'] small,
+.sb-chip.on small {
+  color: rgba(255, 255, 255, 0.85);
+}
+
+.sb-cal-nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.sb-cal-nav strong {
+  font-size: 0.95rem;
+}
+
+.sb-ib {
+  border: 1px solid var(--sb-line);
+  background: var(--sb-card);
+  color: var(--sb-ink);
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  font: inherit;
+  font-size: 18px;
+  cursor: pointer;
+}
+
+.sb-cg {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 6px;
+  text-align: center;
+  margin-bottom: 16px;
+}
+
+.sb-cg i {
+  font-style: normal;
+  font-size: 12px;
+  color: var(--sb-mut);
+  padding: 4px 0;
+}
+
+.sb-dy {
+  position: relative;
+  aspect-ratio: 1 / 0.9;
+  min-height: 44px;
+  border: 1px solid var(--sb-line);
+  background: var(--sb-card);
+  color: var(--sb-ink);
+  border-radius: 12px;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.sb-dy.has {
+  background: var(--sb-soft);
+}
+
+.sb-dy.on {
+  background: var(--sb-br);
+  color: #fff;
+  border-color: var(--sb-br);
+}
+
+.sb-dy:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.sb-dy em {
+  position: absolute;
+  right: 5px;
+  bottom: 3px;
+  font-style: normal;
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--sb-tl);
+}
+
+.sb-dy.on em {
+  color: #fff;
+}
+
+.sb-frm {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 8px;
+}
+
+.sb-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 0.85rem;
+  color: var(--sb-mut);
+}
+
+.sb-field input,
+.sb-field textarea,
+.sb-field select {
+  font: inherit;
+  color: var(--sb-ink);
+  background: var(--sb-card);
+  border: 1px solid var(--sb-line);
+  border-radius: 12px;
+  padding: 10px 12px;
+  min-width: 0;
+}
+
+.sb-field textarea {
+  min-height: 70px;
+  resize: vertical;
+}
+
+.sb-btn {
+  background: var(--sb-br);
+  color: #fff;
+  border: 0;
+  border-radius: 12px;
+  padding: 10px 16px;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.sb-btn:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.sb-btn.ghost {
+  background: var(--sb-soft);
+  color: var(--sb-ink);
+}
+
+.sb-btn.outline {
+  background: transparent;
+  color: var(--sb-ink);
+  border: 1px solid var(--sb-line);
+}
+
+.sb-btn.sm {
+  padding: 6px 12px;
+  font-size: 13px;
+}
+
+.sb-status {
+  margin: 0;
+  color: var(--sb-mut);
+  font-size: 0.9rem;
+}
+
+.sb-status.error {
+  color: var(--sb-rd);
+}
+
+.sb-status.success {
+  color: var(--sb-tl);
+  font-weight: 600;
+}
+
+.sb-ok {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background: var(--sb-tl);
+  color: #fff;
+  font-size: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 12px;
+}
+
+.sb-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+.sb-attr {
+  margin-top: 28px;
+  text-align: center;
+  font-size: 0.8rem;
+  color: var(--sb-mut);
+}
+
+.sb-attr a {
+  color: var(--sb-mut);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.sb-attr a:hover {
+  color: var(--sb-ink);
+}
+
+.sb-root button:focus-visible,
+.sb-root input:focus-visible,
+.sb-root select:focus-visible,
+.sb-root textarea:focus-visible {
+  outline: 3px solid var(--sb-am);
+  outline-offset: 2px;
+}

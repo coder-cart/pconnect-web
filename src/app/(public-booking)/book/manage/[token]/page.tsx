@@ -1,15 +1,14 @@
 'use client';
 
-import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
+import { BuiltByColabdeck } from '@/components/public-booking/BuiltByColabdeck';
 import {
   cancelManagedBooking,
   fetchManagedBooking,
   rescheduleManagedBooking,
   type GuestBookingRequest,
 } from '@/lib/public-booking-api';
-import { SITE_NAME } from '@/lib/marketing/site';
 
 function statusLabel(status: string) {
   return status.replaceAll('_', ' ');
@@ -100,23 +99,22 @@ export default function ManageBookingPage() {
 
   if (isLoading) {
     return (
-      <section className="mk-shell" style={{ paddingTop: '2.5rem' }}>
-        <p className="mk-form__status">Loading booking…</p>
-      </section>
+      <div className="sb-wrap">
+        <p className="sb-status">Loading booking…</p>
+        <BuiltByColabdeck />
+      </div>
     );
   }
 
   if (!request) {
     return (
-      <section className="mk-shell" style={{ paddingTop: '2.5rem' }}>
-        <div className="mk-demo-card" style={{ maxWidth: 480, margin: '0 auto' }}>
+      <div className="sb-wrap">
+        <div className="sb-card">
           <h1>Booking not found</h1>
-          <p>{errorMessage}</p>
-          <Link className="mk-btn mk-btn--outline" href="/">
-            {SITE_NAME}
-          </Link>
+          <p className="sb-lead">{errorMessage}</p>
         </div>
-      </section>
+        <BuiltByColabdeck />
+      </div>
     );
   }
 
@@ -124,22 +122,23 @@ export default function ManageBookingPage() {
     request.status === 'pending' || request.status === 'reschedule_proposed';
 
   return (
-    <section className="mk-shell" style={{ paddingTop: '2.5rem' }}>
-      <div className="mk-demo-card" style={{ maxWidth: 560, margin: '0 auto' }}>
-        <p style={{ fontSize: '0.8rem', letterSpacing: '0.06em', opacity: 0.7 }}>
-          BOOKING REQUEST
-        </p>
-        <h1>{request.studioName}</h1>
-        <p>
+    <div className="sb-wrap">
+      <div className="sb-card">
+        <header className="sb-hero">
+          <h1>{request.studioName}</h1>
+          <p>Your booking request</p>
+        </header>
+
+        <p className="sb-lead">
           Status: <strong>{statusLabel(request.status)}</strong>
         </p>
-        <p>
+        <p className="sb-status">
           Requested:{' '}
           {new Date(request.requestedStartsAt).toLocaleString()} –{' '}
           {new Date(request.requestedEndsAt).toLocaleTimeString()}
         </p>
         {request.proposedStartsAt && request.proposedEndsAt ? (
-          <p>
+          <p className="sb-status" style={{ marginTop: '0.5rem' }}>
             Studio proposed:{' '}
             <strong>
               {new Date(request.proposedStartsAt).toLocaleString()} –{' '}
@@ -148,26 +147,21 @@ export default function ManageBookingPage() {
           </p>
         ) : null}
         {request.rejectionReason ? (
-          <p>Reason: {request.rejectionReason}</p>
+          <p className="sb-status" style={{ marginTop: '0.5rem' }}>
+            Reason: {request.rejectionReason}
+          </p>
         ) : null}
         {errorMessage ? (
-          <p className="mk-form__status mk-form__status--error" role="alert">
+          <p className="sb-status error" role="alert">
             {errorMessage}
           </p>
         ) : null}
 
-        <div
-          style={{
-            display: 'flex',
-            flexWrap: 'wrap',
-            gap: '0.5rem',
-            marginTop: '1.25rem',
-          }}
-        >
+        <div className="sb-actions">
           {request.status === 'reschedule_proposed' ? (
             <button
               type="button"
-              className="mk-btn"
+              className="sb-btn"
               disabled={isBusy}
               onClick={() => void handleAcceptProposal()}
             >
@@ -177,7 +171,7 @@ export default function ManageBookingPage() {
           {canAct ? (
             <button
               type="button"
-              className="mk-btn mk-btn--outline"
+              className="sb-btn outline"
               disabled={isBusy}
               onClick={() => void handleCancel()}
             >
@@ -186,18 +180,15 @@ export default function ManageBookingPage() {
           ) : null}
           <button
             type="button"
-            className="mk-btn mk-btn--ghost"
+            className="sb-btn ghost"
             disabled={isBusy}
             onClick={() => void reload()}
           >
             Refresh
           </button>
         </div>
-
-        <p className="mk-form__privacy" style={{ marginTop: '1.5rem' }}>
-          Powered by <Link href="/">{SITE_NAME}</Link>
-        </p>
       </div>
-    </section>
+      <BuiltByColabdeck />
+    </div>
   );
 }

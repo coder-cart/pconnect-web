@@ -1,9 +1,18 @@
 import { API_BASE_URL } from '@/lib/config';
 
+export interface PublicSessionType {
+  id: string;
+  name: string;
+  durationMinutes: number;
+}
+
 export interface PublicStudioProfile {
   slug: string;
   studioName: string;
   logoUpdatedAt?: string | null;
+  hasLogo?: boolean;
+  bannerUpdatedAt?: string | null;
+  hasBanner?: boolean;
   title: string;
   description?: string | null;
   timezone: string;
@@ -11,6 +20,22 @@ export interface PublicStudioProfile {
   bufferMinutes: number;
   minNoticeHours: number;
   maxAdvanceDays: number;
+  primaryColor?: string | null;
+  secondaryColor?: string | null;
+  backgroundColor?: string | null;
+  contact?: Record<string, string | undefined>;
+  social?: Record<string, string | undefined>;
+  sessionTypes: PublicSessionType[];
+}
+
+export function publicBookingAssetUrl(
+  slug: string,
+  kind: 'logo' | 'banner',
+  cacheKey?: string | null,
+) {
+  const base = `${API_BASE_URL}/public/booking/${encodeURIComponent(slug)}/${kind}`;
+  if (!cacheKey) return base;
+  return `${base}?v=${encodeURIComponent(cacheKey)}`;
 }
 
 export interface GuestBookingRequest {
@@ -74,14 +99,27 @@ export function fetchPublicStudio(slug: string) {
   );
 }
 
-export function fetchPublicSlots(slug: string, from: string, to: string) {
+export function fetchPublicSlots(
+  slug: string,
+  from: string,
+  to: string,
+  options?: { sessionTypeId?: string; durationMinutes?: number },
+) {
   if (!slug?.trim()) {
     return Promise.reject(new Error('Booking page not found'));
   }
   const params = new URLSearchParams({ from, to });
-  return publicFetch<{ slotDurationMinutes: number; slots: string[] }>(
-    `/public/booking/${encodeURIComponent(slug)}/slots?${params}`,
-  );
+  if (options?.sessionTypeId) {
+    params.set('sessionTypeId', options.sessionTypeId);
+  }
+  if (options?.durationMinutes) {
+    params.set('durationMinutes', String(options.durationMinutes));
+  }
+  return publicFetch<{
+    slotDurationMinutes: number;
+    sessionTypeId?: string | null;
+    slots: string[];
+  }>(`/public/booking/${encodeURIComponent(slug)}/slots?${params}`);
 }
 
 export function createPublicBookingRequest(
@@ -92,6 +130,7 @@ export function createPublicBookingRequest(
     guestPhone?: string;
     notes?: string;
     startsAt: string;
+    sessionTypeId?: string;
     website?: string;
   },
 ) {

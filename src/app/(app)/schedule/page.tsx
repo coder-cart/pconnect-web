@@ -2,11 +2,9 @@
 
 import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
-import { ChevronLeft, ChevronRight, Plus } from 'lucide-react';
 import { apiRequest } from '@/lib/api-client';
 import { ApiResponse, userHasPermission, userIsExternal } from '@/lib/auth';
 import { PageHeader } from '@/components/ui/PageHeader';
-import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { Input } from '@/components/ui/Input';
@@ -19,9 +17,12 @@ import {
   StudioCalendar,
   type CalendarEvent,
 } from '@/components/schedule/StudioCalendar';
-import { BookingRequestsPanel } from '@/components/booking/BookingRequestsPanel';
-import { BookingSettingsPanel } from '@/components/booking/BookingSettingsPanel';
+import { StudioAvailabilityPanel } from '@/components/schedule/StudioAvailabilityPanel';
+import { StudioProjectsBoard } from '@/components/schedule/StudioProjectsBoard';
+import { PublicBookFlow } from '@/components/public-booking/PublicBookFlow';
 import { useWorkspace } from '@/components/providers/WorkspaceProvider';
+
+type StudioSection = 'availability' | 'booking' | 'projects';
 
 interface CandidateUser {
   id: string;
@@ -93,18 +94,6 @@ function toLocalInputValue(value: Date) {
   return `${value.getFullYear()}-${pad(value.getMonth() + 1)}-${pad(value.getDate())}T${pad(value.getHours())}:${pad(value.getMinutes())}`;
 }
 
-function shiftAnchor(view: ScheduleView, anchor: Date, direction: -1 | 1) {
-  const next = new Date(anchor);
-  if (view === 'day') {
-    next.setDate(next.getDate() + direction);
-  } else if (view === 'week') {
-    next.setDate(next.getDate() + direction * 7);
-  } else {
-    next.setMonth(next.getMonth() + direction);
-  }
-  return next;
-}
-
 function emptyForm(seed?: Date) {
   const start = seed ? new Date(seed) : new Date();
   if (!seed) {
@@ -131,6 +120,8 @@ export default function SchedulePage() {
   const searchParams = useSearchParams();
   const canManage = userHasPermission(user, 'schedule.manage');
   const isExternal = userIsExternal(user);
+  const canConfigureBooking =
+    canManage || Boolean(isExternal && user?.isOrgAdmin);
   const [bookingClientId, setBookingClientId] = useState<string | null>(null);
   const [bookingClients, setBookingClients] = useState<ClientOption[]>([]);
   const [bookingRequestId, setBookingRequestId] = useState<string | null>(null);
@@ -150,17 +141,27 @@ export default function SchedulePage() {
     if (param === 'week' || param === 'day' || param === 'month') return param;
     return 'month';
   });
-  const [section, setSection] = useState<'calendar' | 'booking'>(() =>
-    searchParams.get('bookingRequest') || searchParams.get('section') === 'booking'
-      ? 'booking'
-      : 'calendar',
-  );
+  const [section, setSection] = useState<StudioSection>(() => {
+    const param = searchParams.get('section');
+    if (param === 'booking' || param === 'projects' || param === 'availability') {
+      return param;
+    }
+    if (searchParams.get('bookingRequest')) return 'projects';
+    return 'availability';
+  });
   const [anchor, setAnchor] = useState(() => new Date());
   const [assigneeFilter, setAssigneeFilter] = useState(
     () => searchParams.get('assigneeUserId') ?? '',
   );
+  const [bookingSlug, setBookingSlug] = useState<string | null>(null);
 
   function loadEvents() {
+    if (!canManage && !userHasPermission(user, 'schedule.view')) {
+      setEvents([]);
+      setIsLoading(false);
+      setErrorMessage(null);
+      return;
+    }
     setIsLoading(true);
     setErrorMessage(null);
     const { from, to } = rangeForView(view, anchor);
@@ -180,7 +181,7 @@ export default function SchedulePage() {
   useEffect(() => {
     void Promise.resolve().then(() => loadEvents());
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [refreshKey, view, anchor, assigneeFilter]);
+  }, [refreshKey, view, anchor, assigneeFilter, canManage, user]);
 
   useEffect(() => {
     const nextView = searchParams.get('view');
@@ -192,11 +193,11 @@ export default function SchedulePage() {
         setView(nextView);
       }
       setAssigneeFilter(nextAssignee);
-      if (bookingRequest && canManage) {
+      if (bookingRequest && (canManage || canConfigureBooking)) {
         setBookingRequestId(bookingRequest);
-        setSection('booking');
-      } else if (!canManage) {
-        setSection('calendar');
+        setSection('projects');
+      } else if (!canManage && !canConfigureBooking) {
+        setSection('availability');
       }
       if (eventId && events.length > 0) {
         const match = events.find((event) => event.id === eventId);
@@ -204,20 +205,25 @@ export default function SchedulePage() {
       }
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [searchParams, events, canManage]);
+  }, [searchParams, events, canManage, canConfigureBooking]);
 
   useEffect(() => {
-    if (!canManage) return;
+    if (!canConfigureBooking) return;
     let cancelled = false;
     apiRequest<ApiResponse<ClientOption[]>>('/clients')
       .then((response) => {
         if (cancelled) return;
-        setBookingClients(response.data);
+        const orgAdminIds = user?.orgAdminClientIds ?? [];
+        const clients =
+          canManage || !isExternal
+            ? response.data
+            : response.data.filter((client) => orgAdminIds.includes(client.id));
+        setBookingClients(clients);
         setBookingClientId((current) => {
-          if (current && response.data.some((client) => client.id === current)) {
+          if (current && clients.some((client) => client.id === current)) {
             return current;
           }
-          return response.data[0]?.id ?? null;
+          return clients[0]?.id ?? null;
         });
       })
       .catch(() => {
@@ -229,7 +235,38 @@ export default function SchedulePage() {
     return () => {
       cancelled = true;
     };
-  }, [canManage]);
+  }, [canConfigureBooking, canManage, isExternal, user?.orgAdminClientIds]);
+
+  useEffect(() => {
+    if (!bookingClientId || !canConfigureBooking) {
+      setBookingSlug(null);
+      return;
+    }
+    let cancelled = false;
+    apiRequest<
+      ApiResponse<{
+        publicSlug?: string | null;
+        enabled?: boolean;
+        publishStatus?: string;
+      }>
+    >(`/clients/${bookingClientId}/booking-settings`)
+      .then((response) => {
+        if (cancelled) return;
+        const published =
+          response.data.enabled &&
+          (response.data.publishStatus === 'published' ||
+            !response.data.publishStatus);
+        setBookingSlug(
+          published ? response.data.publicSlug ?? null : null,
+        );
+      })
+      .catch(() => {
+        if (!cancelled) setBookingSlug(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [bookingClientId, canConfigureBooking, section]);
 
   useEffect(() => {
     if (!modalOpen) return;
@@ -272,26 +309,6 @@ export default function SchedulePage() {
     });
   }, [orders, form.clientOrganizationId]);
 
-  const rangeLabel = useMemo(() => {
-    if (view === 'day') {
-      return anchor.toLocaleDateString(undefined, {
-        weekday: 'long',
-        month: 'long',
-        day: 'numeric',
-        year: 'numeric',
-      });
-    }
-    if (view === 'week') {
-      const from = startOfWeek(anchor);
-      const to = endOfWeek(anchor);
-      return `${from.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })} – ${to.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}`;
-    }
-    return anchor.toLocaleDateString(undefined, {
-      month: 'long',
-      year: 'numeric',
-    });
-  }, [view, anchor]);
-
   function openCreate(seed?: Date) {
     setEditingEvent(null);
     setForm(emptyForm(seed));
@@ -314,15 +331,6 @@ export default function SchedulePage() {
     });
     setWarnings([]);
     setModalOpen(true);
-  }
-
-  function clearAssigneeFilter() {
-    setAssigneeFilter('');
-    if (typeof window !== 'undefined') {
-      const url = new URL(window.location.href);
-      url.searchParams.delete('assigneeUserId');
-      window.history.replaceState({}, '', `${url.pathname}${url.search}`);
-    }
   }
 
   async function handleSubmit(event?: FormEvent) {
@@ -404,207 +412,43 @@ export default function SchedulePage() {
     return Boolean(form.title.trim() && form.startsAt && form.endsAt);
   }
 
-  const upcoming = useMemo(
-    () =>
-      [...events]
-        .filter((event) => event.status !== 'cancelled')
-        .sort(
-          (left, right) =>
-            new Date(left.startsAt).getTime() -
-            new Date(right.startsAt).getTime(),
-        ),
-    [events],
-  );
+  const showAvailability =
+    section === 'availability' || (!canManage && !canConfigureBooking);
+  const showStudioHub = canConfigureBooking;
 
   return (
     <div className="space-y-4">
       <PageHeader
-        title="Schedule"
-        description="Studio shoots, sessions, and meetings."
+        title="Studio"
+        description="Post availability, share your booking page, and run jobs on the project board."
         breadcrumbs={[
           { label: 'Workspace', href: '/dashboard' },
-          { label: 'Schedule' },
+          { label: 'Studio' },
         ]}
-        action={
-          canManage && section === 'calendar' ? (
-            <Button onClick={() => openCreate()}>
-              <Plus className="h-4 w-4" />
-              New event
-            </Button>
-          ) : null
-        }
       />
 
-      {canManage ? (
+      {showStudioHub ? (
         <Tabs
           activeId={section}
-          onChange={(id) => setSection(id as 'calendar' | 'booking')}
+          onChange={(id) => setSection(id as StudioSection)}
           items={[
-            { id: 'calendar', label: 'Calendar' },
-            { id: 'booking', label: 'Public booking' },
+            { id: 'availability', label: 'Availability' },
+            { id: 'booking', label: 'Booking page' },
+            { id: 'projects', label: 'Projects' },
           ]}
         />
       ) : null}
 
-      {section === 'calendar' || !canManage ? (
-        <>
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <Tabs
-              activeId={view}
-              onChange={(id) => setView(id as ScheduleView)}
-              items={[
-                { id: 'month', label: 'Month' },
-                { id: 'week', label: 'Week' },
-                { id: 'day', label: 'Day' },
-              ]}
-            />
-            <div className="flex flex-wrap items-center gap-2">
-              <Button
-                variant="secondary"
-                size="sm"
-                onClick={() => setAnchor(shiftAnchor(view, anchor, -1))}
-                aria-label="Previous"
-              >
-                <ChevronLeft className="h-4 w-4" />
-              </Button>
-              <Button
-                variant="secondary"
-                size="sm"
-                onClick={() => setAnchor(new Date())}
-              >
-                Today
-              </Button>
-              <Button
-                variant="secondary"
-                size="sm"
-                onClick={() => setAnchor(shiftAnchor(view, anchor, 1))}
-                aria-label="Next"
-              >
-                <ChevronRight className="h-4 w-4" />
-              </Button>
-              <p className="min-w-[8rem] text-sm font-medium text-[var(--foreground)]">
-                {rangeLabel}
-              </p>
-            </div>
-          </div>
-
-          {assigneeFilter ? (
-            <Card padding="sm" className="flex flex-wrap items-center justify-between gap-2">
-              <p className="text-sm text-[var(--muted)]">
-                Showing events for one assignee from Workload.
-              </p>
-              <Button size="sm" variant="secondary" onClick={clearAssigneeFilter}>
-                Clear filter
-              </Button>
-            </Card>
-          ) : null}
-
-          {warnings.length > 0 ? (
-            <Card
-              padding="sm"
-              className="border-[var(--warning)] bg-[var(--warning-soft)]"
-            >
-              <p className="text-sm font-medium text-[var(--foreground)]">
-                Scheduling warnings
-              </p>
-              <ul className="mt-1 list-disc pl-5 text-xs text-[var(--muted)]">
-                {warnings.map((warning) => (
-                  <li key={warning}>{warning}</li>
-                ))}
-              </ul>
-            </Card>
-          ) : null}
-
-          {isLoading ? <ListSkeleton rows={5} /> : null}
-          {!isLoading && errorMessage ? (
-            <ErrorState
-              title="Unable to load schedule"
-              description={errorMessage}
-            />
-          ) : null}
-
-          {!isLoading && !errorMessage ? (
-            <StudioCalendar
-              view={view}
-              anchor={anchor}
-              events={events}
-              onSelectEvent={(event) => openEdit(event)}
-              onSelectSlot={
-                canManage
-                  ? (day) => {
-                      setAnchor(day);
-                      openCreate(day);
-                    }
-                  : undefined
-              }
-            />
-          ) : null}
-
-          {!isLoading && !errorMessage && upcoming.length > 0 ? (
-            <Card padding="none" className="overflow-hidden">
-              <div className="border-b border-[var(--border)] px-4 py-3">
-                <p className="text-sm font-semibold text-[var(--foreground)]">
-                  Agenda
-                </p>
-              </div>
-              <ul className="divide-y divide-[var(--border)]">
-                {upcoming.map((event) => (
-                  <li key={event.id}>
-                    <button
-                      type="button"
-                      onClick={() => openEdit(event)}
-                      className="flex w-full items-start justify-between gap-3 px-4 py-3 text-left hover:bg-[var(--surface-muted)]"
-                    >
-                      <div className="min-w-0">
-                        <p className="truncate text-sm font-medium text-[var(--foreground)]">
-                          {event.title}
-                        </p>
-                        <p className="mt-0.5 text-xs text-[var(--muted)]">
-                          {new Date(event.startsAt).toLocaleString()} –{' '}
-                          {new Date(event.endsAt).toLocaleTimeString()}
-                          {event.location ? ` · ${event.location}` : ''}
-                          {event.clientOrganization?.name
-                            ? ` · ${event.clientOrganization.name}`
-                            : ''}
-                          {event.order?.code ? ` · ${event.order.code}` : ''}
-                        </p>
-                        {event.assignees.length > 0 ? (
-                          <p className="mt-1 text-xs text-[var(--muted)]">
-                            {event.assignees
-                              .map((row) => row.user.fullName)
-                              .join(', ')}
-                          </p>
-                        ) : null}
-                      </div>
-                      <div className="flex shrink-0 flex-col items-end gap-1">
-                        <Badge variant="primary">
-                          {event.type.replaceAll('_', ' ')}
-                        </Badge>
-                        <Badge variant="neutral">{event.status}</Badge>
-                      </div>
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            </Card>
-          ) : null}
-
-          {!isLoading && !errorMessage && upcoming.length === 0 ? (
-            <p className="text-sm text-[var(--muted)]">
-              {canManage
-                ? 'No events in this range. Use New event or click a day on the calendar.'
-                : 'No events in this range.'}
-            </p>
-          ) : null}
-        </>
-      ) : (
+      {showStudioHub && showAvailability ? (
         <div className="space-y-4">
           {bookingClients.length > 1 ? (
             <Card padding="sm">
               <Select
                 label="Studio / client"
                 value={bookingClientId ?? ''}
-                onChange={(event) => setBookingClientId(event.target.value || null)}
+                onChange={(event) =>
+                  setBookingClientId(event.target.value || null)
+                }
                 options={bookingClients.map((client) => ({
                   value: client.id,
                   label: client.name,
@@ -613,19 +457,78 @@ export default function SchedulePage() {
             </Card>
           ) : null}
           {bookingClientId ? (
-            <BookingSettingsPanel clientOrganizationId={bookingClientId} />
+            <StudioAvailabilityPanel
+              clientOrganizationId={bookingClientId}
+              onPreviewAsClient={() => setSection('booking')}
+            />
           ) : (
             <EmptyState
               title="No studio linked"
-              description="Link a client organization before enabling public booking."
+              description="Link a client organization before posting availability."
             />
           )}
-          <BookingRequestsPanel
-            highlightId={bookingRequestId}
-            onChanged={() => loadEvents()}
-          />
         </div>
-      )}
+      ) : null}
+
+      {!showStudioHub && showAvailability ? (
+        <div className="space-y-4">
+          {isLoading ? <ListSkeleton rows={5} /> : null}
+          {!isLoading && errorMessage ? (
+            <ErrorState
+              title="Unable to load schedule"
+              description={errorMessage}
+            />
+          ) : null}
+          {!isLoading && !errorMessage ? (
+            <StudioCalendar
+              view={view}
+              anchor={anchor}
+              events={events}
+              onSelectEvent={(event) => openEdit(event)}
+            />
+          ) : null}
+        </div>
+      ) : null}
+
+      {showStudioHub && section === 'booking' ? (
+        <div className="space-y-4">
+          {bookingClients.length > 1 ? (
+            <Card padding="sm">
+              <Select
+                label="Studio / client"
+                value={bookingClientId ?? ''}
+                onChange={(event) =>
+                  setBookingClientId(event.target.value || null)
+                }
+                options={bookingClients.map((client) => ({
+                  value: client.id,
+                  label: client.name,
+                }))}
+              />
+            </Card>
+          ) : null}
+          {bookingSlug ? (
+            <PublicBookFlow
+              slug={bookingSlug}
+              showAttribution={false}
+              lead="This is the page your clients see. Only dates with open slots can be picked."
+              onSubmitted={() => setSection('projects')}
+            />
+          ) : (
+            <EmptyState
+              title="Public booking is off"
+              description="Enable public booking, publish the page, and post open slots on Availability, then preview here."
+            />
+          )}
+        </div>
+      ) : null}
+
+      {showStudioHub && section === 'projects' ? (
+        <StudioProjectsBoard
+          highlightRequestId={bookingRequestId}
+          onChanged={() => loadEvents()}
+        />
+      ) : null}
 
       <Modal
         open={modalOpen}
