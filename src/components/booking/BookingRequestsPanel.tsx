@@ -133,8 +133,8 @@ export function BookingRequestsPanel({
           Booking requests
         </h3>
         <p className="mt-1 text-xs text-[var(--muted)]">
-          Approve to create a confirmed studio calendar event. Reject or propose
-          another time without creating an event.
+          Confirm to create a studio calendar event. Decline or propose another
+          time without creating an event.
         </p>
       </div>
       {errorMessage ? (
@@ -186,7 +186,7 @@ export function BookingRequestsPanel({
                   disabled={busyId === item.id}
                   onClick={() => void approve(item.id)}
                 >
-                  Approve
+                  Confirm
                 </Button>
                 <Button
                   size="sm"
@@ -194,7 +194,7 @@ export function BookingRequestsPanel({
                   disabled={busyId === item.id}
                   onClick={() => void reject(item.id)}
                 >
-                  Reject
+                  Decline
                 </Button>
                 <Button
                   size="sm"

@@ -77,6 +77,7 @@ export const metadata: Metadata = {
   },
   other: {
     'mobile-web-app-capable': 'yes',
+    'colabdeck-release': process.env.NEXT_PUBLIC_APP_RELEASE ?? 'dev',
   },
 };
 

@@ -5,6 +5,7 @@ import {
   FormEvent,
   KeyboardEvent,
   useEffect,
+  useId,
   useLayoutEffect,
   useRef,
   useState,
@@ -62,6 +63,8 @@ import {
   validateChatImageFile,
 } from '@/lib/chat-image-upload';
 import { API_BASE_URL, AUTH_TOKEN_KEY } from '@/lib/config';
+import { beginPwaUpload } from '@/lib/pwa-work-guard';
+import { usePwaWorkHold } from '@/lib/use-pwa-work-hold';
 import { prefersGalleryImagePicker } from '@/lib/device';
 import {
   AnnotatableFile,
@@ -176,6 +179,12 @@ export function ChatComposer({
   const pasteGuardRef = useRef(false);
   const [emojiPos, setEmojiPos] = useState({ left: 0, top: 0 });
   const [emojiReady, setEmojiReady] = useState(false);
+  const composerHoldId = useId();
+  usePwaWorkHold(
+    !isEmpty || attachments.length > 0 || isUploading || isRecording,
+    composerHoldId,
+    'message',
+  );
 
   const imageAttachments = attachments.filter(isImageAttachment);
   const otherAttachments = attachments.filter(
@@ -415,8 +424,21 @@ export function ChatComposer({
     const token = window.localStorage.getItem(AUTH_TOKEN_KEY);
     const formData = new FormData();
     formData.append('file', file);
+    const endUpload = beginPwaUpload();
 
-    const payload = await new Promise<{
+    let payload: {
+      id: string;
+      fileName: string;
+      mimeType: string;
+      processingStatus?: string;
+      originalWidth?: number | null;
+      originalHeight?: number | null;
+      webpStorageKey?: string | null;
+      thumbnailStorageKey?: string | null;
+      _count?: { imageAnnotations: number };
+    };
+    try {
+      payload = await new Promise<{
       id: string;
       fileName: string;
       mimeType: string;
@@ -470,6 +492,9 @@ export function ChatComposer({
       xhr.onerror = () => reject(new Error('Upload failed'));
       xhr.send(formData);
     });
+    } finally {
+      endUpload();
+    }
 
     patchAttachment(localId, {
       status: 'ready',
@@ -866,6 +891,7 @@ export function ChatComposer({
 
   return (
     <form
+      data-chat-composer=""
       onSubmit={(event) => void handleSubmit(event)}
       className="flex max-h-[min(52vh,480px)] flex-col gap-2"
     >

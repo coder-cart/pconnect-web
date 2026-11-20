@@ -29,6 +29,11 @@ ENV NEXT_PUBLIC_APP_ENV=$NEXT_PUBLIC_APP_ENV
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
+# Optional git sha or release id. Empty falls back to a unique build id so
+# each image still installs a new service worker. Rollbacks ship their own id.
+ARG APP_RELEASE=
+ENV APP_RELEASE=$APP_RELEASE
+
 RUN npm run build
 
 FROM node:20-bookworm-slim AS runner

@@ -4,6 +4,7 @@ import {
   createContext,
   useContext,
   useEffect,
+  useId,
   useMemo,
   useRef,
   useState,
@@ -17,6 +18,7 @@ import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { OrderSummary, canEditDeliveryLink, toExternalHref } from '@/lib/orders';
 import { useWorkspace } from '@/components/providers/WorkspaceProvider';
+import { usePwaWorkHold } from '@/lib/use-pwa-work-hold';
 import {
   MasterDataStatus,
   computeOrderCost,
@@ -166,6 +168,7 @@ export function OrderExcelEditor({
   const [folderStatuses, setFolderStatuses] = useState<MasterDataStatus[]>([]);
   const [users, setUsers] = useState<UserOption[]>([]);
   const [busy, setBusy] = useState(false);
+  const [sheetTouched, setSheetTouched] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [sheetFullPage, setSheetFullPage] = useState(false);
   const extraSaveRef = useRef<OrderSheetExtraSave | null>(null);
@@ -192,6 +195,12 @@ export function OrderExcelEditor({
   const [allocations, setAllocations] = useState<AllocationDraft[]>(() =>
     allocationsFromOrder(order),
   );
+  const sheetHoldId = useId();
+  usePwaWorkHold(
+    sheetFullPage || sheetTouched || busy,
+    sheetHoldId,
+    'order-edit',
+  );
 
   useEffect(() => {
     setClientOrganizationId(order.clientOrganization?.id ?? '');
@@ -207,6 +216,7 @@ export function OrderExcelEditor({
     setDeliveryLink(order.deliveryLink ?? '');
     setInternalNotes(order.internalNotes ?? '');
     setAllocations(allocationsFromOrder(order));
+    setSheetTouched(false);
   }, [order]);
 
   useEffect(() => {
@@ -369,6 +379,7 @@ export function OrderExcelEditor({
         }),
       });
       await extraSaveRef.current?.persist();
+      setSheetTouched(false);
       onUpdated();
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : 'Save failed');
@@ -416,6 +427,8 @@ export function OrderExcelEditor({
     <OrderSheetExtraSaveContext.Provider value={extraSaveRef}>
     <Card
       padding="none"
+      onInput={() => setSheetTouched(true)}
+      onChange={() => setSheetTouched(true)}
       className={
         sheetFullPage
           ? 'flex h-full max-h-full flex-col overflow-hidden rounded-none border-0'
