@@ -20,6 +20,7 @@ interface MessageListProps {
   unreadSince?: string | null;
   canManageChannel: boolean;
   canDeleteForEveryone?: boolean;
+  pinnedMessageIds?: Set<string>;
   memberNames?: ReactionMemberDirectory;
   isLoading: boolean;
   activeThreadMessageId: string | null;
@@ -29,6 +30,7 @@ interface MessageListProps {
   onEdit: (messageId: string, body: string) => Promise<void>;
   onDelete: (messageId: string) => void;
   onPin: (messageId: string) => Promise<void>;
+  onUnpin?: (messageId: string) => Promise<void>;
   onCopyMessage: (body: string) => void;
   onCopyLink: (channelId: string, messageId: string) => void;
   onMarkUnread: (messageId: string) => Promise<void>;
@@ -54,6 +56,7 @@ export function MessageList({
   unreadSince = null,
   canManageChannel,
   canDeleteForEveryone = false,
+  pinnedMessageIds,
   memberNames,
   isLoading,
   activeThreadMessageId,
@@ -63,6 +66,7 @@ export function MessageList({
   onEdit,
   onDelete,
   onPin,
+  onUnpin,
   onCopyMessage,
   onCopyLink,
   onMarkUnread,
@@ -114,6 +118,7 @@ export function MessageList({
           currentUserId={currentUserId}
           canManageChannel={canManageChannel}
           canDeleteForEveryone={canDeleteForEveryone}
+          isPinned={pinnedMessageIds?.has(entry.message.id) ?? false}
           memberNames={memberNames}
           unread={unread}
           isActive={activeThreadMessageId === entry.message.id}
@@ -123,6 +128,7 @@ export function MessageList({
           onEdit={onEdit}
           onDelete={onDelete}
           onPin={onPin}
+          onUnpin={onUnpin}
           onCopyMessage={onCopyMessage}
           onCopyLink={onCopyLink}
           onMarkUnread={onMarkUnread}

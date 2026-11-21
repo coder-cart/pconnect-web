@@ -7,6 +7,7 @@ import {
   MoreHorizontal,
   Pencil,
   Pin,
+  PinOff,
   Square,
   Trash2,
 } from 'lucide-react';
@@ -26,6 +27,10 @@ import {
 } from '@/components/ui/ContextMenu';
 import { ChatMessage, getDeletedMessageLabel } from '@/lib/chat-types';
 import { canDeleteMessageForEveryone } from '@/lib/chat-message-permissions';
+import {
+  matchChatFormatShortcut,
+  wrapMarkdownSelection,
+} from '@/lib/chatFormatShortcuts';
 import { formatMessageTime } from '@/lib/formatMessageDate';
 import { useViewerTimeZone } from '@/hooks/useViewerTimeZone';
 import { cn } from '@/lib/cn';
@@ -38,6 +43,7 @@ interface MessageItemProps {
   canManageChannel: boolean;
   /** Owner/Admin may delete others' messages for everyone. */
   canDeleteForEveryone?: boolean;
+  isPinned?: boolean;
   memberNames?: ReactionMemberDirectory;
   isActive?: boolean;
   unread?: boolean;
@@ -47,6 +53,7 @@ interface MessageItemProps {
   onEdit: (messageId: string, body: string) => Promise<void>;
   onDelete: (messageId: string) => void;
   onPin: (messageId: string) => Promise<void>;
+  onUnpin?: (messageId: string) => Promise<void>;
   onCopyMessage: (body: string) => void;
   onCopyLink: (channelId: string, messageId: string) => void;
   onMarkUnread: (messageId: string) => Promise<void>;
@@ -59,6 +66,7 @@ export function MessageItem({
   currentUserId,
   canManageChannel,
   canDeleteForEveryone = false,
+  isPinned = false,
   memberNames,
   isActive,
   unread = false,
@@ -68,6 +76,7 @@ export function MessageItem({
   onEdit,
   onDelete,
   onPin,
+  onUnpin,
   onCopyMessage,
   onCopyLink,
   onMarkUnread,
@@ -184,13 +193,23 @@ export function MessageItem({
       {canManageChannel ? (
         <>
           <ContextMenuSeparator />
-          <ContextMenuItem
-            shortcut="P"
-            onClick={() => void onPin(message.id)}
-          >
-            <Pin className="h-4 w-4" />
-            Pin to channel
-          </ContextMenuItem>
+          {isPinned && onUnpin ? (
+            <ContextMenuItem
+              shortcut="P"
+              onClick={() => void onUnpin(message.id)}
+            >
+              <PinOff className="h-4 w-4" />
+              Unpin from channel
+            </ContextMenuItem>
+          ) : (
+            <ContextMenuItem
+              shortcut="P"
+              onClick={() => void onPin(message.id)}
+            >
+              <Pin className="h-4 w-4" />
+              Pin to channel
+            </ContextMenuItem>
+          )}
         </>
       ) : null}
       {canDelete ? (
@@ -279,6 +298,15 @@ export function MessageItem({
             <span className="text-xs text-[var(--muted)]">
               {formatMessageTime(message.createdAt, timeZone)}
             </span>
+            {isPinned ? (
+              <span
+                className="inline-flex items-center gap-0.5 text-xs text-[var(--muted)]"
+                title="Pinned"
+              >
+                <Pin className="h-3 w-3 text-[var(--danger)]" />
+                Pinned
+              </span>
+            ) : null}
             {message.isEdited && !editing ? (
               <span className="text-xs text-[var(--muted)]">(edited)</span>
             ) : null}
@@ -308,7 +336,38 @@ export function MessageItem({
                   ) {
                     event.preventDefault();
                     void handleSaveEdit();
+                    return;
                   }
+
+                  const formatAction = matchChatFormatShortcut(event);
+                  if (!formatAction) {
+                    return;
+                  }
+
+                  event.preventDefault();
+                  const target = event.currentTarget;
+                  const linkUrl =
+                    formatAction === 'link'
+                      ? window.prompt('Enter link URL')?.trim()
+                      : undefined;
+                  if (formatAction === 'link' && !linkUrl) {
+                    return;
+                  }
+
+                  const next = wrapMarkdownSelection(
+                    target.value,
+                    target.selectionStart,
+                    target.selectionEnd,
+                    formatAction,
+                    linkUrl,
+                  );
+                  setEditBody(next.value);
+                  requestAnimationFrame(() => {
+                    target.setSelectionRange(
+                      next.selectionStart,
+                      next.selectionEnd,
+                    );
+                  });
                 }}
                 className="min-h-[88px] w-full resize-y rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm leading-snug whitespace-pre-wrap outline-none focus:border-[var(--primary)]"
                 aria-label="Edit message"

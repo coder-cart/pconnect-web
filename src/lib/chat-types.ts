@@ -115,6 +115,27 @@ export interface ChannelContext {
   projectName?: string;
 }
 
+export interface ChannelMessagesPage {
+  items: ChatMessage[];
+  hasMore: boolean;
+}
+
+/** Normalize listMessages responses (paginated `{ items, hasMore }` or legacy array). */
+export function normalizeChannelMessagesPage(
+  data: ChannelMessagesPage | ChatMessage[] | null | undefined,
+): ChannelMessagesPage {
+  if (Array.isArray(data)) {
+    return { items: data, hasMore: false };
+  }
+  if (data && Array.isArray(data.items)) {
+    return {
+      items: data.items,
+      hasMore: Boolean(data.hasMore),
+    };
+  }
+  return { items: [], hasMore: false };
+}
+
 export function appendUniqueById<T extends { id: string }>(
   items: T[],
   item: T,

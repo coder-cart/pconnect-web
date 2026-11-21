@@ -1,11 +1,48 @@
 import {
   IMAGE_ANNOTATION_MAX_BYTES,
-  isAnnotatableImageMime,
   validateAnnotatableImageFile,
 } from '@/lib/image-annotations';
 
 const MAX_IMAGE_EDGE = 2560;
 const JPEG_QUALITY = 0.85;
+
+/**
+ * Prefer photo-library-friendly accept lists. Keep MIME + extensions so Android
+ * and iOS surface the native Photos picker instead of a generic Documents UI.
+ * Audio is omitted (API does not accept audio chat uploads).
+ */
+export const CHAT_MEDIA_FILE_ACCEPT = [
+  'image/*',
+  'image/jpeg',
+  'image/png',
+  'image/webp',
+  'image/gif',
+  'image/heic',
+  'image/heif',
+  '.jpg',
+  '.jpeg',
+  '.png',
+  '.webp',
+  '.gif',
+  '.heic',
+  '.heif',
+  'video/mp4',
+  'video/quicktime',
+  '.mp4',
+  '.mov',
+  'application/pdf',
+  '.pdf',
+].join(',');
+
+/** Visually hide a file input without `display:none` (breaks Android .click()). */
+export const CHAT_FILE_INPUT_CLASS =
+  'absolute h-px w-px overflow-hidden opacity-0 pointer-events-none';
+
+export function isHeicLikeImage(file: File) {
+  const mime = (file.type || '').toLowerCase();
+  if (mime === 'image/heic' || mime === 'image/heif') return true;
+  return /\.hei[cf]$/i.test(file.name || '');
+}
 
 function extensionForMime(mimeType: string) {
   switch (mimeType.toLowerCase()) {
@@ -260,6 +297,9 @@ function dedupeClipboardImages(files: File[]) {
 }
 
 export function validateChatImageFile(file: File): string | null {
+  if (isHeicLikeImage(file)) {
+    return 'HEIC photos are not supported yet. Choose a JPEG or PNG, or export the photo as Most Compatible.';
+  }
   if (file.type === 'image/gif') {
     if (file.size > IMAGE_ANNOTATION_MAX_BYTES) {
       return 'Image must be 10 MB or smaller';

@@ -1,4 +1,8 @@
+'use client';
+
+import type { MouseEvent } from 'react';
 import Link from 'next/link';
+import { usePathname, useRouter } from 'next/navigation';
 import { Card } from '@/components/ui/Card';
 import {
   formatNotificationRelativeTime,
@@ -6,6 +10,10 @@ import {
   NotificationRecord,
 } from '@/lib/notifications';
 import { formatMentionPlainText } from '@/lib/chatMarkdown';
+import {
+  navigateToChatConversation,
+  parseChatConversationHref,
+} from '@/lib/chat-navigation';
 
 function initials(value: string) {
   return value
@@ -21,6 +29,24 @@ export function RecentMessagesPanel({
 }: {
   items: NotificationRecord[];
 }) {
+  const router = useRouter();
+  const pathname = usePathname();
+
+  function handleChatLinkClick(
+    event: MouseEvent<HTMLAnchorElement>,
+    href: string,
+  ) {
+    const chatTarget = parseChatConversationHref(href);
+    if (!chatTarget) return;
+    event.preventDefault();
+    navigateToChatConversation(router, {
+      channelId: chatTarget.channelId,
+      messageId: chatTarget.messageId,
+      pathname,
+      alreadyInConversation: false,
+    });
+  }
+
   return (
     <Card className="h-full">
       <div className="mb-3 flex items-center justify-between gap-2">
@@ -44,10 +70,12 @@ export function RecentMessagesPanel({
         <ul className="space-y-3">
           {items.slice(0, 5).map((item) => {
             const title = formatNotificationTitle(item);
+            const href = item.linkUrl || '/chat';
             return (
               <li key={item.id}>
                 <Link
-                  href={item.linkUrl || '/chat'}
+                  href={href}
+                  onClick={(event) => handleChatLinkClick(event, href)}
                   className="flex gap-3 rounded-[var(--radius-md)] p-2 hover:bg-[var(--surface-muted)]"
                 >
                   <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[var(--primary-soft)] text-xs font-semibold text-[var(--primary)]">

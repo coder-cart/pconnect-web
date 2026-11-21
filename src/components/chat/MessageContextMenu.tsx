@@ -5,6 +5,7 @@ import {
   Copy,
   Link2,
   Pin,
+  PinOff,
   Pencil,
   Square,
   Trash2,
@@ -29,9 +30,11 @@ interface MessageContextMenuProps {
   currentUserId: string;
   canManageChannel: boolean;
   canDeleteForEveryone?: boolean;
+  isPinned?: boolean;
   onEdit: (messageId: string, body: string) => Promise<void>;
   onDelete: (messageId: string) => void;
   onPin: (messageId: string) => Promise<void>;
+  onUnpin?: (messageId: string) => Promise<void>;
   onCopyMessage: (body: string) => void;
   onCopyLink: (channelId: string, messageId: string) => void;
   onMarkUnread: (messageId: string) => Promise<void>;
@@ -45,9 +48,11 @@ export function MessageContextMenu({
   currentUserId,
   canManageChannel,
   canDeleteForEveryone = false,
+  isPinned = false,
   onEdit,
   onDelete,
   onPin,
+  onUnpin,
   onCopyMessage,
   onCopyLink,
   onMarkUnread,
@@ -105,14 +110,25 @@ export function MessageContextMenu({
       {canManageChannel ? (
         <>
           <MenuSeparator mode={mode} />
-          <MenuItemWrapper
-            mode={mode}
-            onClick={() => void onPin(message.id)}
-            shortcut="P"
-          >
-            <Pin className="h-4 w-4" />
-            Pin to channel
-          </MenuItemWrapper>
+          {isPinned && onUnpin ? (
+            <MenuItemWrapper
+              mode={mode}
+              onClick={() => void onUnpin(message.id)}
+              shortcut="P"
+            >
+              <PinOff className="h-4 w-4" />
+              Unpin from channel
+            </MenuItemWrapper>
+          ) : (
+            <MenuItemWrapper
+              mode={mode}
+              onClick={() => void onPin(message.id)}
+              shortcut="P"
+            >
+              <Pin className="h-4 w-4" />
+              Pin to channel
+            </MenuItemWrapper>
+          )}
         </>
       ) : null}
       {canDelete ? (
@@ -302,13 +318,23 @@ export function MessageContextMenuWrapper({
       {props.canManageChannel ? (
         <>
           <ContextMenuSeparator />
-          <ContextMenuItem
-            shortcut="P"
-            onClick={() => void props.onPin(props.message.id)}
-          >
-            <Pin className="h-4 w-4" />
-            Pin to channel
-          </ContextMenuItem>
+          {props.isPinned && props.onUnpin ? (
+            <ContextMenuItem
+              shortcut="P"
+              onClick={() => void props.onUnpin?.(props.message.id)}
+            >
+              <PinOff className="h-4 w-4" />
+              Unpin from channel
+            </ContextMenuItem>
+          ) : (
+            <ContextMenuItem
+              shortcut="P"
+              onClick={() => void props.onPin(props.message.id)}
+            >
+              <Pin className="h-4 w-4" />
+              Pin to channel
+            </ContextMenuItem>
+          )}
         </>
       ) : null}
       {canDelete ? (

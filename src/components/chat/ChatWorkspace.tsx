@@ -1,8 +1,21 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { Plus } from 'lucide-react';
 import { apiRequest } from '@/lib/api-client';
+import {
+  buildChatHref,
+  CHAT_LIST_PATH,
+  CHAT_OVERLAY_HISTORY_TOKEN,
+  clearChatConversationUrl,
+  dismissSoftHistoryLayer,
+  ensureMobileChatListUnderConversation,
+  historyHasChatConversationFrame,
+  isMobileChatViewport,
+  markChatConversationHistoryFrame,
+  navigateToChatConversation,
+} from '@/lib/chat-navigation';
 import {
   ApiResponse,
   AuthenticatedUser,
@@ -14,12 +27,16 @@ import {
 import {
   appendUniqueById,
   insertMessageChronologically,
+  normalizeChannelMessagesPage,
   ChatChannel,
   ChatMessage,
   ChannelContext,
+  ChannelMessagesPage,
   getChannelLabel,
   PendingChannelInvite,
 } from '@/lib/chat-types';
+import type { ChatScrollRestore } from '@/hooks/useChatScroll';
+import { useChatKeyboardViewport } from '@/hooks/useChatKeyboardViewport';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { EmptyState, ErrorState } from '@/components/ui/StatePanels';
@@ -32,8 +49,6 @@ import { ChatComposer } from '@/components/chat/ChatComposer';
 import { ChannelSidebar } from '@/components/chat/ChannelSidebar';
 import { ChannelDetailsPanel } from '@/components/chat/ChannelDetailsPanel';
 import { ChannelHeader } from '@/components/chat/ChannelHeader';
-import { ChannelCanvasPanel } from '@/components/chat/ChannelCanvasPanel';
-import { PinnedMessagesPanel } from '@/components/chat/PinnedMessagesPanel';
 import { MessageList } from '@/components/chat/MessageList';
 import { ThreadPanel } from '@/components/chat/ThreadPanel';
 import { ChatScrollArea } from '@/components/chat/ChatScrollArea';
@@ -174,6 +189,9 @@ export function ChatWorkspace({
   initialChannelId = null,
   initialMessageId = null,
 }: ChatWorkspaceProps) {
+  const router = useRouter();
+  const conversationHistoryPushedRef = useRef(false);
+  const overlayHistoryPushedRef = useRef(false);
   const [channels, setChannels] = useState<ChatChannel[]>([]);
   const [selectedChannelId, setSelectedChannelId] = useState<string | null>(
     initialChannelId,
@@ -189,13 +207,34 @@ export function ChatWorkspace({
     if (typeof window === 'undefined') return true;
     return window.localStorage.getItem('pconnect.chat.sidebarOpen') !== '0';
   });
-  const [channelTab, setChannelTab] = useState<'messages' | 'canvas' | 'pins'>('messages');
   const [huddleLink, setHuddleLink] = useState<string | null>(null);
   const [highlightMessageId, setHighlightMessageId] = useState<string | null>(
     initialMessageId,
   );
   const [isLoadingChannels, setIsLoadingChannels] = useState(true);
   const [isLoadingMessages, setIsLoadingMessages] = useState(false);
+  const [hasMoreMessages, setHasMoreMessages] = useState(false);
+  const [isLoadingOlderMessages, setIsLoadingOlderMessages] = useState(false);
+  const [suspendStickToBottom, setSuspendStickToBottom] = useState(false);
+  const [activeScrollKey, setActiveScrollKey] = useState<string | null>(null);
+  const [restoreOnKeyChange, setRestoreOnKeyChange] =
+    useState<ChatScrollRestore | null>(null);
+  const scrollPositionsRef = useRef<
+    Map<string, { scrollTop: number; distanceFromBottom: number }>
+  >(new Map());
+  const scrollContainerRef = useRef<HTMLDivElement | null>(null);
+  const currentScrollPositionRef = useRef<{
+    scrollTop: number;
+    distanceFromBottom: number;
+  } | null>(null);
+  const loadingOlderRef = useRef(false);
+  const hasMoreMessagesRef = useRef(false);
+  const messagesRef = useRef<ChatMessage[]>([]);
+  const initialMessageIdRef = useRef(initialMessageId);
+  initialMessageIdRef.current = initialMessageId;
+  const chatPaneRef = useChatKeyboardViewport(true);
+  messagesRef.current = messages;
+  hasMoreMessagesRef.current = hasMoreMessages;
   const [isLoadingThread, setIsLoadingThread] = useState(false);
   const [isSending, setIsSending] = useState(false);
   const [isSendingThreadReply, setIsSendingThreadReply] = useState(false);
@@ -227,7 +266,17 @@ export function ChatWorkspace({
   const [viewerCanInviteClientTeammates, setViewerCanInviteClientTeammates] =
     useState(false);
   const [pinnedMessages, setPinnedMessages] = useState<
-    Array<{ id: string; pinnedAt: string; message: ChatMessage }>
+    Array<{
+      id: string;
+      pinnedAt: string;
+      pinnedBy?: {
+        id: string;
+        fullName: string;
+        email?: string;
+        avatarUpdatedAt?: string | null;
+      } | null;
+      message: ChatMessage;
+    }>
   >([]);
   const [isLoadingPins, setIsLoadingPins] = useState(false);
   const [pendingInvites, setPendingInvites] = useState<PendingChannelInvite[]>([]);
@@ -301,7 +350,19 @@ export function ChatWorkspace({
 
     try {
       const response = await apiRequest<
-        ApiResponse<Array<{ id: string; pinnedAt: string; message: ChatMessage }>>
+        ApiResponse<
+          Array<{
+            id: string;
+            pinnedAt: string;
+            pinnedBy?: {
+              id: string;
+              fullName: string;
+              email?: string;
+              avatarUpdatedAt?: string | null;
+            } | null;
+            message: ChatMessage;
+          }>
+        >
       >(`/channels/${channelId}/pins`);
       setPinnedMessages(response.data);
     } catch {
@@ -324,36 +385,90 @@ export function ChatWorkspace({
     return response.data;
   }, [isExternalUser]);
 
+  const selectChannel = useCallback(
+    (channelId: string, messageId?: string | null) => {
+      const alreadyInConversation = Boolean(selectedChannelIdRef.current);
+      const result = navigateToChatConversation(router, {
+        channelId,
+        messageId,
+        pathname: CHAT_LIST_PATH,
+        alreadyInConversation,
+      });
+      if (result.pushedConversation) {
+        conversationHistoryPushedRef.current = true;
+        queueMicrotask(() => {
+          markChatConversationHistoryFrame();
+        });
+      }
+
+      setSelectedChannelId(channelId);
+      setDetailsOpen(false);
+      setThreadMessageId(null);
+      if (messageId) {
+        setHighlightMessageId(messageId);
+      }
+    },
+    [router],
+  );
+
+  const clearConversation = useCallback(
+    (options?: { preferBack?: boolean }) => {
+      const conversationWasStacked =
+        conversationHistoryPushedRef.current ||
+        historyHasChatConversationFrame();
+
+      setThreadMessageId(null);
+      setDetailsOpen(false);
+      setSelectedChannelId(null);
+      setHighlightMessageId(null);
+
+      conversationHistoryPushedRef.current = false;
+      overlayHistoryPushedRef.current = false;
+
+      clearChatConversationUrl(router, {
+        preferBack: options?.preferBack,
+        conversationWasStacked,
+      });
+    },
+    [router],
+  );
+
   useEffect(() => {
     loadChannels()
       .then((data) => {
-        if (data.length > 0) {
-          setSelectedChannelId((current) => {
-            const preferred = current ?? initialChannelId ?? null;
-            if (preferred) return preferred;
+        if (data.length === 0) return;
 
-            // Mobile opens on the conversation list; desktop still picks a default.
-            const isMobileViewport =
-              typeof window !== 'undefined' &&
-              window.matchMedia('(max-width: 1023px)').matches;
-            if (isMobileViewport) {
-              return null;
-            }
-
-            if (isExternalUser) {
-              const hub = data.find((channel) => channel.type === 'client_shared');
-              return hub?.id ?? data[0].id;
-            }
-
-            return data[0].id;
-          });
+        const preferred =
+          selectedChannelIdRef.current ?? initialChannelId ?? null;
+        if (preferred) {
+          setSelectedChannelId(preferred);
+          return;
         }
+
+        // Mobile opens on the conversation list; desktop picks a default via URL.
+        if (isMobileChatViewport()) {
+          return;
+        }
+
+        const defaultId = isExternalUser
+          ? (data.find((channel) => channel.type === 'client_shared')?.id ??
+            data[0].id)
+          : data[0].id;
+
+        router.replace(buildChatHref(defaultId));
+        setSelectedChannelId(defaultId);
       })
       .catch((error: Error) => setErrorMessage(error.message))
       .finally(() => setIsLoadingChannels(false));
 
     loadPendingInvites().catch(() => setPendingInvites([]));
-  }, [loadChannels, loadPendingInvites, initialChannelId, isExternalUser]);
+  }, [
+    loadChannels,
+    loadPendingInvites,
+    initialChannelId,
+    isExternalUser,
+    router,
+  ]);
 
   useEffect(() => {
     selectedChannelIdRef.current = selectedChannelId;
@@ -517,8 +632,15 @@ export function ChatWorkspace({
         setMessages((current) => bumpCount(current));
         setThreadReplies((current) => bumpCount(current));
       }
+
+      if (event === 'message.pinned' || event === 'message.unpinned') {
+        const channelId = selectedChannelIdRef.current;
+        if (channelId) {
+          void loadPinnedMessages(channelId);
+        }
+      }
     });
-  }, [subscribeChannelEvents, user.id]);
+  }, [loadPinnedMessages, subscribeChannelEvents, user.id]);
 
   useEffect(() => {
     return subscribePresenceUpdated((payload) => {
@@ -550,8 +672,14 @@ export function ChatWorkspace({
     // Opening/reading a channel clears intentional unread preservation.
     preserveSelectedUnreadRef.current = false;
     joinChannel(requestChannelId);
-    setChannelTab('messages');
     setIsLoadingMessages(true);
+    setActiveScrollKey(null);
+    setRestoreOnKeyChange(null);
+    setHasMoreMessages(false);
+    setIsLoadingOlderMessages(false);
+    setSuspendStickToBottom(false);
+    loadingOlderRef.current = false;
+    currentScrollPositionRef.current = null;
     setMessages([]);
     setErrorMessage(null);
     setThreadMessageId(null);
@@ -567,25 +695,80 @@ export function ChatWorkspace({
     );
 
     let cancelled = false;
+    const anchorId = initialMessageIdRef.current;
+
+    async function loadInitialMessages(): Promise<ChannelMessagesPage> {
+      let page = normalizeChannelMessagesPage(
+        (
+          await apiRequest<ApiResponse<ChannelMessagesPage | ChatMessage[]>>(
+            `/channels/${requestChannelId}/messages?limit=50`,
+          )
+        ).data,
+      );
+
+      // Deep-link: keep fetching older pages until the target message is present.
+      while (
+        anchorId &&
+        page.hasMore &&
+        !page.items.some((message) => message.id === anchorId)
+      ) {
+        const oldest = page.items[0];
+        if (!oldest) break;
+        const older = normalizeChannelMessagesPage(
+          (
+            await apiRequest<ApiResponse<ChannelMessagesPage | ChatMessage[]>>(
+              `/channels/${requestChannelId}/messages?limit=50&before=${oldest.id}`,
+            )
+          ).data,
+        );
+        if (older.items.length === 0) {
+          page = { ...page, hasMore: false };
+          break;
+        }
+        const merged = [...older.items];
+        for (const message of page.items) {
+          if (!merged.some((existing) => existing.id === message.id)) {
+            merged.push(message);
+          }
+        }
+        page = { items: merged, hasMore: older.hasMore };
+      }
+
+      return page;
+    }
 
     Promise.all([
-      apiRequest<ApiResponse<ChatMessage[]>>(
-        `/channels/${requestChannelId}/messages`,
-      ),
+      loadInitialMessages(),
       apiRequest<ApiResponse<unknown>>(`/channels/${requestChannelId}/read`, {
         method: 'POST',
-      }),
+      }).catch(() => ({ success: true as const, data: null })),
       CHAT_HUDDLE_ENABLED
         ? apiRequest<ApiResponse<{ joinPath?: string } | null>>(
             `/channels/${requestChannelId}/huddles/active`,
           ).catch(() => ({ success: true, data: null }))
         : Promise.resolve({ success: true as const, data: null }),
     ])
-      .then(([messagesResponse, , huddleResponse]) => {
+      .then(([page, , huddleResponse]) => {
         if (cancelled || selectedChannelIdRef.current !== requestChannelId) {
           return;
         }
-        setMessages(messagesResponse.data);
+        setMessages(page.items);
+        setHasMoreMessages(page.hasMore);
+        const stored = scrollPositionsRef.current.get(requestChannelId);
+        const followDeepLink = Boolean(anchorId);
+        if (
+          stored &&
+          !followDeepLink &&
+          stored.distanceFromBottom > 96
+        ) {
+          setRestoreOnKeyChange({
+            mode: 'distanceFromBottom',
+            distance: stored.distanceFromBottom,
+          });
+        } else {
+          setRestoreOnKeyChange({ mode: 'bottom' });
+        }
+        setActiveScrollKey(requestChannelId);
         setChannels((current) =>
           current.map((channel) =>
             channel.id === requestChannelId
@@ -611,9 +794,104 @@ export function ChatWorkspace({
 
     return () => {
       cancelled = true;
+      if (currentScrollPositionRef.current) {
+        scrollPositionsRef.current.set(
+          requestChannelId,
+          currentScrollPositionRef.current,
+        );
+      }
       leaveChannel(requestChannelId);
     };
   }, [selectedChannelId, isLoadingChannels, joinChannel, leaveChannel]);
+
+  const handleScrollPosition = useCallback(
+    (state: {
+      scrollTop: number;
+      distanceFromBottom: number;
+      nearBottom: boolean;
+    }) => {
+      currentScrollPositionRef.current = {
+        scrollTop: state.scrollTop,
+        distanceFromBottom: state.distanceFromBottom,
+      };
+      if (selectedChannelIdRef.current) {
+        scrollPositionsRef.current.set(selectedChannelIdRef.current, {
+          scrollTop: state.scrollTop,
+          distanceFromBottom: state.distanceFromBottom,
+        });
+      }
+    },
+    [],
+  );
+
+  const handleLoadOlderMessages = useCallback(async () => {
+    const channelId = selectedChannelIdRef.current;
+    if (
+      !channelId ||
+      !hasMoreMessagesRef.current ||
+      loadingOlderRef.current ||
+      isLoadingMessages
+    ) {
+      return;
+    }
+
+    const oldest = messagesRef.current[0];
+    if (!oldest) {
+      return;
+    }
+
+    loadingOlderRef.current = true;
+    setIsLoadingOlderMessages(true);
+    setSuspendStickToBottom(true);
+    const container = scrollContainerRef.current;
+    const previousHeight = container?.scrollHeight ?? 0;
+
+    try {
+      const response = await apiRequest<
+        ApiResponse<ChannelMessagesPage | ChatMessage[]>
+      >(
+        `/channels/${channelId}/messages?limit=50&before=${oldest.id}`,
+      );
+      if (selectedChannelIdRef.current !== channelId) {
+        return;
+      }
+      const page = normalizeChannelMessagesPage(response.data);
+      setHasMoreMessages(page.hasMore);
+      if (page.items.length === 0) {
+        return;
+      }
+      setMessages((current) => {
+        const merged = [...page.items];
+        for (const message of current) {
+          if (!merged.some((existing) => existing.id === message.id)) {
+            merged.push(message);
+          }
+        }
+        return merged;
+      });
+      requestAnimationFrame(() => {
+        const scroller = scrollContainerRef.current;
+        if (scroller && previousHeight > 0) {
+          scroller.scrollTop += scroller.scrollHeight - previousHeight;
+        }
+        setSuspendStickToBottom(false);
+      });
+    } catch (error) {
+      if (selectedChannelIdRef.current === channelId) {
+        setErrorMessage(
+          error instanceof Error
+            ? error.message
+            : 'Failed to load older messages',
+        );
+      }
+      setSuspendStickToBottom(false);
+    } finally {
+      loadingOlderRef.current = false;
+      if (selectedChannelIdRef.current === channelId) {
+        setIsLoadingOlderMessages(false);
+      }
+    }
+  }, [isLoadingMessages]);
 
   useEffect(() => {
     const channel = channels.find((item) => item.id === selectedChannelId);
@@ -667,12 +945,13 @@ export function ChatWorkspace({
   }, [selectedChannelId]);
 
   useEffect(() => {
-    if (!selectedChannelId || (channelTab !== 'pins' && !detailsOpen)) {
+    if (!selectedChannelId) {
+      setPinnedMessages([]);
       return;
     }
 
     void loadPinnedMessages(selectedChannelId);
-  }, [selectedChannelId, channelTab, detailsOpen, loadPinnedMessages]);
+  }, [selectedChannelId, loadPinnedMessages]);
 
   useEffect(() => {
     if (!selectedChannelId) {
@@ -703,10 +982,27 @@ export function ChatWorkspace({
       .finally(() => setIsLoadingThread(false));
   }, [selectedChannelId, threadMessageId]);
 
-  // Soft-nav from notifications while already on /chat must update selection.
+  // URL is the conversation layer: Back/popstate and deep links sync selection.
   useEffect(() => {
-    if (initialChannelId) {
-      setSelectedChannelId(initialChannelId);
+    setSelectedChannelId(initialChannelId ?? null);
+    if (!initialChannelId) {
+      conversationHistoryPushedRef.current = false;
+      overlayHistoryPushedRef.current = false;
+      setThreadMessageId(null);
+      setDetailsOpen(false);
+      return;
+    }
+
+    // Already stacked via in-list selectChannel push — do not insert another list frame.
+    if (conversationHistoryPushedRef.current) {
+      return;
+    }
+
+    // Cross-module / deep-link opens: insert Chat List under conversation on mobile.
+    if (ensureMobileChatListUnderConversation()) {
+      conversationHistoryPushedRef.current = true;
+    } else if (historyHasChatConversationFrame()) {
+      conversationHistoryPushedRef.current = true;
     }
   }, [initialChannelId]);
 
@@ -715,7 +1011,48 @@ export function ChatWorkspace({
     setHighlightMessageId(initialMessageId);
     const timer = window.setTimeout(() => setHighlightMessageId(null), 3000);
     return () => window.clearTimeout(timer);
-  }, [initialMessageId, messages]);
+  }, [initialMessageId]);
+
+  // Nested mobile layers (details / thread): dismiss on system Back first.
+  useEffect(() => {
+    if (!isMobileChatViewport()) {
+      return;
+    }
+
+    const overlayOpen = detailsOpen || Boolean(threadMessageId);
+
+    if (!overlayOpen) {
+      if (overlayHistoryPushedRef.current) {
+        overlayHistoryPushedRef.current = false;
+        dismissSoftHistoryLayer('chatOverlay', CHAT_OVERLAY_HISTORY_TOKEN);
+      }
+      return;
+    }
+
+    if (overlayHistoryPushedRef.current) {
+      return;
+    }
+
+    window.history.pushState(
+      {
+        ...(window.history.state ?? {}),
+        chatOverlay: CHAT_OVERLAY_HISTORY_TOKEN,
+      },
+      '',
+    );
+    overlayHistoryPushedRef.current = true;
+
+    function onPopState() {
+      overlayHistoryPushedRef.current = false;
+      setDetailsOpen(false);
+      setThreadMessageId(null);
+    }
+
+    window.addEventListener('popstate', onPopState);
+    return () => {
+      window.removeEventListener('popstate', onPopState);
+    };
+  }, [detailsOpen, threadMessageId]);
 
   async function handleNotificationChange(payload: {
     notificationLevel?: ChannelNotificationPreference['notificationLevel'];
@@ -757,7 +1094,7 @@ export function ChatWorkspace({
       );
       await loadChannels();
       await loadPendingInvites();
-      setSelectedChannelId(invite.channelId);
+      selectChannel(invite.channelId);
     } catch (error) {
       setErrorMessage(
         error instanceof Error ? error.message : 'Unable to accept invite',
@@ -1004,11 +1341,9 @@ export function ChatWorkspace({
         current.filter((row) => row.id !== targetId),
       );
       if (selectedChannelId === targetId) {
-        setSelectedChannelId(null);
-        setDetailsOpen(false);
         setMessages([]);
-        setThreadMessageId(null);
         setThreadReplies([]);
+        clearConversation({ preferBack: false });
       }
       setPendingHideChannelId(null);
       void refreshUnread();
@@ -1082,10 +1417,7 @@ export function ChatWorkspace({
     await apiRequest(`/channels/${selectedChannelId}/pins/${messageId}`, {
       method: 'POST',
     });
-
-    if (channelTab === 'pins') {
-      await loadPinnedMessages(selectedChannelId);
-    }
+    await loadPinnedMessages(selectedChannelId);
   }
 
   async function handleUnpin(messageId: string) {
@@ -1098,7 +1430,6 @@ export function ChatWorkspace({
   }
 
   function handleJumpToPinnedMessage(messageId: string) {
-    setChannelTab('messages');
     setHighlightMessageId(messageId);
     setThreadMessageId(null);
     setDetailsOpen(false);
@@ -1175,17 +1506,22 @@ export function ChatWorkspace({
   async function handleChannelCreated() {
     const data = await loadChannels();
     if (data.length > 0) {
-      setSelectedChannelId(data[data.length - 1].id);
+      selectChannel(data[data.length - 1].id);
     }
   }
 
   async function handleDirectMessageStarted(channel: ChatChannel) {
     setChannels((current) => appendUniqueById(current, channel));
-    setSelectedChannelId(channel.id);
+    selectChannel(channel.id);
   }
 
   const selectedChannel = channels.find(
     (channel) => channel.id === selectedChannelId,
+  );
+  const canPinMessages = canCreateStaffChannel;
+  const pinnedMessageIds = useMemo(
+    () => new Set(pinnedMessages.map((pin) => pin.message.id)),
+    [pinnedMessages],
   );
   const canManageMembers =
     (canCreateStaffChannel &&
@@ -1219,10 +1555,9 @@ export function ChatWorkspace({
       setChannels((current) =>
         current.filter((channel) => channel.id !== selectedChannelId),
       );
-      setSelectedChannelId(null);
-      setDetailsOpen(false);
       setMessages([]);
       setDeleteChannelConfirmOpen(false);
+      clearConversation({ preferBack: false });
     } catch (error) {
       setErrorMessage(
         error instanceof Error ? error.message : 'Unable to delete channel',
@@ -1364,6 +1699,9 @@ export function ChatWorkspace({
   return (
     <>
       <div
+        ref={(node) => {
+          chatPaneRef.current = node;
+        }}
         className={cn(
           'grid h-full min-h-0 grid-cols-1 gap-0 overflow-hidden',
           showDesktopSidebar && (detailsOpen || threadMessageId)
@@ -1388,7 +1726,7 @@ export function ChatWorkspace({
               ? 'Your organization channels appear here.'
               : 'No internal connections yet.'
           }
-          onSelectChannel={setSelectedChannelId}
+          onSelectChannel={selectChannel}
           onCreateChannel={openCreateChannel}
           onAddConnection={() => setAddConnectionOpen(true)}
           onStartDirectMessage={() => setStartDmOpen(true)}
@@ -1422,8 +1760,6 @@ export function ChatWorkspace({
             channelContext={channelContext}
             dmPeer={selectedChannel?.dmPeer}
             members={channelMembers}
-            activeTab={channelTab}
-            onTabChange={setChannelTab}
             canInvite={canInvite}
             onInvite={() => setManageMembersOpen(true)}
             onStartHuddle={() => void handleStartHuddle()}
@@ -1439,81 +1775,95 @@ export function ChatWorkspace({
             sidebarOpen={sidebarOpen}
             onToggleSidebar={handleToggleSidebar}
             onBack={() => {
-              setSelectedChannelId(null);
-              setThreadMessageId(null);
-              setDetailsOpen(false);
+              if (detailsOpen || threadMessageId) {
+                if (
+                  !dismissSoftHistoryLayer(
+                    'chatOverlay',
+                    CHAT_OVERLAY_HISTORY_TOKEN,
+                  )
+                ) {
+                  setDetailsOpen(false);
+                  setThreadMessageId(null);
+                }
+                return;
+              }
+              clearConversation();
             }}
           />
 
-          {channelTab === 'canvas' ? (
-            selectedChannelId ? (
-              <ChannelCanvasPanel channelId={selectedChannelId} />
-            ) : null
-          ) : channelTab === 'pins' ? (
-            selectedChannelId ? (
-              <PinnedMessagesPanel
-                pins={pinnedMessages}
-                isLoading={isLoadingPins}
-                canUnpin={canCreateStaffChannel}
-                onJumpToMessage={handleJumpToPinnedMessage}
-                onUnpin={handleUnpin}
-              />
-            ) : null
-          ) : (
-            <>
-              {selectedChannelId ? (
-                <ChatScrollArea
-                  scrollKey={selectedChannelId}
-                  anchorMessageId={highlightMessageId}
-                  containerClassName="chat-inset-x py-[var(--chat-inset-y)]"
-                  contentClassName="space-y-0"
-                >
-                  <MessageList
-                    messages={messages}
-                    channelId={selectedChannelId}
-                    channelType={selectedChannel?.type}
-                    currentUserId={user.id}
-                    unreadSince={unreadSince}
-                    canManageChannel={canManageMembers}
-                    canDeleteForEveryone={canDeleteForEveryone}
-                    memberNames={memberNames}
-                    isLoading={isLoadingMessages}
-                    activeThreadMessageId={threadMessageId}
-                    highlightMessageId={highlightMessageId}
-                    onReply={handleOpenThread}
-                    onReact={handleReact}
-                    onEdit={handleEdit}
-                    onDelete={handleDeleteRequest}
-                    onPin={handlePin}
-                    onCopyMessage={handleCopyMessage}
-                    onCopyLink={handleCopyLink}
-                    onMarkUnread={handleMarkUnread}
-                  />
-                </ChatScrollArea>
+          {selectedChannelId ? (
+            <ChatScrollArea
+              scrollKey={activeScrollKey}
+              anchorMessageId={highlightMessageId}
+              restoreOnKeyChange={restoreOnKeyChange}
+              onScrollPosition={handleScrollPosition}
+              suspendStickToBottom={suspendStickToBottom}
+              onReachTop={() => {
+                void handleLoadOlderMessages();
+              }}
+              scrollContainerRef={scrollContainerRef}
+              containerClassName="chat-inset-x py-[var(--chat-inset-y)]"
+              contentClassName="space-y-0"
+            >
+              {isLoadingOlderMessages ? (
+                <p className="px-2 py-2 text-center text-xs text-[var(--muted)]">
+                  Loading older messages…
+                </p>
               ) : null}
+              {!isLoadingOlderMessages &&
+              !hasMoreMessages &&
+              messages.length > 0 ? (
+                <p className="px-2 py-2 text-center text-xs text-[var(--muted)]">
+                  Beginning of conversation
+                </p>
+              ) : null}
+              <MessageList
+                messages={messages}
+                channelId={selectedChannelId}
+                channelType={selectedChannel?.type}
+                currentUserId={user.id}
+                unreadSince={unreadSince}
+                canManageChannel={canPinMessages}
+                canDeleteForEveryone={canDeleteForEveryone}
+                pinnedMessageIds={pinnedMessageIds}
+                memberNames={memberNames}
+                isLoading={isLoadingMessages}
+                activeThreadMessageId={threadMessageId}
+                highlightMessageId={highlightMessageId}
+                onReply={handleOpenThread}
+                onReact={handleReact}
+                onEdit={handleEdit}
+                onDelete={handleDeleteRequest}
+                onPin={handlePin}
+                onUnpin={handleUnpin}
+                onCopyMessage={handleCopyMessage}
+                onCopyLink={handleCopyLink}
+                onMarkUnread={handleMarkUnread}
+              />
+            </ChatScrollArea>
+          ) : null}
 
-              <div className="chat-inset safe-pb sticky bottom-0 z-10 shrink-0 border-t border-[var(--border)] bg-[var(--surface)]">
-                <ChatComposer
-                  channelId={selectedChannelId}
-                  channelName={
-                    selectedChannel
-                      ? getChannelLabel(selectedChannel)
-                      : undefined
-                  }
-                  channelType={selectedChannel?.type}
-                  isSubmitting={isSending}
-                  members={channelMembers}
-                  currentUserId={user.id}
-                  isInternalUser={!userIsExternal(user)}
-                  onSubmit={handleSendMessage}
-                />
-              </div>
-            </>
-          )}
+          <div className="chat-inset safe-pb sticky bottom-0 z-10 shrink-0 border-t border-[var(--border)] bg-[var(--surface)]">
+            <ChatComposer
+              channelId={selectedChannelId}
+              channelName={
+                selectedChannel
+                  ? getChannelLabel(selectedChannel)
+                  : undefined
+              }
+              channelType={selectedChannel?.type}
+              isSubmitting={isSending}
+              members={channelMembers}
+              currentUserId={user.id}
+              isInternalUser={!userIsExternal(user)}
+              onSubmit={handleSendMessage}
+            />
+          </div>
         </Card>
 
         {detailsOpen && selectedChannelId ? (
           <ChannelDetailsPanel
+            channelId={selectedChannelId}
             channelName={selectedChannel?.name}
             channelDisplayName={selectedChannel?.displayName}
             channelType={selectedChannel?.type}
@@ -1524,6 +1874,8 @@ export function ChatWorkspace({
             isLoadingPins={isLoadingPins}
             canInvite={canInvite}
             onInvite={() => setManageMembersOpen(true)}
+            canPin={canPinMessages}
+            onUnpin={handleUnpin}
             canDeleteGroup={canDeleteGroup}
             onDeleteGroup={handleDeleteGroup}
             isDeletingGroup={isDeletingGroup}
@@ -1553,8 +1905,9 @@ export function ChatWorkspace({
             currentUserId={user.id}
             isInternalUser={!userIsExternal(user)}
             members={channelMembers}
-            canManageChannel={canManageMembers}
+            canManageChannel={canPinMessages}
             canDeleteForEveryone={canDeleteForEveryone}
+            pinnedMessageIds={pinnedMessageIds}
             isLoading={isLoadingThread}
             isSending={isSendingThreadReply}
             onClose={() => setThreadMessageId(null)}
@@ -1563,6 +1916,7 @@ export function ChatWorkspace({
             onEdit={handleEdit}
             onDelete={handleDeleteRequest}
             onPin={handlePin}
+            onUnpin={handleUnpin}
             onCopyMessage={handleCopyMessage}
             onCopyLink={handleCopyLink}
             onMarkUnread={handleMarkUnread}

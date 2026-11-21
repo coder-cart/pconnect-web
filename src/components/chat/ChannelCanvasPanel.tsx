@@ -6,9 +6,14 @@ import { ApiResponse } from '@/lib/auth';
 
 interface ChannelCanvasPanelProps {
   channelId: string;
+  /** Hide the internal title when embedded under a parent section heading. */
+  hideTitle?: boolean;
 }
 
-export function ChannelCanvasPanel({ channelId }: ChannelCanvasPanelProps) {
+export function ChannelCanvasPanel({
+  channelId,
+  hideTitle = false,
+}: ChannelCanvasPanelProps) {
   const [content, setContent] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
@@ -44,12 +49,20 @@ export function ChannelCanvasPanel({ channelId }: ChannelCanvasPanelProps) {
 
   return (
     <div className="chat-inset flex flex-1 flex-col">
-      <div className="mb-2.5 flex items-center justify-between">
-        <p className="text-sm font-medium text-[var(--foreground)]">Channel canvas</p>
-        {isSaving ? (
-          <span className="text-xs text-[var(--muted)]">Saving...</span>
-        ) : null}
-      </div>
+      {hideTitle ? (
+        isSaving ? (
+          <p className="mb-2 text-right text-xs text-[var(--muted)]">Saving...</p>
+        ) : null
+      ) : (
+        <div className="mb-2.5 flex items-center justify-between">
+          <p className="text-sm font-medium text-[var(--foreground)]">
+            Channel canvas
+          </p>
+          {isSaving ? (
+            <span className="text-xs text-[var(--muted)]">Saving...</span>
+          ) : null}
+        </div>
+      )}
       <textarea
         value={content}
         onChange={(event) => setContent(event.target.value)}

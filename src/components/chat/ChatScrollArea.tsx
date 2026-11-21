@@ -1,13 +1,25 @@
 'use client';
 
-import { ReactNode } from 'react';
+import { MutableRefObject, ReactNode, useEffect } from 'react';
 import { ArrowDown } from 'lucide-react';
-import { useChatScroll } from '@/hooks/useChatScroll';
+import {
+  useChatScroll,
+  type ChatScrollRestore,
+} from '@/hooks/useChatScroll';
 import { cn } from '@/lib/cn';
 
 interface ChatScrollAreaProps {
   scrollKey?: string | null;
   anchorMessageId?: string | null;
+  restoreOnKeyChange?: ChatScrollRestore | null;
+  onScrollPosition?: (state: {
+    scrollTop: number;
+    distanceFromBottom: number;
+    nearBottom: boolean;
+  }) => void;
+  suspendStickToBottom?: boolean;
+  onReachTop?: () => void;
+  scrollContainerRef?: MutableRefObject<HTMLDivElement | null>;
   jumpLabel?: string;
   className?: string;
   containerClassName?: string;
@@ -15,9 +27,16 @@ interface ChatScrollAreaProps {
   children: ReactNode;
 }
 
+const TOP_LOAD_THRESHOLD = 80;
+
 export function ChatScrollArea({
   scrollKey,
   anchorMessageId,
+  restoreOnKeyChange,
+  onScrollPosition,
+  suspendStickToBottom,
+  onReachTop,
+  scrollContainerRef,
   jumpLabel = 'Jump to latest',
   className,
   containerClassName,
@@ -30,15 +49,38 @@ export function ChatScrollArea({
     showJumpToLatest,
     scrollToBottom,
     handleScroll,
-  } = useChatScroll(scrollKey, { anchorMessageId });
+  } = useChatScroll(scrollKey, {
+    anchorMessageId,
+    restoreOnKeyChange,
+    onScrollPosition,
+    suspendStickToBottom,
+  });
+
+  useEffect(() => {
+    if (!scrollContainerRef) {
+      return;
+    }
+    scrollContainerRef.current = containerRef.current;
+    return () => {
+      scrollContainerRef.current = null;
+    };
+  });
 
   return (
     <div className={cn('relative min-h-0 flex-1', className)}>
       <div
         ref={containerRef}
-        onScroll={handleScroll}
+        onScroll={(event) => {
+          handleScroll();
+          if (
+            onReachTop &&
+            event.currentTarget.scrollTop <= TOP_LOAD_THRESHOLD
+          ) {
+            onReachTop();
+          }
+        }}
         className={cn(
-          'chat-inset-x h-full overflow-y-auto overscroll-y-contain scroll-smooth py-[var(--chat-inset-y)]',
+          'chat-inset-x h-full overflow-y-auto overscroll-y-contain [overflow-anchor:auto] py-[var(--chat-inset-y)]',
           containerClassName,
         )}
       >
