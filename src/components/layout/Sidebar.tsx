@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { ChevronUp, PanelLeftClose, PanelLeftOpen, Settings, X } from 'lucide-react';
 import { AuthenticatedUser, userHasAnyPermission, userHasPermission } from '@/lib/auth';
 import { getRoleLabel, getNavItemLabel, getVisibleNavItems, NavItem } from '@/lib/navigation';
@@ -21,6 +21,7 @@ import {
   presenceSubtitle,
 } from '@/lib/user-presence';
 import { formatMentionPlainText } from '@/lib/chatMarkdown';
+import { navigateToChatConversation } from '@/lib/chat-navigation';
 
 interface SidebarProps {
   user: AuthenticatedUser;
@@ -90,12 +91,15 @@ function UnreadConversationLink({
   collapsed?: boolean;
 }) {
   const [open, setOpen] = useState(false);
+  const pathname = usePathname();
+  const router = useRouter();
   const person = personForConversation(conversation);
   const away = isAway(person.presenceStatus);
   const statusLine = formatCustomStatus(person);
   const preview = conversation.latestMessage?.body
     ? formatMentionPlainText(conversation.latestMessage.body)
     : conversation.name;
+  const chatHref = `/chat?channel=${conversation.channelId}`;
 
   return (
     <div
@@ -106,7 +110,7 @@ function UnreadConversationLink({
       onMouseLeave={() => setOpen(false)}
     >
       <Link
-        href={`/chat?channel=${conversation.channelId}`}
+        href={chatHref}
         onClick={(event) => {
           if (!window.matchMedia('(hover: hover)').matches) {
             if (!open && !collapsed) {
@@ -115,6 +119,15 @@ function UnreadConversationLink({
               return;
             }
           }
+          event.preventDefault();
+          const alreadyInConversation =
+            pathname === '/chat' &&
+            new URLSearchParams(window.location.search).has('channel');
+          navigateToChatConversation(router, {
+            channelId: conversation.channelId,
+            pathname,
+            alreadyInConversation,
+          });
           onNavigate?.();
         }}
         title={collapsed ? person.fullName : undefined}

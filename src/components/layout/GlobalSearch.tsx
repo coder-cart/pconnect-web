@@ -1,10 +1,14 @@
 'use client';
 
 import { ReactNode, useEffect, useRef, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { Hash, MessageSquare, Search } from 'lucide-react';
 import { apiRequest } from '@/lib/api-client';
 import { ApiResponse } from '@/lib/auth';
+import {
+  navigateToChatConversation,
+  parseChatConversationHref,
+} from '@/lib/chat-navigation';
 import { cn } from '@/lib/cn';
 
 interface SearchChannelResult {
@@ -40,6 +44,7 @@ interface GlobalSearchProps {
 export function GlobalSearch({ className, variant = 'default' }: GlobalSearchProps) {
   const isShell = variant === 'shell';
   const router = useRouter();
+  const pathname = usePathname();
   const containerRef = useRef<HTMLDivElement>(null);
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<SearchResults | null>(null);
@@ -82,6 +87,20 @@ export function GlobalSearch({ className, variant = 'default' }: GlobalSearchPro
   function navigate(path: string) {
     setIsOpen(false);
     setQuery('');
+    const chatTarget = parseChatConversationHref(path);
+    if (chatTarget) {
+      const alreadyInConversation =
+        pathname === '/chat' &&
+        typeof window !== 'undefined' &&
+        new URLSearchParams(window.location.search).has('channel');
+      navigateToChatConversation(router, {
+        channelId: chatTarget.channelId,
+        messageId: chatTarget.messageId,
+        pathname,
+        alreadyInConversation,
+      });
+      return;
+    }
     router.push(path);
   }
 

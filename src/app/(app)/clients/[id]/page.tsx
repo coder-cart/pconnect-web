@@ -2,7 +2,12 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import { useParams, useRouter, useSearchParams } from 'next/navigation';
+import {
+  useParams,
+  usePathname,
+  useRouter,
+  useSearchParams,
+} from 'next/navigation';
 import {
   BarChart3,
   CheckCircle2,
@@ -37,6 +42,7 @@ import { ClientOrgLogo } from '@/components/ui/ClientOrgLogo';
 import { ImageCropModal } from '@/components/ui/ImageCropModal';
 import { Modal, ModalActions } from '@/components/ui/Modal';
 import { cn } from '@/lib/cn';
+import { navigateToChatConversation } from '@/lib/chat-navigation';
 import { CreateOnboardingModal } from '@/components/modals/CreateOnboardingModal';
 import { LinkClientUserModal } from '@/components/modals/LinkClientUserModal';
 import { ClientServiceConfig } from '@/components/clients/ClientServiceConfig';
@@ -57,6 +63,7 @@ interface ClientDetail {
   id: string;
   name: string;
   clientName?: string | null;
+  clientCode?: string | null;
   status: string;
   primaryContactName?: string | null;
   primaryContactEmail?: string | null;
@@ -188,6 +195,7 @@ export default function ClientDetailPage() {
   const searchParams = useSearchParams();
   const clientId = params.id;
   const router = useRouter();
+  const pathname = usePathname();
   const { user } = useWorkspace();
   const canManage = userHasPermission(user, 'clients.manage');
   const canManageOnboarding = userHasPermission(user, 'onboarding.manage');
@@ -815,9 +823,13 @@ export default function ClientDetailPage() {
                   </Badge>
                 </div>
                 <p className="text-sm text-[var(--muted)]">
-                  {client.clientName
-                    ? `${client.clientName} · Client profile`
-                    : 'Client profile'}
+                  {[
+                    client.clientCode ? `CLT-${client.clientCode}` : null,
+                    client.clientName || null,
+                    'Client profile',
+                  ]
+                    .filter(Boolean)
+                    .join(' · ')}
                 </p>
               </div>
 
@@ -1502,6 +1514,14 @@ export default function ClientDetailPage() {
               <Link
                 href={`/chat?channel=${hubChannelId}`}
                 className="text-[var(--primary)] hover:underline"
+                onClick={(event) => {
+                  event.preventDefault();
+                  navigateToChatConversation(router, {
+                    channelId: hubChannelId,
+                    pathname,
+                    alreadyInConversation: false,
+                  });
+                }}
               >
                 Open in Chat
               </Link>

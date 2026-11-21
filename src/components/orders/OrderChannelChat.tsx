@@ -7,7 +7,12 @@ import {
   AuthenticatedUser,
   userIsExternal,
 } from '@/lib/auth';
-import { ChatMessage, appendUniqueById } from '@/lib/chat-types';
+import {
+  ChatMessage,
+  ChannelMessagesPage,
+  appendUniqueById,
+  normalizeChannelMessagesPage,
+} from '@/lib/chat-types';
 import { Card } from '@/components/ui/Card';
 import { ErrorState } from '@/components/ui/StatePanels';
 import { MessageList } from '@/components/chat/MessageList';
@@ -67,10 +72,10 @@ export function OrderChannelChat({
     setIsLoading(true);
     setErrorMessage(null);
     try {
-      const response = await apiRequest<ApiResponse<ChatMessage[]>>(
-        `/channels/${channelId}/messages`,
-      );
-      setMessages(Array.isArray(response.data) ? response.data : []);
+      const response = await apiRequest<
+        ApiResponse<ChannelMessagesPage | ChatMessage[]>
+      >(`/channels/${channelId}/messages?limit=50`);
+      setMessages(normalizeChannelMessagesPage(response.data).items);
     } catch (error) {
       setErrorMessage(
         error instanceof Error ? error.message : 'Failed to load messages',

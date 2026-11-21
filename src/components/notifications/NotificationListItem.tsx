@@ -1,5 +1,6 @@
 'use client';
 
+import type { MouseEvent } from 'react';
 import {
   AtSign,
   Bell,
@@ -8,6 +9,7 @@ import {
   CheckSquare,
 } from 'lucide-react';
 import Link from 'next/link';
+import { usePathname, useRouter } from 'next/navigation';
 import { Badge } from '@/components/ui/Badge';
 import { Card } from '@/components/ui/Card';
 import {
@@ -17,6 +19,10 @@ import {
   getNotificationIconType,
 } from '@/lib/notifications';
 import { formatMentionPlainText } from '@/lib/chatMarkdown';
+import {
+  navigateToChatConversation,
+  parseChatConversationHref,
+} from '@/lib/chat-navigation';
 import { cn } from '@/lib/cn';
 
 interface NotificationListItemProps {
@@ -43,6 +49,32 @@ export function NotificationListItem({
   onMarkRead,
   onNavigate,
 }: NotificationListItemProps) {
+  const router = useRouter();
+  const pathname = usePathname();
+
+  function handleLinkClick(event: MouseEvent<HTMLAnchorElement>) {
+    if (!notification.isRead && onMarkRead) {
+      void onMarkRead(notification.id);
+    }
+    onNavigate?.();
+
+    const href = notification.linkUrl;
+    if (!href) return;
+    const chatTarget = parseChatConversationHref(href);
+    if (!chatTarget) return;
+
+    event.preventDefault();
+    navigateToChatConversation(router, {
+      channelId: chatTarget.channelId,
+      messageId: chatTarget.messageId,
+      pathname,
+      alreadyInConversation:
+        pathname === '/chat' &&
+        typeof window !== 'undefined' &&
+        new URLSearchParams(window.location.search).has('channel'),
+    });
+  }
+
   const content = (
     <>
       <div
@@ -100,12 +132,7 @@ export function NotificationListItem({
     const inner = notification.linkUrl ? (
       <Link
         href={notification.linkUrl}
-        onClick={() => {
-          if (!notification.isRead && onMarkRead) {
-            void onMarkRead(notification.id);
-          }
-          onNavigate?.();
-        }}
+        onClick={handleLinkClick}
         className={cn(
           'flex w-full items-start gap-3 rounded-[var(--radius-md)] px-3 py-2 text-left transition-colors hover:bg-[var(--surface-muted)]',
           !notification.isRead && 'bg-[var(--primary-soft)]/20',
@@ -133,11 +160,7 @@ export function NotificationListItem({
         {notification.linkUrl ? (
           <Link
             href={notification.linkUrl}
-            onClick={() => {
-              if (!notification.isRead && onMarkRead) {
-                void onMarkRead(notification.id);
-              }
-            }}
+            onClick={handleLinkClick}
             className="flex min-w-0 flex-1 items-start gap-3"
           >
             {content}

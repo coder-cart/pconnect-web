@@ -1,4 +1,5 @@
 import { ReactNode, createElement } from 'react';
+import { isSafeChatHref } from '@/lib/safeChatHref';
 
 const URL_PATTERN = /(https?:\/\/[^\s<]+)/g;
 
@@ -6,9 +7,17 @@ function isHttpUrl(text: string) {
   return /^https?:\/\//.test(text);
 }
 
+function safeHref(href: string): string | null {
+  const trimmed = href.trim();
+  if (!isSafeChatHref(trimmed)) {
+    return null;
+  }
+  return trimmed;
+}
+
 function renderInlineMarkdown(text: string, keyPrefix: string): ReactNode[] {
   const pattern =
-    /(@\[[^\]]+\]\([^)]+\)|\*\*[^*]+\*\*|~~[^~]+~~|`[^`]+`|(?<!\*)\*(?!\*)[^*]+\*(?!\*)|\[[^\]]+\]\([^)]+\))/g;
+    /(@\[[^\]]+\]\([^)]+\)|\*\*[^*]+\*\*|__[^_]+__|~~[^~]+~~|`[^`]+`|(?<!\*)\*(?!\*)[^*]+\*(?!\*)|\[[^\]]+\]\([^)]+\))/g;
   const nodes: ReactNode[] = [];
   let lastIndex = 0;
   let match: RegExpExecArray | null;
@@ -52,6 +61,10 @@ function renderInlineMarkdown(text: string, keyPrefix: string): ReactNode[] {
           token.slice(2, -2),
         ),
       );
+    } else if (token.startsWith('__') && token.endsWith('__')) {
+      nodes.push(
+        createElement('u', { key, className: 'underline' }, token.slice(2, -2)),
+      );
     } else if (token.startsWith('~~') && token.endsWith('~~')) {
       nodes.push(
         createElement('s', { key, className: 'line-through' }, token.slice(2, -2)),
@@ -75,19 +88,25 @@ function renderInlineMarkdown(text: string, keyPrefix: string): ReactNode[] {
     } else if (token.startsWith('[')) {
       const linkMatch = token.match(/^\[([^\]]+)\]\(([^)]+)\)$/);
       if (linkMatch) {
-        nodes.push(
-          createElement(
-            'a',
-            {
-              key,
-              href: linkMatch[2],
-              target: '_blank',
-              rel: 'noopener noreferrer',
-              className: 'text-[var(--primary)] underline-offset-2 hover:underline',
-            },
-            linkMatch[1],
-          ),
-        );
+        const href = safeHref(linkMatch[2]);
+        if (href) {
+          nodes.push(
+            createElement(
+              'a',
+              {
+                key,
+                href,
+                target: '_blank',
+                rel: 'noopener noreferrer',
+                className:
+                  'text-[var(--primary)] underline-offset-2 hover:underline',
+              },
+              linkMatch[1],
+            ),
+          );
+        } else {
+          nodes.push(linkMatch[1]);
+        }
       } else {
         nodes.push(token);
       }
@@ -111,26 +130,66 @@ function renderInlineMarkdown(text: string, keyPrefix: string): ReactNode[] {
 function renderPlainTextWithLinks(text: string, keyPrefix: string): ReactNode[] {
   const parts = text.split(URL_PATTERN).filter((part) => part.length > 0);
 
-  return parts.map((part, partIndex) =>
-    isHttpUrl(part)
-      ? createElement(
-          'a',
-          {
-            key: `${keyPrefix}-url-${partIndex}`,
-            href: part,
-            target: '_blank',
-            rel: 'noopener noreferrer',
-            className: 'text-[var(--primary)] underline-offset-2 hover:underline',
-          },
-          part,
-        )
-      : createElement('span', { key: `${keyPrefix}-txt-${partIndex}` }, part),
-  );
+  return parts.map((part, partIndex) => {
+    if (isHttpUrl(part) && safeHref(part)) {
+      return createElement(
+        'a',
+        {
+          key: `${keyPrefix}-url-${partIndex}`,
+          href: part,
+          target: '_blank',
+          rel: 'noopener noreferrer',
+          className: 'text-[var(--primary)] underline-offset-2 hover:underline',
+        },
+        part,
+      );
+    }
+    return createElement('span', { key: `${keyPrefix}-txt-${partIndex}` }, part);
+  });
 }
 
 /** Plain-text surfaces: `@[Name](id)` → `@Name` (notifications, activity, previews). */
 export function formatMentionPlainText(text: string): string {
   return text.replace(/@\[([^\]]+)\]\([^)]+\)/g, '@$1');
+}
+
+function isHeadingLine(line: string): RegExpMatchArray | null {
+  return /^(#{1,6})\s+(.+)$/.exec(line);
+}
+
+function isTableSeparator(line: string): boolean {
+  return /^\s*\|?[\s:|-]+\|[\s:|-|]*\|?\s*$/.test(line) && /---/.test(line);
+}
+
+function isTableRow(line: string): boolean {
+  return line.includes('|') && line.trim().length > 0;
+}
+
+function splitTableRow(line: string): string[] {
+  const trimmed = line.trim().replace(/^\|/, '').replace(/\|$/, '');
+  return trimmed.split('|').map((cell) => cell.trim());
+}
+
+function headingClass(level: number): string {
+  switch (level) {
+    case 1:
+      return 'text-base font-semibold';
+    case 2:
+      return 'text-sm font-semibold';
+    default:
+      return 'text-sm font-medium';
+  }
+}
+
+function isBlockStart(line: string): boolean {
+  return (
+    line.startsWith('```') ||
+    line.startsWith('> ') ||
+    /^\d+\.\s/.test(line) ||
+    line.startsWith('- ') ||
+    Boolean(isHeadingLine(line)) ||
+    (isTableRow(line) && line.includes('|'))
+  );
 }
 
 export function renderMarkdownBody(text: string): ReactNode {
@@ -158,6 +217,90 @@ export function renderMarkdownBody(text: string): ReactNode {
               'overflow-x-auto rounded-[var(--radius-md)] bg-[var(--surface-muted)] p-3 font-mono text-xs',
           },
           createElement('code', null, codeLines.join('\n')),
+        ),
+      );
+      continue;
+    }
+
+    const heading = isHeadingLine(line);
+    if (heading) {
+      const level = Math.min(heading[1].length, 6);
+      const tag = `h${level}` as 'h1' | 'h2' | 'h3' | 'h4' | 'h5' | 'h6';
+      blocks.push(
+        createElement(
+          tag,
+          {
+            key: `h-${index}`,
+            className: headingClass(level),
+          },
+          renderInlineMarkdown(heading[2], `h-${index}`),
+        ),
+      );
+      index += 1;
+      continue;
+    }
+
+    if (
+      isTableRow(line) &&
+      index + 1 < lines.length &&
+      isTableSeparator(lines[index + 1])
+    ) {
+      const headerCells = splitTableRow(line);
+      index += 2;
+      const bodyRows: string[][] = [];
+      while (index < lines.length && isTableRow(lines[index]) && !isTableSeparator(lines[index])) {
+        bodyRows.push(splitTableRow(lines[index]));
+        index += 1;
+      }
+      blocks.push(
+        createElement(
+          'div',
+          {
+            key: `table-wrap-${index}`,
+            className: 'overflow-x-auto',
+          },
+          createElement(
+            'table',
+            {
+              className:
+                'w-full border-collapse text-left text-xs [&_td]:border [&_td]:border-[var(--border)] [&_td]:px-2 [&_td]:py-1 [&_th]:border [&_th]:border-[var(--border)] [&_th]:bg-[var(--surface-muted)] [&_th]:px-2 [&_th]:py-1 [&_th]:font-medium',
+            },
+            createElement(
+              'thead',
+              null,
+              createElement(
+                'tr',
+                null,
+                headerCells.map((cell, cellIndex) =>
+                  createElement(
+                    'th',
+                    { key: `th-${cellIndex}` },
+                    renderInlineMarkdown(cell, `th-${index}-${cellIndex}`),
+                  ),
+                ),
+              ),
+            ),
+            createElement(
+              'tbody',
+              null,
+              bodyRows.map((row, rowIndex) =>
+                createElement(
+                  'tr',
+                  { key: `tr-${rowIndex}` },
+                  row.map((cell, cellIndex) =>
+                    createElement(
+                      'td',
+                      { key: `td-${rowIndex}-${cellIndex}` },
+                      renderInlineMarkdown(
+                        cell,
+                        `td-${index}-${rowIndex}-${cellIndex}`,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
         ),
       );
       continue;
@@ -227,7 +370,6 @@ export function renderMarkdownBody(text: string): ReactNode {
     }
 
     if (line.trim().length === 0) {
-      // Preserve intentional blank lines between paragraphs.
       blocks.push(
         createElement('div', {
           key: `gap-${index}`,
@@ -239,18 +381,21 @@ export function renderMarkdownBody(text: string): ReactNode {
       continue;
     }
 
-    // Collect consecutive soft-wrapped lines into one pre-wrap block so
-    // single Enter breaks render as line breaks, not huge paragraph gaps.
     const paragraphLines: string[] = [line];
     index += 1;
     while (
       index < lines.length &&
       lines[index].trim().length > 0 &&
-      !lines[index].startsWith('```') &&
-      !lines[index].startsWith('> ') &&
-      !/^\d+\.\s/.test(lines[index]) &&
-      !lines[index].startsWith('- ')
+      !isBlockStart(lines[index])
     ) {
+      // Do not swallow table header+separator as paragraph text.
+      if (
+        isTableRow(lines[index]) &&
+        index + 1 < lines.length &&
+        isTableSeparator(lines[index + 1])
+      ) {
+        break;
+      }
       paragraphLines.push(lines[index]);
       index += 1;
     }
@@ -268,7 +413,10 @@ export function renderMarkdownBody(text: string): ReactNode {
             `p-${index}-${paragraphIndex}`,
           );
           if (paragraphIndex < paragraphLines.length - 1) {
-            return [...nodes, createElement('br', { key: `br-${index}-${paragraphIndex}` })];
+            return [
+              ...nodes,
+              createElement('br', { key: `br-${index}-${paragraphIndex}` }),
+            ];
           }
           return nodes;
         }),
@@ -285,6 +433,50 @@ export function htmlToMarkdown(root: HTMLElement): string {
     .join('')
     .replace(/\n{3,}/g, '\n\n')
     .trim();
+}
+
+function escapeTableCell(text: string): string {
+  return text.replace(/\|/g, '\\|').replace(/\n+/g, ' ').trim();
+}
+
+function tableToMarkdown(element: HTMLElement): string {
+  const rows = Array.from(element.querySelectorAll('tr'));
+  if (rows.length === 0) {
+    return Array.from(element.childNodes).map(nodeToMarkdown).join('');
+  }
+
+  const matrix = rows.map((row) =>
+    Array.from(row.querySelectorAll('th,td')).map((cell) =>
+      escapeTableCell(nodeToMarkdown(cell)),
+    ),
+  );
+
+  const hasColspan = rows.some((row) =>
+    Array.from(row.querySelectorAll('th,td')).some(
+      (cell) => Number(cell.getAttribute('colspan') ?? '1') > 1,
+    ),
+  );
+
+  if (hasColspan || matrix.some((row) => row.length === 0)) {
+    return matrix.map((row) => row.join('\t')).join('\n') + '\n';
+  }
+
+  const width = Math.max(...matrix.map((row) => row.length));
+  const normalized = matrix.map((row) => {
+    const next = [...row];
+    while (next.length < width) next.push('');
+    return next;
+  });
+
+  const header = normalized[0];
+  const body = normalized.slice(1);
+  const separator = header.map(() => '---');
+  const lines = [
+    `| ${header.join(' | ')} |`,
+    `| ${separator.join(' | ')} |`,
+    ...body.map((row) => `| ${row.join(' | ')} |`),
+  ];
+  return `${lines.join('\n')}\n`;
 }
 
 function nodeToMarkdown(node: Node): string {
@@ -307,18 +499,38 @@ function nodeToMarkdown(node: Node): string {
     case 'em':
     case 'i':
       return childText ? `*${childText}*` : '';
+    case 'u':
+      return childText ? `__${childText}__` : '';
     case 's':
     case 'strike':
     case 'del':
       return childText ? `~~${childText}~~` : '';
     case 'code':
-      return childText ? `\`${childText}\`` : '';
+      return element.closest('pre')
+        ? childText
+        : childText
+          ? `\`${childText}\``
+          : '';
     case 'a': {
       const href = element.getAttribute('href') ?? '';
-      return childText ? `[${childText}](${href})` : href;
+      const safe = safeHref(href);
+      if (!safe) {
+        return childText;
+      }
+      return childText ? `[${childText}](${safe})` : safe;
     }
     case 'br':
       return '\n';
+    case 'h1':
+    case 'h2':
+    case 'h3':
+    case 'h4':
+    case 'h5':
+    case 'h6': {
+      const level = Number(tag.slice(1));
+      const text = childText.replace(/\n+/g, ' ').trim();
+      return text ? `${'#'.repeat(level)} ${text}\n` : '';
+    }
     case 'blockquote':
       return childText
         .split('\n')
@@ -326,17 +538,32 @@ function nodeToMarkdown(node: Node): string {
         .map((line) => `> ${line}`)
         .join('\n');
     case 'ul':
-      return Array.from(element.children)
-        .map((item) => `- ${nodeToMarkdown(item).trim()}`)
-        .join('\n');
+      return (
+        Array.from(element.children)
+          .map((item) => `- ${nodeToMarkdown(item).trim()}`)
+          .join('\n') + '\n'
+      );
     case 'ol':
-      return Array.from(element.children)
-        .map((item, itemIndex) => `${itemIndex + 1}. ${nodeToMarkdown(item).trim()}`)
-        .join('\n');
+      return (
+        Array.from(element.children)
+          .map(
+            (item, itemIndex) =>
+              `${itemIndex + 1}. ${nodeToMarkdown(item).trim()}`,
+          )
+          .join('\n') + '\n'
+      );
     case 'li':
       return childText;
     case 'pre':
-      return `\`\`\`\n${childText.trim()}\n\`\`\``;
+      return `\`\`\`\n${childText.trim()}\n\`\`\`\n`;
+    case 'table':
+      return tableToMarkdown(element);
+    case 'thead':
+    case 'tbody':
+    case 'tr':
+    case 'th':
+    case 'td':
+      return childText;
     case 'span': {
       const mentionId = element.dataset.mentionId;
       const mentionName = element.dataset.mentionName;

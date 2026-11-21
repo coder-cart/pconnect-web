@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import { type ReactNode, useEffect, useMemo } from 'react';
 import {
@@ -9,15 +9,17 @@ import {
   Link2,
   MessageCircle,
   Pin,
+  PinOff,
   Plus,
   Trash2,
   Users,
   X,
 } from 'lucide-react';
+import { ChannelCanvasPanel } from '@/components/chat/ChannelCanvasPanel';
+import { MessageAttachment } from '@/components/chat/ChatMessageBody';
 import { UserAvatar } from '@/components/ui/UserAvatar';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
-import { MessageAttachment } from '@/components/chat/ChatMessageBody';
 import { ChannelMemberOption } from '@/lib/channelMembers';
 import {
   ChannelContext,
@@ -34,17 +36,32 @@ import {
 
 const DETAILS_PANEL_ID = 'channel-details-panel';
 
+export type ChannelPinnedMessage = {
+  id: string;
+  pinnedAt: string;
+  pinnedBy?: {
+    id: string;
+    fullName: string;
+    email?: string;
+    avatarUpdatedAt?: string | null;
+  } | null;
+  message: ChatMessage;
+};
+
 interface ChannelDetailsPanelProps {
+  channelId?: string;
   channelName?: string;
   channelDisplayName?: string;
   channelType?: string;
   channelContext: ChannelContext | null;
   members: ChannelMemberOption[];
   messages: ChatMessage[];
-  pins: Array<{ id: string; pinnedAt: string; message: ChatMessage }>;
+  pins: ChannelPinnedMessage[];
   isLoadingPins: boolean;
   canInvite: boolean;
   onInvite: () => void;
+  canPin?: boolean;
+  onUnpin?: (messageId: string) => Promise<void>;
   canDeleteGroup?: boolean;
   onDeleteGroup?: () => void;
   isDeletingGroup?: boolean;
@@ -80,6 +97,7 @@ function collectAttachments(messages: ChatMessage[], kind: 'file' | 'link') {
 }
 
 export function ChannelDetailsPanel({
+  channelId,
   channelName,
   channelDisplayName,
   channelType,
@@ -90,6 +108,8 @@ export function ChannelDetailsPanel({
   isLoadingPins,
   canInvite,
   onInvite,
+  canPin = false,
+  onUnpin,
   canDeleteGroup = false,
   onDeleteGroup,
   isDeletingGroup = false,
@@ -366,11 +386,14 @@ export function ChannelDetailsPanel({
           ) : (
             <ul className="space-y-2">
               {pins.map((pin) => (
-                <li key={pin.id}>
+                <li
+                  key={pin.id}
+                  className="rounded-[var(--radius-md)] border border-[var(--border)] px-3 py-2.5"
+                >
                   <button
                     type="button"
                     onClick={() => onJumpToPin(pin.message.id)}
-                    className="w-full rounded-[var(--radius-md)] border border-[var(--border)] px-3 py-2.5 text-left hover:bg-[var(--surface-muted)]"
+                    className="w-full text-left hover:opacity-90"
                   >
                     <div className="flex items-center gap-2 text-xs text-[var(--muted)]">
                       <Pin className="h-3.5 w-3.5 text-[var(--danger)]" />
@@ -391,12 +414,56 @@ export function ChannelDetailsPanel({
                         ? formatMentionPlainText(pin.message.body)
                         : 'Pinned attachment'}
                     </p>
+                    <p className="mt-1 text-[11px] text-[var(--muted)]">
+                      {pin.pinnedBy?.fullName
+                        ? `Pinned by ${pin.pinnedBy.fullName}`
+                        : 'Pinned'}
+                      {' · '}
+                      {new Date(pin.pinnedAt).toLocaleString(undefined, {
+                        month: 'short',
+                        day: 'numeric',
+                        hour: 'numeric',
+                        minute: '2-digit',
+                      })}
+                    </p>
                   </button>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="secondary"
+                      onClick={() => onJumpToPin(pin.message.id)}
+                    >
+                      Jump
+                    </Button>
+                    {canPin && onUnpin ? (
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => void onUnpin(pin.message.id)}
+                      >
+                        <PinOff className="h-3.5 w-3.5" />
+                        Unpin
+                      </Button>
+                    ) : null}
+                  </div>
                 </li>
               ))}
             </ul>
           )}
         </section>
+
+        {channelId ? (
+          <section className="space-y-2.5">
+            <p className="text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">
+              Channel notes
+            </p>
+            <div className="rounded-[var(--radius-md)] border border-[var(--border)] overflow-hidden">
+              <ChannelCanvasPanel channelId={channelId} hideTitle />
+            </div>
+          </section>
+        ) : null}
       </div>
     </Card>
   );

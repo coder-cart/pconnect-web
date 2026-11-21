@@ -1,7 +1,8 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
+import { navigateToChatConversation } from '@/lib/chat-navigation';
 import {
   BarChart3,
   Briefcase,
@@ -56,6 +57,7 @@ interface ClientItem {
   id: string;
   name: string;
   clientName?: string | null;
+  clientCode?: string | null;
   status: string;
   primaryContactName?: string | null;
   primaryContactEmail?: string | null;
@@ -100,6 +102,7 @@ const STATUS_FILTERS = [
 
 export default function ClientsPage() {
   const router = useRouter();
+  const pathname = usePathname();
   const { user, refreshKey, notifyRefresh } = useWorkspace();
   const canManageClients = userHasPermission(user, 'clients.manage');
   const canManageOnboarding = userHasPermission(user, 'onboarding.manage');
@@ -146,6 +149,8 @@ export default function ClientsPage() {
       const haystack = [
         item.name,
         item.clientName,
+        item.clientCode,
+        item.clientCode ? `CLT-${item.clientCode}` : null,
         item.status,
         item.primaryContactName,
         item.primaryContactEmail,
@@ -196,7 +201,11 @@ export default function ClientsPage() {
       const response = await apiRequest<ApiResponse<ChatChannel>>(
         `/clients/${clientId}/messages-channel`,
       );
-      router.push(`/chat?channel=${response.data.id}`);
+      navigateToChatConversation(router, {
+        channelId: response.data.id,
+        pathname,
+        alreadyInConversation: false,
+      });
     } finally {
       setOpeningMessagesClientId(null);
     }
@@ -391,6 +400,11 @@ export default function ClientsPage() {
                           <span className="truncate text-sm font-semibold text-[var(--foreground)]">
                             {item.name}
                           </span>
+                          {item.clientCode ? (
+                            <Badge variant="neutral">
+                              CLT-{item.clientCode}
+                            </Badge>
+                          ) : null}
                           <Badge
                             variant={statusVariant(item.status)}
                             className="capitalize"

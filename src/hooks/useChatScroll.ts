@@ -2,8 +2,23 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 
 const NEAR_BOTTOM_THRESHOLD = 96;
 
+export type ChatScrollRestore =
+  | { mode: 'bottom' }
+  | { mode: 'offset'; scrollTop: number }
+  | { mode: 'distanceFromBottom'; distance: number };
+
 interface UseChatScrollOptions {
   anchorMessageId?: string | null;
+  /** Applied once when scrollKey changes (after channel switch). */
+  restoreOnKeyChange?: ChatScrollRestore | null;
+  /** Called when user scrolls so callers can persist position. */
+  onScrollPosition?: (state: {
+    scrollTop: number;
+    distanceFromBottom: number;
+    nearBottom: boolean;
+  }) => void;
+  /** When true, ResizeObserver will not stick to bottom (e.g. prepending history). */
+  suspendStickToBottom?: boolean;
 }
 
 export function useChatScroll(
@@ -14,9 +29,17 @@ export function useChatScroll(
   const contentRef = useRef<HTMLDivElement>(null);
   const [showJumpToLatest, setShowJumpToLatest] = useState(false);
   const isNearBottomRef = useRef(true);
+  const suspendStickRef = useRef(Boolean(options.suspendStickToBottom));
+  const lastAnchoredIdRef = useRef<string | null>(null);
+  const restoreRef = useRef(options.restoreOnKeyChange ?? null);
+  const onScrollPositionRef = useRef(options.onScrollPosition);
   const anchorMessageId = options.anchorMessageId ?? null;
 
-  const scrollToBottom = useCallback((behavior: ScrollBehavior = 'smooth') => {
+  suspendStickRef.current = Boolean(options.suspendStickToBottom);
+  restoreRef.current = options.restoreOnKeyChange ?? null;
+  onScrollPositionRef.current = options.onScrollPosition;
+
+  const scrollToBottom = useCallback((behavior: ScrollBehavior = 'auto') => {
     const container = containerRef.current;
     if (!container) {
       return;
@@ -31,7 +54,7 @@ export function useChatScroll(
   }, []);
 
   const scrollToMessage = useCallback(
-    (messageId: string, behavior: ScrollBehavior = 'smooth') => {
+    (messageId: string, behavior: ScrollBehavior = 'auto') => {
       const container = containerRef.current;
       const element = document.getElementById(`message-${messageId}`);
       if (!container || !element) {
@@ -58,6 +81,32 @@ export function useChatScroll(
     [],
   );
 
+  const applyRestore = useCallback((restore: ChatScrollRestore) => {
+    const container = containerRef.current;
+    if (!container) {
+      return;
+    }
+    if (restore.mode === 'bottom') {
+      container.scrollTop = container.scrollHeight;
+      isNearBottomRef.current = true;
+      setShowJumpToLatest(false);
+      return;
+    }
+    if (restore.mode === 'offset') {
+      container.scrollTop = restore.scrollTop;
+    } else {
+      container.scrollTop = Math.max(
+        0,
+        container.scrollHeight - container.clientHeight - restore.distance,
+      );
+    }
+    const distanceFromBottom =
+      container.scrollHeight - container.scrollTop - container.clientHeight;
+    const nearBottom = distanceFromBottom <= NEAR_BOTTOM_THRESHOLD;
+    isNearBottomRef.current = nearBottom;
+    setShowJumpToLatest(!nearBottom);
+  }, []);
+
   const handleScroll = useCallback(() => {
     const container = containerRef.current;
     if (!container) {
@@ -69,60 +118,87 @@ export function useChatScroll(
     const nearBottom = distanceFromBottom <= NEAR_BOTTOM_THRESHOLD;
     isNearBottomRef.current = nearBottom;
     setShowJumpToLatest(!nearBottom);
+    onScrollPositionRef.current?.({
+      scrollTop: container.scrollTop,
+      distanceFromBottom,
+      nearBottom,
+    });
   }, []);
 
+  // Conversation / list identity change only — never re-run when highlight clears.
   useEffect(() => {
-    isNearBottomRef.current = true;
-    setShowJumpToLatest(false);
-
-    if (anchorMessageId) {
-      let cancelled = false;
-
-      const tryAnchor = () => {
-        if (cancelled) {
-          return true;
-        }
-
-        if (scrollToMessage(anchorMessageId, 'auto')) {
-          return true;
-        }
-
-        return false;
-      };
-
+    lastAnchoredIdRef.current = null;
+    const restore = restoreRef.current;
+    if (restore && restore.mode !== 'bottom') {
+      isNearBottomRef.current = false;
       requestAnimationFrame(() => {
-        if (tryAnchor()) {
-          return;
-        }
-
-        scrollToBottom('auto');
+        applyRestore(restore);
       });
-
-      const content = contentRef.current;
-      if (!content) {
-        return () => {
-          cancelled = true;
-        };
-      }
-
-      const observer = new MutationObserver(() => {
-        if (tryAnchor()) {
-          observer.disconnect();
-        }
-      });
-
-      observer.observe(content, { childList: true, subtree: true });
-
-      return () => {
-        cancelled = true;
-        observer.disconnect();
-      };
+      return;
     }
 
+    isNearBottomRef.current = true;
+    setShowJumpToLatest(false);
     requestAnimationFrame(() => {
       scrollToBottom('auto');
     });
-  }, [scrollKey, anchorMessageId, scrollToBottom, scrollToMessage]);
+  }, [scrollKey, applyRestore, scrollToBottom]);
+
+  // One-shot anchor: only when a new anchor id appears; clearing does nothing.
+  useEffect(() => {
+    if (!anchorMessageId) {
+      return;
+    }
+    if (lastAnchoredIdRef.current === anchorMessageId) {
+      return;
+    }
+
+    let cancelled = false;
+    const tryAnchor = () => {
+      if (cancelled) {
+        return true;
+      }
+      if (scrollToMessage(anchorMessageId, 'auto')) {
+        lastAnchoredIdRef.current = anchorMessageId;
+        return true;
+      }
+      return false;
+    };
+
+    requestAnimationFrame(() => {
+      if (tryAnchor()) {
+        return;
+      }
+    });
+
+    const content = contentRef.current;
+    if (!content) {
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    const observer = new MutationObserver(() => {
+      if (tryAnchor()) {
+        observer.disconnect();
+      }
+    });
+    observer.observe(content, { childList: true, subtree: true });
+
+    const timeoutId = window.setTimeout(() => {
+      observer.disconnect();
+      if (!cancelled && lastAnchoredIdRef.current !== anchorMessageId) {
+        // Message never appeared — do not yank to bottom.
+        cancelled = true;
+      }
+    }, 2500);
+
+    return () => {
+      cancelled = true;
+      observer.disconnect();
+      window.clearTimeout(timeoutId);
+    };
+  }, [anchorMessageId, scrollToMessage]);
 
   useEffect(() => {
     const content = contentRef.current;
@@ -131,6 +207,9 @@ export function useChatScroll(
     }
 
     const observer = new ResizeObserver(() => {
+      if (suspendStickRef.current) {
+        return;
+      }
       if (isNearBottomRef.current) {
         scrollToBottom('auto');
       }
@@ -146,5 +225,6 @@ export function useChatScroll(
     showJumpToLatest,
     scrollToBottom,
     handleScroll,
+    isNearBottomRef,
   };
 }

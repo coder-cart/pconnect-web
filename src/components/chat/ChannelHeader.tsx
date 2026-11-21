@@ -17,7 +17,6 @@ import { ClientOrgLogo } from '@/components/ui/ClientOrgLogo';
 import { UserAvatar } from '@/components/ui/UserAvatar';
 import { ChannelNotificationMenu } from '@/components/chat/ChannelNotificationMenu';
 import { DETAILS_PANEL_ID } from '@/components/chat/ChannelDetailsPanel';
-import { Tabs } from '@/components/ui/Tabs';
 import {
   ChannelMemberOption,
   ChannelNotificationPreference,
@@ -35,8 +34,6 @@ import {
   presenceSubtitle,
 } from '@/lib/user-presence';
 
-type ChannelTab = 'messages' | 'canvas' | 'pins';
-
 interface ChannelHeaderProps {
   channelName?: string;
   channelDisplayName?: string;
@@ -46,8 +43,6 @@ interface ChannelHeaderProps {
   channelContext: ChannelContext | null;
   dmPeer?: ChatDmPeer | null;
   members?: ChannelMemberOption[];
-  activeTab: ChannelTab;
-  onTabChange: (tab: ChannelTab) => void;
   canInvite: boolean;
   onInvite: () => void;
   onStartHuddle: () => void;
@@ -75,8 +70,6 @@ export function ChannelHeader({
   channelContext,
   dmPeer = null,
   members = [],
-  activeTab,
-  onTabChange,
   canInvite,
   onInvite,
   onStartHuddle,
@@ -303,17 +296,6 @@ export function ChannelHeader({
           ) : null}
         </div>
       </div>
-
-      <Tabs
-        activeId={activeTab}
-        onChange={(id) => onTabChange(id as ChannelTab)}
-        className="chat-inset-x"
-        items={[
-          { id: 'messages', label: 'Messages' },
-          { id: 'pins', label: 'Pins' },
-          { id: 'canvas', label: 'Canvas' },
-        ]}
-      />
     </div>
   );
 }

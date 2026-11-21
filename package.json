@@ -11,12 +11,14 @@
     "dev:webpack": "node init && next dev -p 6001 --webpack",
     "build": "node init && next build",
     "start": "node init && next start -p 6001",
-    "lint": "eslint"
+    "lint": "eslint",
+    "test:paste": "tsx --test src/lib/chatPaste.pipeline.test.ts"
   },
   "dependencies": {
     "@stripe/react-stripe-js": "^6.6.0",
     "@stripe/stripe-js": "^9.8.0",
     "clsx": "^2.1.1",
+    "isomorphic-dompurify": "^3.19.0",
     "lucide-react": "^1.18.0",
     "next": "16.2.9",
     "react": "19.2.4",
@@ -27,12 +29,15 @@
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
+    "@types/jsdom": "^30.0.0",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "eslint": "^9",
     "eslint-config-next": "16.2.9",
+    "jsdom": "^29.1.1",
     "tailwindcss": "^4",
+    "tsx": "^4.23.15",
     "typescript": "^5"
   }
 }

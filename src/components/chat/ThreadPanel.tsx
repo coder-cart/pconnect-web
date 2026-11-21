@@ -26,6 +26,7 @@ interface ThreadPanelProps {
   members: ChannelMemberOption[];
   canManageChannel: boolean;
   canDeleteForEveryone?: boolean;
+  pinnedMessageIds?: Set<string>;
   isLoading: boolean;
   isSending: boolean;
   onClose: () => void;
@@ -44,6 +45,7 @@ interface ThreadPanelProps {
   onEdit: (messageId: string, body: string) => Promise<void>;
   onDelete: (messageId: string) => void;
   onPin: (messageId: string) => Promise<void>;
+  onUnpin?: (messageId: string) => Promise<void>;
   onCopyMessage: (body: string) => void;
   onCopyLink: (channelId: string, messageId: string) => void;
   onMarkUnread: (messageId: string) => Promise<void>;
@@ -61,6 +63,7 @@ export function ThreadPanel({
   members,
   canManageChannel,
   canDeleteForEveryone = false,
+  pinnedMessageIds,
   isLoading,
   isSending,
   onClose,
@@ -69,6 +72,7 @@ export function ThreadPanel({
   onEdit,
   onDelete,
   onPin,
+  onUnpin,
   onCopyMessage,
   onCopyLink,
   onMarkUnread,
@@ -94,7 +98,7 @@ export function ThreadPanel({
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [onClose]);
 
-  const threadScrollKey = `${parentMessage.id}:${replies.length}:${isLoading ? 'loading' : 'ready'}`;
+  const threadScrollKey = parentMessage.id;
 
   return (
     <Card
@@ -164,12 +168,14 @@ export function ThreadPanel({
                 currentUserId={currentUserId}
                 canManageChannel={canManageChannel}
                 canDeleteForEveryone={canDeleteForEveryone}
+                isPinned={pinnedMessageIds?.has(reply.id) ?? false}
                 memberNames={memberNames}
                 onReply={() => {}}
                 onReact={onReact}
                 onEdit={onEdit}
                 onDelete={onDelete}
                 onPin={onPin}
+                onUnpin={onUnpin}
                 onCopyMessage={onCopyMessage}
                 onCopyLink={onCopyLink}
                 onMarkUnread={onMarkUnread}
