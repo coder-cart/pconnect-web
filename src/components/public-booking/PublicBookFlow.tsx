@@ -359,8 +359,14 @@ export function PublicBookFlow({
             Your session is held while {profile?.studioName} confirms it. In the
             studio view it now appears under Projects, in the Inquiry column.
           </p>
+          {manageToken ? (
+            <p className="sb-lead">
+              Use the manage link below (also emailed to you) to cancel or
+              respond to a proposed time.
+            </p>
+          ) : null}
           <div className="sb-actions">
-            {manageToken && showAttribution && !embed ? (
+            {manageToken ? (
               <Link className="sb-btn" href={`/book/manage/${manageToken}`}>
                 Manage your request
               </Link>
