@@ -28,6 +28,7 @@ import { GlobalSearch } from '@/components/layout/GlobalSearch';
 import { NotificationPopover } from '@/components/notifications/NotificationPopover';
 import { useNotifications } from '@/components/providers/NotificationProvider';
 import { ProfileMenu } from '@/components/layout/ProfileMenu';
+import { StagingBadge } from '@/components/layout/StagingBadge';
 import {
   isNotificationSoundMuted,
   playNotificationSound,
@@ -193,6 +194,8 @@ export function TopBar({
         <div className="min-w-[6.5rem] flex-1 lg:max-w-xl">
           <GlobalSearch variant="shell" />
         </div>
+
+        <StagingBadge />
 
         <div className="ml-auto flex shrink-0 items-center gap-0.5 sm:gap-1">
           {createItems.length > 0 ? (

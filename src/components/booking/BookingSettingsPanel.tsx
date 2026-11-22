@@ -1,0 +1,500 @@
+'use client';
+
+import { useEffect, useState } from 'react';
+import { apiRequest } from '@/lib/api-client';
+import { ApiResponse } from '@/lib/auth';
+import { Button } from '@/components/ui/Button';
+import { Card } from '@/components/ui/Card';
+import { Input } from '@/components/ui/Input';
+import { Select } from '@/components/ui/Select';
+
+interface SessionType {
+  id: string;
+  name: string;
+  durationMinutes: number;
+}
+
+type WorkingHoursMap = Record<string, { start: string; end: string } | null>;
+
+interface BookingSettings {
+  exists: boolean;
+  enabled: boolean;
+  publicSlug: string | null;
+  publicUrl: string | null;
+  timezone: string;
+  slotDurationMinutes: number;
+  bufferMinutes: number;
+  minNoticeHours: number;
+  maxAdvanceDays: number;
+  workingHoursJson?: WorkingHoursMap;
+  sessionTypes?: SessionType[];
+  title: string | null;
+  description: string | null;
+}
+
+interface BookingSettingsPanelProps {
+  clientOrganizationId: string;
+}
+
+const WEEKDAYS = [
+  { key: '1', label: 'Mon' },
+  { key: '2', label: 'Tue' },
+  { key: '3', label: 'Wed' },
+  { key: '4', label: 'Thu' },
+  { key: '5', label: 'Fri' },
+  { key: '6', label: 'Sat' },
+  { key: '0', label: 'Sun' },
+] as const;
+
+const DEFAULT_HOURS: WorkingHoursMap = {
+  '0': null,
+  '1': { start: '09:00', end: '17:00' },
+  '2': { start: '09:00', end: '17:00' },
+  '3': { start: '09:00', end: '17:00' },
+  '4': { start: '09:00', end: '17:00' },
+  '5': { start: '09:00', end: '17:00' },
+  '6': null,
+};
+
+const DEFAULT_SESSION_TYPES: SessionType[] = [
+  { id: 'portrait', name: 'Portrait session', durationMinutes: 60 },
+  { id: 'mini', name: 'Mini session', durationMinutes: 30 },
+  { id: 'wedding', name: 'Wedding consult', durationMinutes: 30 },
+];
+
+export function BookingSettingsPanel({
+  clientOrganizationId,
+}: BookingSettingsPanelProps) {
+  const [settings, setSettings] = useState<BookingSettings | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSaving, setIsSaving] = useState(false);
+  const [copied, setCopied] = useState(false);
+
+  async function load() {
+    setIsLoading(true);
+    setErrorMessage(null);
+    try {
+      const response = await apiRequest<ApiResponse<BookingSettings>>(
+        `/clients/${clientOrganizationId}/booking-settings`,
+      );
+      const data = response.data;
+      setSettings({
+        ...data,
+        workingHoursJson: data.workingHoursJson ?? DEFAULT_HOURS,
+        sessionTypes:
+          data.sessionTypes && data.sessionTypes.length > 0
+            ? data.sessionTypes
+            : DEFAULT_SESSION_TYPES,
+      });
+    } catch (error) {
+      setSettings(null);
+      setErrorMessage(
+        error instanceof Error
+          ? error.message
+          : 'Unable to load booking settings',
+      );
+    } finally {
+      setIsLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    void load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [clientOrganizationId]);
+
+  async function enable() {
+    setIsSaving(true);
+    setErrorMessage(null);
+    try {
+      const response = await apiRequest<ApiResponse<BookingSettings>>(
+        `/clients/${clientOrganizationId}/booking-settings/enable`,
+        { method: 'POST' },
+      );
+      setSettings({
+        ...response.data,
+        workingHoursJson: response.data.workingHoursJson ?? DEFAULT_HOURS,
+        sessionTypes:
+          response.data.sessionTypes && response.data.sessionTypes.length > 0
+            ? response.data.sessionTypes
+            : DEFAULT_SESSION_TYPES,
+      });
+    } catch (error) {
+      setErrorMessage(
+        error instanceof Error ? error.message : 'Unable to enable booking',
+      );
+    } finally {
+      setIsSaving(false);
+    }
+  }
+
+  async function save(patch: Record<string, unknown>) {
+    setIsSaving(true);
+    setErrorMessage(null);
+    try {
+      const response = await apiRequest<ApiResponse<BookingSettings>>(
+        `/clients/${clientOrganizationId}/booking-settings`,
+        {
+          method: 'PATCH',
+          body: JSON.stringify(patch),
+        },
+      );
+      setSettings({
+        ...response.data,
+        workingHoursJson: response.data.workingHoursJson ?? DEFAULT_HOURS,
+        sessionTypes:
+          response.data.sessionTypes && response.data.sessionTypes.length > 0
+            ? response.data.sessionTypes
+            : DEFAULT_SESSION_TYPES,
+      });
+    } catch (error) {
+      setErrorMessage(
+        error instanceof Error ? error.message : 'Unable to save settings',
+      );
+    } finally {
+      setIsSaving(false);
+    }
+  }
+
+  if (isLoading) {
+    return (
+      <Card padding="sm">
+        <p className="text-sm text-[var(--muted)]">
+          Loading public booking settings…
+        </p>
+      </Card>
+    );
+  }
+
+  if (!settings) {
+    return (
+      <Card padding="sm" className="space-y-3">
+        <p className="text-sm text-[var(--danger)]">
+          {errorMessage ?? 'Unable to load booking settings'}
+        </p>
+        <Button size="sm" variant="secondary" onClick={() => void load()}>
+          Retry
+        </Button>
+      </Card>
+    );
+  }
+
+  const workingHours = settings.workingHoursJson ?? DEFAULT_HOURS;
+  const sessionTypes = settings.sessionTypes ?? DEFAULT_SESSION_TYPES;
+
+  return (
+    <Card padding="md" className="space-y-4">
+      <div>
+        <h3 className="text-sm font-semibold text-[var(--foreground)]">
+          Public booking link
+        </h3>
+        <p className="mt-1 text-xs text-[var(--muted)]">
+          Share a studio-branded page so visitors can request time. Requests need
+          your approval before a calendar event is created.
+        </p>
+      </div>
+
+      {errorMessage ? (
+        <p className="text-xs text-[var(--danger)]">{errorMessage}</p>
+      ) : null}
+
+      {!settings.exists || !settings.enabled ? (
+        <div className="space-y-3">
+          {settings.exists && settings.publicUrl ? (
+            <p className="rounded-[var(--radius-md)] bg-[var(--surface-muted)] px-3 py-2 text-xs text-[var(--muted)]">
+              Public booking is off. Your link stays reserved until you enable
+              it again.
+            </p>
+          ) : null}
+          <Button disabled={isSaving} onClick={() => void enable()}>
+            {settings.exists ? 'Re-enable public booking' : 'Enable public booking'}
+          </Button>
+        </div>
+      ) : (
+        <>
+          <div className="space-y-2">
+            <Input
+              label="Share URL"
+              value={settings.publicUrl ?? ''}
+              readOnly
+            />
+            <div className="flex flex-wrap gap-2">
+              <Button
+                size="sm"
+                variant="secondary"
+                disabled={!settings.publicUrl}
+                onClick={async () => {
+                  if (!settings.publicUrl) return;
+                  await navigator.clipboard.writeText(settings.publicUrl);
+                  setCopied(true);
+                  window.setTimeout(() => setCopied(false), 1500);
+                }}
+              >
+                {copied ? 'Copied' : 'Copy link'}
+              </Button>
+              <Button
+                size="sm"
+                variant="secondary"
+                disabled={!settings.publicUrl}
+                onClick={() => {
+                  if (settings.publicUrl) {
+                    window.open(settings.publicUrl, '_blank', 'noopener,noreferrer');
+                  }
+                }}
+              >
+                Preview as client
+              </Button>
+              <Button
+                size="sm"
+                variant="ghost"
+                disabled={isSaving}
+                onClick={() => void save({ enabled: false })}
+              >
+                Disable
+              </Button>
+            </div>
+          </div>
+
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Input
+              label="Public title"
+              value={settings.title ?? ''}
+              onChange={(event) =>
+                setSettings({ ...settings, title: event.target.value })
+              }
+            />
+            <Input
+              label="Fallback duration (minutes)"
+              type="number"
+              min={15}
+              value={String(settings.slotDurationMinutes)}
+              onChange={(event) =>
+                setSettings({
+                  ...settings,
+                  slotDurationMinutes: Number(event.target.value),
+                })
+              }
+            />
+            <Input
+              label="Buffer (minutes)"
+              type="number"
+              min={0}
+              value={String(settings.bufferMinutes)}
+              onChange={(event) =>
+                setSettings({
+                  ...settings,
+                  bufferMinutes: Number(event.target.value),
+                })
+              }
+            />
+            <Input
+              label="Min notice (hours)"
+              type="number"
+              min={0}
+              value={String(settings.minNoticeHours)}
+              onChange={(event) =>
+                setSettings({
+                  ...settings,
+                  minNoticeHours: Number(event.target.value),
+                })
+              }
+            />
+          </div>
+
+          <label className="block space-y-1.5">
+            <span className="text-sm font-medium text-[var(--foreground)]">
+              Public description
+            </span>
+            <textarea
+              className="w-full rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm"
+              rows={3}
+              value={settings.description ?? ''}
+              onChange={(event) =>
+                setSettings({ ...settings, description: event.target.value })
+              }
+            />
+          </label>
+
+          <div className="space-y-2">
+            <div className="flex items-center justify-between gap-2">
+              <h4 className="text-sm font-semibold text-[var(--foreground)]">
+                Session types
+              </h4>
+              <Button
+                size="sm"
+                variant="secondary"
+                onClick={() =>
+                  setSettings({
+                    ...settings,
+                    sessionTypes: [
+                      ...sessionTypes,
+                      {
+                        id: `session-${Date.now()}`,
+                        name: 'New session',
+                        durationMinutes: 60,
+                      },
+                    ],
+                  })
+                }
+              >
+                Add type
+              </Button>
+            </div>
+            <ul className="space-y-2">
+              {sessionTypes.map((type, index) => (
+                <li
+                  key={type.id}
+                  className="grid gap-2 rounded-[var(--radius-md)] border border-[var(--border)] p-3 sm:grid-cols-[1fr_7rem_auto]"
+                >
+                  <Input
+                    label="Name"
+                    value={type.name}
+                    onChange={(event) => {
+                      const next = [...sessionTypes];
+                      next[index] = { ...type, name: event.target.value };
+                      setSettings({ ...settings, sessionTypes: next });
+                    }}
+                  />
+                  <Select
+                    label="Minutes"
+                    value={String(type.durationMinutes)}
+                    onChange={(event) => {
+                      const next = [...sessionTypes];
+                      next[index] = {
+                        ...type,
+                        durationMinutes: Number(event.target.value),
+                      };
+                      setSettings({ ...settings, sessionTypes: next });
+                    }}
+                    options={[
+                      { value: '30', label: '30' },
+                      { value: '60', label: '60' },
+                      { value: '90', label: '90' },
+                      { value: '120', label: '120' },
+                    ]}
+                  />
+                  <div className="flex items-end">
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      disabled={sessionTypes.length <= 1}
+                      onClick={() =>
+                        setSettings({
+                          ...settings,
+                          sessionTypes: sessionTypes.filter(
+                            (item) => item.id !== type.id,
+                          ),
+                        })
+                      }
+                    >
+                      Remove
+                    </Button>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </div>
+
+          <div className="space-y-2">
+            <h4 className="text-sm font-semibold text-[var(--foreground)]">
+              Weekly availability
+            </h4>
+            <p className="text-xs text-[var(--muted)]">
+              Open windows generate bookable slots. Closed days stay empty on the
+              public calendar.
+            </p>
+            <ul className="space-y-2">
+              {WEEKDAYS.map((day) => {
+                const hours = workingHours[day.key];
+                const open = Boolean(hours);
+                return (
+                  <li
+                    key={day.key}
+                    className="flex flex-wrap items-center gap-2 rounded-[var(--radius-md)] bg-[var(--surface-muted)] px-3 py-2"
+                  >
+                    <label className="flex min-w-[4.5rem] items-center gap-2 text-sm font-medium">
+                      <input
+                        type="checkbox"
+                        checked={open}
+                        onChange={(event) => {
+                          const next: WorkingHoursMap = {
+                            ...workingHours,
+                            [day.key]: event.target.checked
+                              ? { start: '09:00', end: '17:00' }
+                              : null,
+                          };
+                          setSettings({
+                            ...settings,
+                            workingHoursJson: next,
+                          });
+                        }}
+                      />
+                      {day.label}
+                    </label>
+                    {open && hours ? (
+                      <>
+                        <Input
+                          type="time"
+                          value={hours.start}
+                          onChange={(event) =>
+                            setSettings({
+                              ...settings,
+                              workingHoursJson: {
+                                ...workingHours,
+                                [day.key]: {
+                                  ...hours,
+                                  start: event.target.value,
+                                },
+                              },
+                            })
+                          }
+                        />
+                        <span className="text-xs text-[var(--muted)]">to</span>
+                        <Input
+                          type="time"
+                          value={hours.end}
+                          onChange={(event) =>
+                            setSettings({
+                              ...settings,
+                              workingHoursJson: {
+                                ...workingHours,
+                                [day.key]: {
+                                  ...hours,
+                                  end: event.target.value,
+                                },
+                              },
+                            })
+                          }
+                        />
+                      </>
+                    ) : (
+                      <span className="text-xs text-[var(--muted)]">Closed</span>
+                    )}
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
+
+          <Button
+            disabled={isSaving}
+            onClick={() =>
+              void save({
+                title: settings.title,
+                description: settings.description,
+                slotDurationMinutes: settings.slotDurationMinutes,
+                bufferMinutes: settings.bufferMinutes,
+                minNoticeHours: settings.minNoticeHours,
+                sessionTypes,
+                workingHoursJson: workingHours,
+              })
+            }
+          >
+            Save settings
+          </Button>
+        </>
+      )}
+    </Card>
+  );
+}

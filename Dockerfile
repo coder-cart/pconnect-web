@@ -19,13 +19,20 @@ ENV NODE_OPTIONS=--max-old-space-size=1024
 ARG NEXT_PUBLIC_API_URL=https://colabdeck.com/api
 ARG NEXT_PUBLIC_WS_URL=https://colabdeck.com
 ARG NEXT_PUBLIC_WS_PATH=/socket.io
+ARG NEXT_PUBLIC_APP_ENV=production
 
 ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
 ENV NEXT_PUBLIC_WS_URL=$NEXT_PUBLIC_WS_URL
 ENV NEXT_PUBLIC_WS_PATH=$NEXT_PUBLIC_WS_PATH
+ENV NEXT_PUBLIC_APP_ENV=$NEXT_PUBLIC_APP_ENV
 
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
+
+# Optional git sha or release id. Empty falls back to a unique build id so
+# each image still installs a new service worker. Rollbacks ship their own id.
+ARG APP_RELEASE=
+ENV APP_RELEASE=$APP_RELEASE
 
 RUN npm run build
 

@@ -326,7 +326,7 @@ export function ChatWorkspace({
     );
 
   const openCreateChannel = useCallback(() => {
-    setChannelPreset(null);
+    setChannelPreset({ type: 'public' });
     setCreateChannelOpen(true);
   }, []);
 

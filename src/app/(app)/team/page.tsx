@@ -13,6 +13,7 @@ import {
   RestrictedState,
 } from '@/components/ui/StatePanels';
 import { LinkClientUserModal } from '@/components/modals/LinkClientUserModal';
+import { BookingSettingsPanel } from '@/components/booking/BookingSettingsPanel';
 import { apiRequest } from '@/lib/api-client';
 import { ApiResponse, userHasPermission, userIsExternal } from '@/lib/auth';
 import { useWorkspace } from '@/components/providers/WorkspaceProvider';
@@ -176,6 +177,10 @@ export default function TeamPage() {
 
       {!isLoading && !errorMessage && client ? (
         <>
+          {isOrgAdmin ? (
+            <BookingSettingsPanel clientOrganizationId={client.id} />
+          ) : null}
+
           {!invitesEnabled ? (
             <Card>
               <div className="flex gap-3">

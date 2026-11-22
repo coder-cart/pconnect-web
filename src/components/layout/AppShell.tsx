@@ -55,6 +55,7 @@ function AppShellContent({
     user.permissionCodes,
     user.roleCodes,
     user.portalAccessLevel,
+    Boolean(user.isOrgAdmin),
   );
   useEffect(() => {
     if (

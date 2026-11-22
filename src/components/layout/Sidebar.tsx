@@ -9,6 +9,7 @@ import { getRoleLabel, getNavItemLabel, getVisibleNavItems, NavItem } from '@/li
 import { UserAvatar } from '@/components/ui/UserAvatar';
 import { Logo } from '@/components/ui/Logo';
 import { AdminToolsMenu } from '@/components/layout/AdminToolsMenu';
+import { StagingBadge } from '@/components/layout/StagingBadge';
 import {
   UnreadConversation,
   UnreadPerson,
@@ -34,19 +35,34 @@ interface SidebarProps {
   onToggleCollapsed?: () => void;
 }
 
+/** Title person/label for Unread rows. Groups always keep the channel name. */
 function personForConversation(conversation: UnreadConversation): UnreadPerson {
-  if (conversation.type === 'direct' && conversation.dmPeer) {
-    return conversation.dmPeer;
+  if (conversation.type === 'direct') {
+    if (conversation.dmPeer) return conversation.dmPeer;
+    if (conversation.latestMessage?.sender) {
+      return conversation.latestMessage.sender;
+    }
   }
-  if (conversation.latestMessage?.sender) {
-    return conversation.latestMessage.sender;
-  }
+
   return {
     id: conversation.channelId,
     fullName: conversation.name,
   };
 }
 
+function previewForConversation(conversation: UnreadConversation): string {
+  const body = conversation.latestMessage?.body
+    ? formatMentionPlainText(conversation.latestMessage.body)
+    : null;
+  if (!body) return conversation.name;
+
+  const senderName = conversation.latestMessage?.sender?.fullName?.trim();
+  if (conversation.type !== 'direct' && senderName) {
+    return `${senderName}: ${body}`;
+  }
+
+  return body;
+}
 
 function UnreadPersonHoverCard({ person }: { person: UnreadPerson }) {
   return (
@@ -93,18 +109,19 @@ function UnreadConversationLink({
   const [open, setOpen] = useState(false);
   const pathname = usePathname();
   const router = useRouter();
+  const isDirect = conversation.type === 'direct';
   const person = personForConversation(conversation);
   const away = isAway(person.presenceStatus);
-  const statusLine = formatCustomStatus(person);
-  const preview = conversation.latestMessage?.body
-    ? formatMentionPlainText(conversation.latestMessage.body)
-    : conversation.name;
+  const statusLine = isDirect ? formatCustomStatus(person) : null;
+  const preview = previewForConversation(conversation);
+  const title = person.fullName;
   const chatHref = `/chat?channel=${conversation.channelId}`;
 
   return (
     <div
       className="relative"
       onMouseEnter={() => {
+        if (!isDirect) return;
         if (window.matchMedia('(hover: hover)').matches) setOpen(true);
       }}
       onMouseLeave={() => setOpen(false)}
@@ -112,7 +129,7 @@ function UnreadConversationLink({
       <Link
         href={chatHref}
         onClick={(event) => {
-          if (!window.matchMedia('(hover: hover)').matches) {
+          if (isDirect && !window.matchMedia('(hover: hover)').matches) {
             if (!open && !collapsed) {
               event.preventDefault();
               setOpen(true);
@@ -130,7 +147,7 @@ function UnreadConversationLink({
           });
           onNavigate?.();
         }}
-        title={collapsed ? person.fullName : undefined}
+        title={collapsed ? title : undefined}
         className={cn(
           'flex items-center gap-2.5 rounded-[var(--radius-md)] px-2.5 py-2 text-left transition-colors hover:bg-[var(--shell-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--shell-focus-ring)]',
           collapsed && 'justify-center px-2',
@@ -145,20 +162,22 @@ function UnreadConversationLink({
             }}
             size="xs"
           />
-          <span
-            className={cn(
-              'absolute -bottom-0.5 -right-0.5 h-2 w-2 rounded-full border border-[var(--shell-brand)]',
-              away ? 'bg-[var(--shell-muted)]' : 'bg-[var(--success)]',
-            )}
-            aria-hidden
-          />
+          {isDirect ? (
+            <span
+              className={cn(
+                'absolute -bottom-0.5 -right-0.5 h-2 w-2 rounded-full border border-[var(--shell-brand)]',
+                away ? 'bg-[var(--shell-muted)]' : 'bg-[var(--success)]',
+              )}
+              aria-hidden
+            />
+          ) : null}
         </span>
         {!collapsed ? (
           <>
             <span className="min-w-0 flex-1">
               <span className="block truncate text-sm font-semibold text-[var(--shell-text)]">
-                {person.fullName}
-                {person.statusEmoji ? (
+                {title}
+                {isDirect && person.statusEmoji ? (
                   <span className="ml-1 font-normal" aria-hidden>
                     {person.statusEmoji}
                   </span>
@@ -176,7 +195,9 @@ function UnreadConversationLink({
           <span className="absolute right-1 top-1 h-2 w-2 rounded-full bg-[var(--shell-badge)]" />
         ) : null}
       </Link>
-      {open && !collapsed ? <UnreadPersonHoverCard person={person} /> : null}
+      {open && !collapsed && isDirect ? (
+        <UnreadPersonHoverCard person={person} />
+      ) : null}
     </div>
   );
 }
@@ -198,6 +219,7 @@ export function Sidebar({
     user.permissionCodes,
     user.roleCodes,
     user.portalAccessLevel,
+    Boolean(user.isOrgAdmin),
   ).map((item) => {
     if (item.href === '/chat' && messageUnreadCount > 0) {
       return { ...item, badge: messageUnreadCount };
@@ -259,14 +281,18 @@ export function Sidebar({
     >
       <div
         className={cn(
-          'flex shrink-0 items-center   border-b border-[var(--shell-border)] px-3 py-3',
+          'flex shrink-0 items-center border-b border-[var(--shell-border)] px-3 py-3',
           isCollapsed ? 'justify-center' : 'justify-between px-4 py-3.5',
         )}
       >
         {isCollapsed ? (
           <Logo compact className=" " />
         ) : (
-          <Logo className=" " />
+          <div className="flex min-w-0 items-center gap-2">
+            <Logo className=" " />
+            {/* Client component; safe inside client Sidebar */}
+            <StagingBadge />
+          </div>
         )}
         <div className="flex shrink-0 items-center gap-1">
           {!mobile && onToggleCollapsed ? (
