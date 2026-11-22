@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { Maximize2, Minimize2, SquareArrowOutUpRight, X } from 'lucide-react';
-import { OrderDetailView } from '@/app/(app)/orders/[id]/page';
+import { OrderDetailView } from '@/components/orders/OrderDetailView';
 import { cn } from '@/lib/cn';
 
 export function OrderDetailDrawer({

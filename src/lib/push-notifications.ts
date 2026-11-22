@@ -1,5 +1,6 @@
 import { apiRequest } from '@/lib/api-client';
 import { ApiResponse } from '@/lib/auth';
+import { ensureServiceWorker } from '@/lib/pwa-registration';
 
 export type DevicePushStatus =
   | 'unsupported'
@@ -33,10 +34,8 @@ export function devicePushSupported() {
 
 export async function registerPushWorker() {
   if (!devicePushSupported()) return null;
-  const registration = await navigator.serviceWorker.register('/sw.js', {
-    scope: '/',
-    updateViaCache: 'none',
-  });
+  const registration = await ensureServiceWorker();
+  if (!registration) return null;
   // Ensure an active worker before pushManager.subscribe.
   await navigator.serviceWorker.ready;
   try {

@@ -1,12 +1,13 @@
 import {
   BadgeCheck,
   Building2,
+  CalendarDays,
+  CheckSquare,
   ClipboardList,
   Home,
   MessageSquare,
   Receipt,
   Settings,
-  UserRound,
   Users,
   UsersRound,
   type LucideIcon,
@@ -23,6 +24,8 @@ export interface NavItem {
   externalOnly?: boolean;
   /** Show when the user has any one of these permissions. */
   permissions?: string[];
+  /** Also show to external org-admins (booking config without schedule.manage). */
+  allowOrgAdmin?: boolean;
   badge?: number;
 }
 
@@ -45,6 +48,28 @@ export const NAV_ITEMS: NavItem[] = [
     externalLabel: 'Order',
     icon: ClipboardList,
     permissions: ['orders.view'],
+  },
+  {
+    href: '/tasks',
+    label: 'Tasks',
+    externalLabel: 'Tasks',
+    icon: CheckSquare,
+    permissions: ['tasks.view_internal', 'tasks.create'],
+  },
+  {
+    href: '/schedule',
+    label: 'Studio',
+    externalLabel: 'Studio',
+    icon: CalendarDays,
+    permissions: ['schedule.view', 'schedule.manage'],
+    allowOrgAdmin: true,
+  },
+  {
+    href: '/workload',
+    label: 'Workload',
+    externalLabel: 'Workload',
+    icon: UsersRound,
+    permissions: ['tasks.view_internal', 'schedule.view'],
   },
   {
     href: '/clients',
@@ -106,6 +131,7 @@ const ROUTE_RULES: Array<{
   permissions: string[];
   internalOnly?: boolean;
   externalOnly?: boolean;
+  allowOrgAdmin?: boolean;
 }> = [
   { prefix: '/orders', permissions: ['orders.view'] },
   { prefix: '/clients', permissions: ['clients.view'], internalOnly: true },
@@ -150,12 +176,19 @@ const ROUTE_RULES: Array<{
   {
     prefix: '/tasks',
     permissions: ['tasks.view_internal', 'tasks.create'],
-    internalOnly: true,
+  },
+  {
+    prefix: '/schedule',
+    permissions: ['schedule.view', 'schedule.manage'],
+    allowOrgAdmin: true,
   },
   {
     prefix: '/projects',
     permissions: ['projects.view_internal', 'projects.create'],
-    internalOnly: true,
+  },
+  {
+    prefix: '/workload',
+    permissions: ['tasks.view_internal', 'schedule.view'],
   },
   {
     prefix: '/files',
@@ -205,6 +238,7 @@ export function canAccessPath(
   permissionCodes: string[],
   roleCodes: string[] = [],
   portalAccessLevel?: 'chat_only' | 'chat_and_orders' | null,
+  isOrgAdmin = false,
 ): boolean {
   if (isEditorOnly(roleCodes)) {
     return isMessagingOnlyPath(pathname);
@@ -220,7 +254,10 @@ export function canAccessPath(
   if (!rule) return true;
   if (rule.internalOnly && userType === 'external') return false;
   if (rule.externalOnly && userType === 'internal') return false;
-  return rule.permissions.some((code) => permissionCodes.includes(code));
+  if (rule.permissions.some((code) => permissionCodes.includes(code))) {
+    return true;
+  }
+  return Boolean(rule.allowOrgAdmin && userType === 'external' && isOrgAdmin);
 }
 
 export function getNavItemLabel(item: NavItem, userType: 'internal' | 'external') {
@@ -242,6 +279,7 @@ export function getVisibleNavItems(
   permissionCodes: string[],
   roleCodes: string[] = [],
   portalAccessLevel?: 'chat_only' | 'chat_and_orders' | null,
+  isOrgAdmin = false,
 ): NavItem[] {
   const items = NAV_ITEMS.filter((item) => {
     if (item.internalOnly && userType === 'external') {
@@ -252,11 +290,16 @@ export function getVisibleNavItems(
       return false;
     }
 
-    if (
-      item.permissions?.length &&
-      !item.permissions.some((code) => permissionCodes.includes(code))
-    ) {
-      return false;
+    if (item.permissions?.length) {
+      const hasPermission = item.permissions.some((code) =>
+        permissionCodes.includes(code),
+      );
+      if (
+        !hasPermission &&
+        !(item.allowOrgAdmin && userType === 'external' && isOrgAdmin)
+      ) {
+        return false;
+      }
     }
 
     return true;

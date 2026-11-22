@@ -24,7 +24,6 @@ import {
   ChatChannel,
   ChatDmPeer,
   getChannelLabel,
-  isDirectOrGroupChannel,
   PendingChannelInvite,
 } from '@/lib/chat-types';
 import { cn } from '@/lib/cn';
@@ -172,6 +171,7 @@ function ChannelButton({
             ? 'bg-[var(--shell-active)] text-[var(--shell-text)] shadow-[inset_3px_0_0_0_rgba(255,255,255,0.45)]'
             : 'text-[var(--shell-muted)] hover:bg-[var(--shell-hover)] hover:text-[var(--shell-text)]',
         )}
+        title={label}
       >
         <button
           type="button"
@@ -514,7 +514,7 @@ export function ChannelSidebar({
                 key={invite.id}
                 className="rounded-[var(--radius-md)] border border-[var(--shell-border)] bg-[var(--shell-hover)] p-2"
               >
-                <p className="text-sm font-medium">
+                <p className="truncate text-sm font-medium text-[var(--shell-text)]">
                   {invite.channel.name.replace(/^#/, '')}
                 </p>
                 <Button

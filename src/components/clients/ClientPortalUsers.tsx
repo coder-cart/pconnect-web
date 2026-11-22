@@ -10,6 +10,7 @@ import {
   DropdownMenu,
   DropdownMenuItem,
 } from '@/components/ui/DropdownMenu';
+import { GeneratePortalPasswordDialog } from '@/components/clients/GeneratePortalPasswordDialog';
 
 export interface PortalMember {
   id: string;
@@ -77,10 +78,6 @@ function formatLastLogin(value?: string | null) {
   return `Last login: ${new Date(value).toLocaleString()}`;
 }
 
-function resendLabel(member: PortalMember) {
-  return isNotOnboarded(member) ? 'Resend onboarding' : 'Resend';
-}
-
 export function ClientPortalUsers({
   clientId,
   clientName,
@@ -97,6 +94,9 @@ export function ClientPortalUsers({
   onInvite,
 }: ClientPortalUsersProps) {
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [passwordTarget, setPasswordTarget] = useState<PortalMember | null>(
+    null,
+  );
   const orgDisabled = clientStatus === 'inactive';
 
   const savedContacts = buildSavedContacts(
@@ -120,6 +120,61 @@ export function ClientPortalUsers({
     await onChanged();
   }
 
+  function openGeneratePassword(member: PortalMember) {
+    if (orgDisabled) {
+      onError(
+        'This client organization is disabled. Activate it before managing portal logins.',
+      );
+      return;
+    }
+    if (member.user.status === 'inactive') {
+      onError(
+        'Enable the portal login before generating a temporary password.',
+      );
+      return;
+    }
+    onError(null);
+    setPasswordTarget(member);
+  }
+
+  async function sendPasswordResetLink(member: PortalMember) {
+    if (orgDisabled) {
+      onError(
+        'This client organization is disabled. Activate it before managing portal logins.',
+      );
+      return;
+    }
+    if (member.user.status !== 'active') {
+      onError(
+        'Enable the portal login before sending a password reset link.',
+      );
+      return;
+    }
+    const confirmed = window.confirm(
+      `Send a password reset link to ${member.user.email}? The email will not include a password.`,
+    );
+    if (!confirmed) return;
+    setBusyId(member.user.id);
+    onError(null);
+    try {
+      await reloadAfter(async () => {
+        await apiRequest(
+          `/clients/${clientId}/users/${member.user.id}/send-password-reset-link`,
+          { method: 'POST' },
+        );
+      });
+      onNotice(`Password reset link sent to ${member.user.email}.`);
+    } catch (error) {
+      onError(
+        error instanceof Error
+          ? error.message
+          : 'Failed to send password reset link',
+      );
+    } finally {
+      setBusyId(null);
+    }
+  }
+
   async function resend(member: PortalMember) {
     if (orgDisabled) {
       onError(
@@ -130,8 +185,8 @@ export function ClientPortalUsers({
     const turningOn = member.user.status === 'inactive';
     const confirmed = window.confirm(
       turningOn
-        ? `Email a new temporary password to ${member.user.email}? This also turns the login back on, and the current password will stop working.`
-        : `Email a new temporary password to ${member.user.email}? The current password will stop working.`,
+        ? `Email login instructions with a new temporary password to ${member.user.email}? This also turns the login back on, and the current password will stop working.`
+        : `Email login instructions with a new temporary password to ${member.user.email}? The current password will stop working.`,
     );
     if (!confirmed) return;
     setBusyId(member.user.id);
@@ -143,10 +198,12 @@ export function ClientPortalUsers({
           { method: 'POST' },
         );
       });
-      onNotice(`Login email sent to ${member.user.email}.`);
+      onNotice(`Login instructions sent to ${member.user.email}.`);
     } catch (error) {
       onError(
-        error instanceof Error ? error.message : 'Failed to resend login email',
+        error instanceof Error
+          ? error.message
+          : 'Failed to resend login instructions',
       );
     } finally {
       setBusyId(null);
@@ -424,62 +481,7 @@ export function ClientPortalUsers({
                     ) : (
                       <span className="flex-1" />
                     )}
-                    <div className="hidden flex-wrap items-center gap-2 lg:flex">
-                      <Button
-                        size="sm"
-                        variant="secondary"
-                        disabled={busyId === member.user.id || orgDisabled}
-                        onClick={() => void resend(member)}
-                        title={
-                          orgDisabled
-                            ? 'Activate the client organization before resending'
-                            : undefined
-                        }
-                      >
-                        {resendLabel(member)}
-                      </Button>
-                      {member.user.status === 'inactive' ? (
-                        <Button
-                          size="sm"
-                          variant="secondary"
-                          disabled={
-                            busyId === member.user.id ||
-                            seats.used >= seats.max ||
-                            orgDisabled
-                          }
-                          onClick={() => void setStatus(member, 'active')}
-                        >
-                          Enable
-                        </Button>
-                      ) : (
-                        <Button
-                          size="sm"
-                          variant="secondary"
-                          disabled={busyId === member.user.id}
-                          onClick={() => void setStatus(member, 'inactive')}
-                        >
-                          Disable
-                        </Button>
-                      )}
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        disabled={busyId === member.user.id}
-                        onClick={() => void toggleOrgAdmin(member)}
-                      >
-                        {member.isOrgAdmin ? 'Demote' : 'Make admin'}
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="danger"
-                        disabled={busyId === member.user.id}
-                        onClick={() => void remove(member)}
-                      >
-                        Delete
-                      </Button>
-                    </div>
                     <DropdownMenu
-                      className="lg:hidden"
                       trigger={
                         <Button
                           size="sm"
@@ -488,30 +490,49 @@ export function ClientPortalUsers({
                           disabled={busyId === member.user.id}
                         >
                           <MoreHorizontal className="h-4 w-4" />
+                          <span className="hidden sm:inline">Actions</span>
                         </Button>
                       }
                     >
                       <DropdownMenuItem
+                        disabled={
+                          orgDisabled || member.user.status === 'inactive'
+                        }
+                        onClick={() => openGeneratePassword(member)}
+                      >
+                        Generate password
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        disabled={
+                          orgDisabled || member.user.status !== 'active'
+                        }
+                        onClick={() => void sendPasswordResetLink(member)}
+                      >
+                        Send password reset link
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
                         disabled={orgDisabled}
                         onClick={() => void resend(member)}
                       >
-                        {resendLabel(member)}
+                        Resend login instructions
                       </DropdownMenuItem>
                       {member.user.status === 'inactive' ? (
                         <DropdownMenuItem
-                          disabled={seats.used >= seats.max}
+                          disabled={seats.used >= seats.max || orgDisabled}
                           onClick={() => void setStatus(member, 'active')}
                         >
-                          Enable
+                          Enable portal access
                         </DropdownMenuItem>
                       ) : (
                         <DropdownMenuItem
                           onClick={() => void setStatus(member, 'inactive')}
                         >
-                          Disable
+                          Disable portal access
                         </DropdownMenuItem>
                       )}
-                      <DropdownMenuItem onClick={() => void toggleOrgAdmin(member)}>
+                      <DropdownMenuItem
+                        onClick={() => void toggleOrgAdmin(member)}
+                      >
                         {member.isOrgAdmin ? 'Demote' : 'Make admin'}
                       </DropdownMenuItem>
                       <DropdownMenuItem
@@ -528,6 +549,20 @@ export function ClientPortalUsers({
           </ul>
         )}
       </Card>
+
+      {passwordTarget ? (
+        <GeneratePortalPasswordDialog
+          open
+          clientId={clientId}
+          userId={passwordTarget.user.id}
+          userEmail={passwordTarget.user.email}
+          userName={passwordTarget.user.fullName}
+          onClose={() => setPasswordTarget(null)}
+          onApplied={onChanged}
+          onNotice={onNotice}
+          onError={onError}
+        />
+      ) : null}
     </div>
   );
 }

@@ -1,4 +1,22 @@
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import type { NextConfig } from 'next';
+
+function readAppRelease(): string {
+  try {
+    const parsed = JSON.parse(
+      readFileSync(join(process.cwd(), 'public', 'version.json'), 'utf8'),
+    ) as { release?: unknown };
+    if (typeof parsed.release === 'string' && parsed.release.trim()) {
+      return parsed.release.trim();
+    }
+  } catch {
+    // Dev and CI still boot if the release stamp has not been written yet.
+  }
+  return 'dev';
+}
+
+const appRelease = readAppRelease();
 
 function resolveOrigin(url: string | undefined): string | null {
   if (!url || url.startsWith('/')) {
@@ -31,17 +49,32 @@ function buildConnectSrc(): string {
   return ["'self'", ...origins, 'ws:', 'wss:'].join(' ');
 }
 
-function buildContentSecurityPolicy(): string {
+function buildImgSrc(): string {
+  const origins = new Set<string>(["'self'", 'data:', 'blob:', 'https://*.stripe.com']);
+  const apiOrigin = resolveOrigin(process.env.NEXT_PUBLIC_API_URL);
+  if (apiOrigin) origins.add(apiOrigin);
+  origins.add('http://localhost:3001');
+  origins.add('http://127.0.0.1:3001');
+  origins.add('http://localhost:6002');
+  origins.add('http://127.0.0.1:6002');
+  return [...origins].join(' ');
+}
+
+function buildContentSecurityPolicy(options?: {
+  allowFraming?: boolean;
+}): string {
   return [
     "default-src 'self'",
     "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://js.stripe.com",
     "style-src 'self' 'unsafe-inline'",
-    "img-src 'self' data: blob: https://*.stripe.com",
+    `img-src ${buildImgSrc()}`,
     "media-src 'self' blob:",
     "font-src 'self' data:",
     `connect-src ${buildConnectSrc()} https://api.stripe.com https://m.stripe.network`,
     "frame-src https://js.stripe.com https://hooks.stripe.com",
-    "frame-ancestors 'none'",
+    options?.allowFraming
+      ? 'frame-ancestors *'
+      : "frame-ancestors 'none'",
     "base-uri 'self'",
     "form-action 'self'",
   ].join('; ');
@@ -54,6 +87,9 @@ const apiProxyTarget =
 const nextConfig: NextConfig = {
   output: 'standalone',
   poweredByHeader: false,
+  env: {
+    NEXT_PUBLIC_APP_RELEASE: appRelease,
+  },
   // Keep `/api/socket.io/?EIO=…` from being 308'd to a slashless URL (Engine.IO).
   skipTrailingSlashRedirect: ngrokProxy,
   // Allow HMR when the dev server is accessed via ngrok (client demos).
@@ -89,7 +125,33 @@ const nextConfig: NextConfig = {
     ];
   },
   async headers() {
+    const revalidate = [
+      { key: 'Cache-Control', value: 'no-cache, no-store, must-revalidate' },
+    ];
     return [
+      { source: '/sw.js', headers: revalidate },
+      { source: '/pwa-release.js', headers: revalidate },
+      { source: '/version.json', headers: revalidate },
+      {
+        source: '/manifest.webmanifest',
+        headers: [{ key: 'Cache-Control', value: 'no-cache, must-revalidate' }],
+      },
+      {
+        // Public booking pages may be embedded on client websites.
+        source: '/book/:path*',
+        headers: [
+          { key: 'X-Content-Type-Options', value: 'nosniff' },
+          { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
+          {
+            key: 'Permissions-Policy',
+            value: 'camera=(), microphone=(), geolocation=()',
+          },
+          {
+            key: 'Content-Security-Policy',
+            value: buildContentSecurityPolicy({ allowFraming: true }),
+          },
+        ],
+      },
       {
         source: '/:path*',
         headers: [

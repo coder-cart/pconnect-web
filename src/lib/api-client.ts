@@ -1,3 +1,4 @@
+import { beginPwaUpload } from './pwa-work-guard';
 import { API_BASE_URL } from './config';
 import {
   clearStoredToken,
@@ -108,6 +109,19 @@ export async function apiRequest<T>(
 }
 
 export async function apiUpload<T>(
+  path: string,
+  formData: FormData,
+  options: Omit<RequestOptions, 'body' | 'headers'> = {},
+): Promise<T> {
+  const endUpload = beginPwaUpload();
+  try {
+    return await uploadForm<T>(path, formData, options);
+  } finally {
+    endUpload();
+  }
+}
+
+async function uploadForm<T>(
   path: string,
   formData: FormData,
   options: Omit<RequestOptions, 'body' | 'headers'> = {},

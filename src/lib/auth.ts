@@ -22,6 +22,10 @@ export interface AuthenticatedUser {
   effectiveTimeZone?: string | null;
   /** Effective portal access for external users. Null for staff. */
   portalAccessLevel?: ClientPortalAccessLevel | null;
+  /** True when the external user is org-admin on at least one linked client. */
+  isOrgAdmin?: boolean;
+  /** Client orgs where this external user is an org-admin. */
+  orgAdminClientIds?: string[];
   /** ISO timestamp when Get Started tour was completed; null = not completed. */
   productTourCompletedAt?: string | null;
 }

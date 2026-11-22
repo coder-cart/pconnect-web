@@ -6,10 +6,10 @@
     "node": ">=20"
   },
   "scripts": {
-    "dev": "node init && next dev -p 6001 --webpack",
-    "dev:turbopack": "node init && next dev -p 6001",
-    "dev:webpack": "node init && next dev -p 6001 --webpack",
-    "build": "node init && next build",
+    "dev": "node init && node scripts/stamp-pwa-version.mjs && node init && next dev -p 6001 --webpack",
+    "dev:turbopack": "node init && node scripts/stamp-pwa-version.mjs && node init && next dev -p 6001",
+    "dev:webpack": "node init && node scripts/stamp-pwa-version.mjs && node init && next dev -p 6001 --webpack",
+    "build": "node init && node scripts/stamp-pwa-version.mjs && node init && next build",
     "start": "node init && next start -p 6001",
     "lint": "eslint",
     "test:paste": "tsx --test src/lib/chatPaste.pipeline.test.ts"

@@ -37,6 +37,7 @@ import {
 import { RecentActivityPanel } from '@/components/dashboard/RecentActivityPanel';
 import { RecentMessagesPanel } from '@/components/dashboard/RecentMessagesPanel';
 import { RecentOrdersTable } from '@/components/dashboard/RecentOrdersTable';
+import { TasksScheduleWidgets } from '@/components/dashboard/TasksScheduleWidgets';
 
 function boardStage(code: string | null | undefined) {
   if (!code || code === 'cancelled' || code === 'completed') {
@@ -68,6 +69,7 @@ export default function DashboardPage() {
   const hideClientIdentity = isProductionOnlyStaff(user?.roleCodes);
   const roleLabel = getRoleLabel(user.userType, user.roleCodes);
   const canViewOrders = userHasPermission(user, 'orders.view');
+  const canViewTasks = userHasPermission(user, 'tasks.view_internal');
   const firstName = user.fullName.split(' ')[0] || user.fullName;
 
   useEffect(() => {
@@ -229,6 +231,8 @@ export default function DashboardPage() {
           </Link>
         </Card>
       ) : null}
+
+      <TasksScheduleWidgets enabled={canViewTasks} />
 
       {isLoading ? <ListSkeleton rows={5} /> : null}
 
