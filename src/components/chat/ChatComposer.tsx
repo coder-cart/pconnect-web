@@ -202,7 +202,7 @@ export function ChatComposer({
   const [emojiReady, setEmojiReady] = useState(false);
   const composerHoldId = useId();
   usePwaWorkHold(
-    !isEmpty || attachments.length > 0 || isUploading || isRecording,
+    !isEmpty || attachments.length > 0 || isUploading,
     composerHoldId,
     'message',
   );
