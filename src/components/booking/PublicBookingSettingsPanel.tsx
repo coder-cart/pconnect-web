@@ -17,6 +17,8 @@ interface BookingBlackout {
   reason: string | null;
 }
 
+type ProductionRouting = 'none' | 'local_task' | 'nhc_order';
+
 interface PublicBookingSettings {
   exists: boolean;
   enabled: boolean;
@@ -33,7 +35,13 @@ interface PublicBookingSettings {
   bannerUpdatedAt: string | null;
   contact: Record<string, string | undefined>;
   social: Record<string, string | undefined>;
-  embedSnippet: string;
+  embedSnippet: string | null;
+  embedEnabled?: boolean;
+  autoConfirm?: boolean;
+  productionRouting?: ProductionRouting;
+  defaultAssigneeUserId?: string | null;
+  nhcProjectId?: string | null;
+  nhcDefaultManagerUserId?: string | null;
 }
 
 interface PublicBookingSettingsPanelProps {
@@ -52,6 +60,12 @@ const EMBED_PRESETS = [
   { id: 'standard', label: 'Standard', width: '100%', height: '750' },
   { id: 'tall', label: 'Tall', width: '100%', height: '900' },
 ] as const;
+
+const ROUTING_OPTIONS = [
+  { value: 'none', label: 'None (manual only)' },
+  { value: 'local_task', label: 'Local production task' },
+  { value: 'nhc_order', label: 'NHC order + task' },
+];
 
 export function PublicBookingSettingsPanel({
   clientOrganizationId,
@@ -88,7 +102,10 @@ export function PublicBookingSettingsPanel({
         publishStatus: settingsResponse.data.publishStatus ?? 'draft',
         contact: settingsResponse.data.contact ?? {},
         social: settingsResponse.data.social ?? {},
-        embedSnippet: settingsResponse.data.embedSnippet ?? '',
+        embedSnippet: settingsResponse.data.embedSnippet ?? null,
+        embedEnabled: settingsResponse.data.embedEnabled ?? true,
+        productionRouting:
+          settingsResponse.data.productionRouting ?? ('none' as ProductionRouting),
         hasBanner: Boolean(settingsResponse.data.hasBanner),
       };
       setSettings(data);
@@ -277,11 +294,11 @@ export function PublicBookingSettingsPanel({
   }
 
   const embedCode = useMemo(() => {
-    if (!settings?.publicUrl) return '';
+    if (!settings?.publicUrl || settings.embedEnabled === false) return '';
     const preset =
       EMBED_PRESETS.find((item) => item.id === embedPreset) ?? EMBED_PRESETS[1];
     return `<iframe src="${settings.publicUrl}?embed=1" width="${preset.width}" height="${preset.height}" style="border:0;border-radius:12px;" loading="lazy" title="Book online"></iframe>`;
-  }, [settings?.publicUrl, embedPreset]);
+  }, [settings?.publicUrl, settings?.embedEnabled, embedPreset]);
 
   if (isLoading) {
     return (
@@ -612,44 +629,122 @@ export function PublicBookingSettingsPanel({
 
           <div className="space-y-2">
             <h4 className="text-sm font-semibold text-[var(--foreground)]">
-              Website embed
+              Production routing
             </h4>
             <p className="text-xs text-[var(--muted)]">
-              Paste this iframe into WordPress, Shopify, or any site that allows
-              HTML embeds. Use <code>?embed=1</code> for a compact layout.
+              After you confirm a booking, Convert to production creates a local
+              task and/or NHC order using these defaults.
             </p>
             <Select
-              label="Size preset"
-              value={embedPreset}
+              label="Default conversion"
+              value={settings.productionRouting ?? 'none'}
               onChange={(event) =>
-                setEmbedPreset(
-                  event.target.value as (typeof EMBED_PRESETS)[number]['id'],
-                )
+                setSettings({
+                  ...settings,
+                  productionRouting: event.target.value as ProductionRouting,
+                })
               }
-              options={EMBED_PRESETS.map((item) => ({
-                value: item.id,
-                label: `${item.label} (${item.height}px)`,
-              }))}
+              options={ROUTING_OPTIONS}
             />
-            <textarea
-              className="w-full rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface)] px-3 py-2 font-mono text-xs"
-              rows={3}
-              readOnly
-              value={embedCode}
+            <Input
+              label="Default assignee user ID"
+              value={settings.defaultAssigneeUserId ?? ''}
+              onChange={(event) =>
+                setSettings({
+                  ...settings,
+                  defaultAssigneeUserId: event.target.value || null,
+                })
+              }
+              placeholder="Optional internal user id"
             />
-            <Button
-              size="sm"
-              variant="secondary"
-              disabled={!embedCode}
-              onClick={async () => {
-                if (!embedCode) return;
-                await navigator.clipboard.writeText(embedCode);
-                setCopiedEmbed(true);
-                window.setTimeout(() => setCopiedEmbed(false), 1500);
-              }}
-            >
-              {copiedEmbed ? 'Copied embed' : 'Copy embed code'}
-            </Button>
+            {(settings.productionRouting ?? 'none') === 'nhc_order' ? (
+              <div className="grid gap-3 sm:grid-cols-2">
+                <Input
+                  label="NHC project ID"
+                  value={settings.nhcProjectId ?? ''}
+                  onChange={(event) =>
+                    setSettings({
+                      ...settings,
+                      nhcProjectId: event.target.value || null,
+                    })
+                  }
+                />
+                <Input
+                  label="NHC default manager user ID"
+                  value={settings.nhcDefaultManagerUserId ?? ''}
+                  onChange={(event) =>
+                    setSettings({
+                      ...settings,
+                      nhcDefaultManagerUserId: event.target.value || null,
+                    })
+                  }
+                />
+              </div>
+            ) : null}
+          </div>
+
+          <div className="space-y-2">
+            <h4 className="text-sm font-semibold text-[var(--foreground)]">
+              Website embed
+            </h4>
+            <label className="flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={settings.embedEnabled !== false}
+                onChange={(event) =>
+                  setSettings({
+                    ...settings,
+                    embedEnabled: event.target.checked,
+                  })
+                }
+              />
+              Allow iframe embeds (<code>?embed=1</code>)
+            </label>
+            {settings.embedEnabled === false ? (
+              <p className="text-xs text-[var(--muted)]">
+                Embed is off. Guests can still use the public share URL.
+              </p>
+            ) : (
+              <>
+                <p className="text-xs text-[var(--muted)]">
+                  Paste this iframe into WordPress, Shopify, or any site that
+                  allows HTML embeds.
+                </p>
+                <Select
+                  label="Size preset"
+                  value={embedPreset}
+                  onChange={(event) =>
+                    setEmbedPreset(
+                      event.target
+                        .value as (typeof EMBED_PRESETS)[number]['id'],
+                    )
+                  }
+                  options={EMBED_PRESETS.map((item) => ({
+                    value: item.id,
+                    label: `${item.label} (${item.height}px)`,
+                  }))}
+                />
+                <textarea
+                  className="w-full rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface)] px-3 py-2 font-mono text-xs"
+                  rows={3}
+                  readOnly
+                  value={embedCode}
+                />
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  disabled={!embedCode}
+                  onClick={async () => {
+                    if (!embedCode) return;
+                    await navigator.clipboard.writeText(embedCode);
+                    setCopiedEmbed(true);
+                    window.setTimeout(() => setCopiedEmbed(false), 1500);
+                  }}
+                >
+                  {copiedEmbed ? 'Copied embed' : 'Copy embed code'}
+                </Button>
+              </>
+            )}
           </div>
 
           <Button
@@ -666,6 +761,12 @@ export function PublicBookingSettingsPanel({
                 backgroundColor: settings.backgroundColor,
                 contact: settings.contact,
                 social: settings.social,
+                embedEnabled: settings.embedEnabled !== false,
+                productionRouting: settings.productionRouting ?? 'none',
+                defaultAssigneeUserId: settings.defaultAssigneeUserId || null,
+                nhcProjectId: settings.nhcProjectId || null,
+                nhcDefaultManagerUserId:
+                  settings.nhcDefaultManagerUserId || null,
               })
             }
           >

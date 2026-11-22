@@ -6,6 +6,31 @@ export interface PublicSessionType {
   durationMinutes: number;
 }
 
+export interface PublicBookingFormField {
+  id: string;
+  label: string;
+  type: 'text' | 'textarea' | 'email' | 'phone' | 'select' | 'checkbox';
+  required: boolean;
+  options?: string[];
+}
+
+export interface PublicBookingService {
+  id: string;
+  name: string;
+  description?: string | null;
+  durationMinutes: number;
+  priceCents?: number | null;
+  currency?: string;
+  formSchema?: PublicBookingFormField[];
+}
+
+export interface PublicBookingCategory {
+  id: string;
+  name: string;
+  description?: string | null;
+  services: PublicBookingService[];
+}
+
 export interface PublicStudioProfile {
   slug: string;
   studioName: string;
@@ -25,7 +50,9 @@ export interface PublicStudioProfile {
   backgroundColor?: string | null;
   contact?: Record<string, string | undefined>;
   social?: Record<string, string | undefined>;
+  embedEnabled?: boolean;
   sessionTypes: PublicSessionType[];
+  categories?: PublicBookingCategory[];
 }
 
 export function publicBookingAssetUrl(
@@ -103,7 +130,11 @@ export function fetchPublicSlots(
   slug: string,
   from: string,
   to: string,
-  options?: { sessionTypeId?: string; durationMinutes?: number },
+  options?: {
+    sessionTypeId?: string;
+    serviceId?: string;
+    durationMinutes?: number;
+  },
 ) {
   if (!slug?.trim()) {
     return Promise.reject(new Error('Booking page not found'));
@@ -112,12 +143,16 @@ export function fetchPublicSlots(
   if (options?.sessionTypeId) {
     params.set('sessionTypeId', options.sessionTypeId);
   }
+  if (options?.serviceId) {
+    params.set('serviceId', options.serviceId);
+  }
   if (options?.durationMinutes) {
     params.set('durationMinutes', String(options.durationMinutes));
   }
   return publicFetch<{
     slotDurationMinutes: number;
     sessionTypeId?: string | null;
+    serviceId?: string | null;
     slots: string[];
   }>(`/public/booking/${encodeURIComponent(slug)}/slots?${params}`);
 }
@@ -131,6 +166,8 @@ export function createPublicBookingRequest(
     notes?: string;
     startsAt: string;
     sessionTypeId?: string;
+    serviceId?: string;
+    formAnswers?: Record<string, string | boolean>;
     website?: string;
   },
 ) {
@@ -145,6 +182,53 @@ export function createPublicBookingRequest(
     method: 'POST',
     body: JSON.stringify(body),
   });
+}
+
+export async function uploadPublicBookingReferenceFile(
+  manageToken: string,
+  file: File,
+) {
+  if (!manageToken?.trim()) {
+    throw new Error('Booking request not found');
+  }
+  const formData = new FormData();
+  formData.append('file', file);
+  const controller = new AbortController();
+  const timeoutId = setTimeout(
+    () => controller.abort(),
+    PUBLIC_FETCH_TIMEOUT_MS,
+  );
+  try {
+    const response = await fetch(
+      `${API_BASE_URL}/public/booking/manage/${encodeURIComponent(manageToken)}/files`,
+      {
+        method: 'POST',
+        body: formData,
+        signal: controller.signal,
+      },
+    );
+    const payload = (await response.json().catch(() => null)) as {
+      success?: boolean;
+      data?: {
+        id: string;
+        fileName: string;
+        mimeType: string;
+        sizeBytes: number;
+      };
+      message?: string;
+    } | null;
+    if (!response.ok || !payload?.success) {
+      throw new Error(payload?.message ?? 'Upload failed');
+    }
+    return payload.data!;
+  } catch (error) {
+    if (error instanceof DOMException && error.name === 'AbortError') {
+      throw new Error('Upload timed out. Please try again.');
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeoutId);
+  }
 }
 
 export function fetchManagedBooking(token: string) {

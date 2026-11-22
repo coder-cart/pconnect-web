@@ -39,6 +39,11 @@ interface StudioProject {
   checklist: ChecklistItem[];
   progress: number;
   clientOrganization: { id: string; name: string };
+  studioEventId?: string | null;
+  productionTaskId?: string | null;
+  productionOrderId?: string | null;
+  category?: { id: string; name: string } | null;
+  service?: { id: string; name: string } | null;
 }
 
 interface StudioProjectsBoardProps {
@@ -162,6 +167,27 @@ export function StudioProjectsBoard({
     } catch (error) {
       setErrorMessage(
         error instanceof Error ? error.message : 'Unable to decline inquiry',
+      );
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  async function convertToProduction(id: string) {
+    setBusyId(id);
+    try {
+      await apiRequest(`/booking-requests/${id}/convert-to-production`, {
+        method: 'POST',
+        body: JSON.stringify({}),
+      });
+      await load({ quiet: true });
+      onChanged?.();
+      setOpenId(id);
+    } catch (error) {
+      setErrorMessage(
+        error instanceof Error
+          ? error.message
+          : 'Unable to convert booking to production',
       );
     } finally {
       setBusyId(null);
@@ -396,22 +422,56 @@ export function StudioProjectsBoard({
                   </Button>
                 </div>
               ) : (
-                <Select
-                  label="Stage"
-                  value={openProject.workflowStage}
-                  disabled={busyId === openProject.id}
-                  onChange={(event) =>
-                    void patchWorkflow(openProject.id, {
-                      workflowStage: event.target.value as WorkflowStage,
-                    })
-                  }
-                  options={COLUMNS.filter((column) => column.id !== 'inquiry').map(
-                    (column) => ({
+                <div className="space-y-3">
+                  <Select
+                    label="Stage"
+                    value={openProject.workflowStage}
+                    disabled={busyId === openProject.id}
+                    onChange={(event) =>
+                      void patchWorkflow(openProject.id, {
+                        workflowStage: event.target.value as WorkflowStage,
+                      })
+                    }
+                    options={COLUMNS.filter(
+                      (column) => column.id !== 'inquiry',
+                    ).map((column) => ({
                       value: column.id,
                       label: column.label,
-                    }),
-                  )}
-                />
+                    }))}
+                  />
+                  {openProject.productionTaskId ||
+                  openProject.productionOrderId ? (
+                    <div className="rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface-muted)] p-3 text-xs space-y-1">
+                      <p className="font-medium text-[var(--foreground)]">
+                        Linked production
+                      </p>
+                      {openProject.productionTaskId ? (
+                        <a
+                          href={`/tasks?task=${openProject.productionTaskId}`}
+                          className="block text-[var(--br)] underline"
+                        >
+                          Open task
+                        </a>
+                      ) : null}
+                      {openProject.productionOrderId ? (
+                        <a
+                          href={`/orders/${openProject.productionOrderId}`}
+                          className="block text-[var(--br)] underline"
+                        >
+                          Open order
+                        </a>
+                      ) : null}
+                    </div>
+                  ) : openProject.status === 'approved' ? (
+                    <Button
+                      size="sm"
+                      disabled={busyId === openProject.id}
+                      onClick={() => void convertToProduction(openProject.id)}
+                    >
+                      Convert to production
+                    </Button>
+                  ) : null}
+                </div>
               )}
 
               <div>

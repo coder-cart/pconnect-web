@@ -15,6 +15,7 @@ import {
   fetchPublicSlots,
   fetchPublicStudio,
   publicBookingAssetUrl,
+  uploadPublicBookingReferenceFile,
   type PublicSessionType,
   type PublicStudioProfile,
 } from '@/lib/public-booking-api';
@@ -77,6 +78,12 @@ export function PublicBookFlow({
 }: PublicBookFlowProps) {
   const [profile, setProfile] = useState<PublicStudioProfile | null>(null);
   const [slots, setSlots] = useState<string[]>([]);
+  const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(
+    null,
+  );
+  const [selectedServiceId, setSelectedServiceId] = useState<string | null>(
+    null,
+  );
   const [selectedTypeId, setSelectedTypeId] = useState<string | null>(null);
   const [selectedDay, setSelectedDay] = useState<string | null>(null);
   const [selectedSlot, setSelectedSlot] = useState<string | null>(null);
@@ -84,6 +91,10 @@ export function PublicBookFlow({
   const [guestName, setGuestName] = useState('');
   const [guestEmail, setGuestEmail] = useState('');
   const [notes, setNotes] = useState('');
+  const [formAnswers, setFormAnswers] = useState<
+    Record<string, string | boolean>
+  >({});
+  const [referenceFiles, setReferenceFiles] = useState<File[]>([]);
   const [honeypot, setHoneypot] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [slotsLoading, setSlotsLoading] = useState(false);
@@ -93,6 +104,18 @@ export function PublicBookFlow({
   const [manageToken, setManageToken] = useState<string | null>(null);
 
   const timeZone = profile?.timezone || 'UTC';
+  const categories = profile?.categories?.filter((c) => c.services.length) ?? [];
+  const useCatalog = categories.length > 0;
+  const selectedCategory =
+    categories.find((category) => category.id === selectedCategoryId) ??
+    categories[0] ??
+    null;
+  const selectedService =
+    selectedCategory?.services.find(
+      (service) => service.id === selectedServiceId,
+    ) ??
+    selectedCategory?.services[0] ??
+    null;
   const sessionTypes: PublicSessionType[] = profile?.sessionTypes?.length
     ? profile.sessionTypes
     : [
@@ -106,6 +129,25 @@ export function PublicBookFlow({
     sessionTypes.find((type) => type.id === selectedTypeId) ??
     sessionTypes[0] ??
     null;
+  const selectedOffering = useCatalog
+    ? selectedService
+      ? {
+          id: selectedService.id,
+          name: selectedService.name,
+          durationMinutes: selectedService.durationMinutes,
+          kind: 'service' as const,
+          formSchema: selectedService.formSchema ?? [],
+        }
+      : null
+    : selectedType
+      ? {
+          id: selectedType.id,
+          name: selectedType.name,
+          durationMinutes: selectedType.durationMinutes,
+          kind: 'session' as const,
+          formSchema: [],
+        }
+      : null;
 
   const brandStyle = {
     ['--sb-br' as string]: profile?.primaryColor || undefined,
@@ -125,7 +167,13 @@ export function PublicBookFlow({
       .then((data) => {
         if (cancelled) return;
         setProfile(data);
-        setSelectedTypeId(data.sessionTypes?.[0]?.id ?? 'default');
+        const firstCategory = data.categories?.find((c) => c.services.length);
+        if (firstCategory) {
+          setSelectedCategoryId(firstCategory.id);
+          setSelectedServiceId(firstCategory.services[0]?.id ?? null);
+        } else {
+          setSelectedTypeId(data.sessionTypes?.[0]?.id ?? 'default');
+        }
       })
       .catch((error: unknown) => {
         if (!cancelled) {
@@ -143,7 +191,7 @@ export function PublicBookFlow({
   }, [slug]);
 
   useEffect(() => {
-    if (!profile || !selectedType) return;
+    if (!profile || !selectedOffering) return;
     let cancelled = false;
     void Promise.resolve().then(async () => {
       setSlotsLoading(true);
@@ -151,9 +199,16 @@ export function PublicBookFlow({
         const from = startOfMonth(monthAnchor).toISOString();
         const to = endOfMonth(monthAnchor).toISOString();
         const data = await fetchPublicSlots(slug, from, to, {
+          serviceId:
+            selectedOffering.kind === 'service'
+              ? selectedOffering.id
+              : undefined,
           sessionTypeId:
-            selectedType.id === 'default' ? undefined : selectedType.id,
-          durationMinutes: selectedType.durationMinutes,
+            selectedOffering.kind === 'session' &&
+            selectedOffering.id !== 'default'
+              ? selectedOffering.id
+              : undefined,
+          durationMinutes: selectedOffering.durationMinutes,
         });
         if (!cancelled) {
           setSlots(data.slots);
@@ -177,8 +232,9 @@ export function PublicBookFlow({
     profile,
     monthAnchor,
     slug,
-    selectedType?.id,
-    selectedType?.durationMinutes,
+    selectedOffering?.id,
+    selectedOffering?.durationMinutes,
+    selectedOffering?.kind,
   ]);
 
   const slotsByDay = useMemo(() => {
@@ -218,12 +274,24 @@ export function PublicBookFlow({
         guestEmail: guestEmail.trim(),
         notes: notes.trim() || undefined,
         startsAt: selectedSlot,
-        sessionTypeId:
-          selectedType && selectedType.id !== 'default'
-            ? selectedType.id
+        serviceId:
+          selectedOffering?.kind === 'service'
+            ? selectedOffering.id
             : undefined,
+        sessionTypeId:
+          selectedOffering?.kind === 'session' &&
+          selectedOffering.id !== 'default'
+            ? selectedOffering.id
+            : undefined,
+        formAnswers:
+          Object.keys(formAnswers).length > 0 ? formAnswers : undefined,
         website: honeypot,
       });
+      if (result.manageToken && referenceFiles.length > 0) {
+        for (const file of referenceFiles.slice(0, 8)) {
+          await uploadPublicBookingReferenceFile(result.manageToken, file);
+        }
+      }
       setManageToken(result.manageToken);
       setSubmitted(true);
       onSubmitted?.();
@@ -253,6 +321,25 @@ export function PublicBookFlow({
           <p className="sb-lead">{errorMessage}</p>
         </div>
         {showAttribution && !embed ? <BuiltByColabdeck /> : null}
+      </div>
+    );
+  }
+
+  if (profile && embed && profile.embedEnabled === false) {
+    return (
+      <div className="sb-wrap sb-wrap--embed" style={brandStyle}>
+        <div className="sb-card">
+          <h1>Embed disabled</h1>
+          <p className="sb-lead">
+            This studio turned off website embeds. Open the public booking page
+            directly to request a session.
+          </p>
+          {profile.slug ? (
+            <p className="sb-lead">
+              <Link href={`/book/${profile.slug}`}>Go to booking page</Link>
+            </p>
+          ) : null}
+        </div>
       </div>
     );
   }
@@ -331,26 +418,83 @@ export function PublicBookFlow({
           <p className="sb-lead">{profile.description}</p>
         ) : null}
 
-        <p className="sb-section-label">1. Choose a session</p>
-        <div className="sb-chips" role="group" aria-label="Session types">
-          {sessionTypes.map((type) => (
-            <button
-              key={type.id}
-              type="button"
-              className={`sb-chip${selectedType?.id === type.id ? ' on' : ''}`}
-              aria-pressed={selectedType?.id === type.id}
-              onClick={() => {
-                setSelectedTypeId(type.id);
-                setSelectedSlot(null);
-              }}
-            >
-              {type.name}
-              <small>{type.durationMinutes} min</small>
-            </button>
-          ))}
-        </div>
+        {useCatalog ? (
+          <>
+            <p className="sb-section-label">1. Choose a category</p>
+            <div className="sb-chips" role="group" aria-label="Categories">
+              {categories.map((category) => (
+                <button
+                  key={category.id}
+                  type="button"
+                  className={`sb-chip${
+                    selectedCategory?.id === category.id ? ' on' : ''
+                  }`}
+                  aria-pressed={selectedCategory?.id === category.id}
+                  onClick={() => {
+                    setSelectedCategoryId(category.id);
+                    setSelectedServiceId(category.services[0]?.id ?? null);
+                    setSelectedSlot(null);
+                    setFormAnswers({});
+                  }}
+                >
+                  {category.name}
+                  <small>{category.services.length} services</small>
+                </button>
+              ))}
+            </div>
+            <p className="sb-section-label">2. Choose a service</p>
+            <div className="sb-chips" role="group" aria-label="Services">
+              {(selectedCategory?.services ?? []).map((service) => (
+                <button
+                  key={service.id}
+                  type="button"
+                  className={`sb-chip${
+                    selectedService?.id === service.id ? ' on' : ''
+                  }`}
+                  aria-pressed={selectedService?.id === service.id}
+                  onClick={() => {
+                    setSelectedServiceId(service.id);
+                    setSelectedSlot(null);
+                    setFormAnswers({});
+                  }}
+                >
+                  {service.name}
+                  <small>
+                    {service.durationMinutes} min
+                    {service.priceCents != null
+                      ? ` · ${(service.priceCents / 100).toFixed(0)} ${service.currency || 'USD'}`
+                      : ''}
+                  </small>
+                </button>
+              ))}
+            </div>
+          </>
+        ) : (
+          <>
+            <p className="sb-section-label">1. Choose a session</p>
+            <div className="sb-chips" role="group" aria-label="Session types">
+              {sessionTypes.map((type) => (
+                <button
+                  key={type.id}
+                  type="button"
+                  className={`sb-chip${selectedType?.id === type.id ? ' on' : ''}`}
+                  aria-pressed={selectedType?.id === type.id}
+                  onClick={() => {
+                    setSelectedTypeId(type.id);
+                    setSelectedSlot(null);
+                  }}
+                >
+                  {type.name}
+                  <small>{type.durationMinutes} min</small>
+                </button>
+              ))}
+            </div>
+          </>
+        )}
 
-        <p className="sb-section-label">2. Pick a date</p>
+        <p className="sb-section-label">
+          {useCatalog ? '3' : '2'}. Pick a date
+        </p>
         <div className="sb-cal-nav">
           <button
             type="button"
@@ -429,7 +573,9 @@ export function PublicBookFlow({
 
         {selectedDay ? (
           <>
-            <p className="sb-section-label">3. Pick a time</p>
+            <p className="sb-section-label">
+              {useCatalog ? '4' : '3'}. Pick a time
+            </p>
             <div className="sb-chips" role="group" aria-label="Available times">
               {selectedDaySlots.map((slot) => (
                 <button
@@ -452,7 +598,9 @@ export function PublicBookFlow({
             onSubmit={(event) => void handleSubmit(event)}
             noValidate
           >
-            <p className="sb-section-label">4. Your details</p>
+            <p className="sb-section-label">
+              {useCatalog ? '5' : '4'}. Your details
+            </p>
             <label className="sb-field">
               <span>Full name</span>
               <input
@@ -474,6 +622,73 @@ export function PublicBookFlow({
                 onChange={(event) => setGuestEmail(event.target.value)}
               />
             </label>
+            {(selectedOffering?.formSchema ?? []).map((field) => (
+              <label key={field.id} className="sb-field">
+                <span>
+                  {field.label}
+                  {field.required ? ' *' : ''}
+                </span>
+                {field.type === 'textarea' ? (
+                  <textarea
+                    required={field.required}
+                    value={String(formAnswers[field.id] ?? '')}
+                    onChange={(event) =>
+                      setFormAnswers((prev) => ({
+                        ...prev,
+                        [field.id]: event.target.value,
+                      }))
+                    }
+                  />
+                ) : field.type === 'checkbox' ? (
+                  <input
+                    type="checkbox"
+                    checked={Boolean(formAnswers[field.id])}
+                    onChange={(event) =>
+                      setFormAnswers((prev) => ({
+                        ...prev,
+                        [field.id]: event.target.checked,
+                      }))
+                    }
+                  />
+                ) : field.type === 'select' ? (
+                  <select
+                    required={field.required}
+                    value={String(formAnswers[field.id] ?? '')}
+                    onChange={(event) =>
+                      setFormAnswers((prev) => ({
+                        ...prev,
+                        [field.id]: event.target.value,
+                      }))
+                    }
+                  >
+                    <option value="">Select…</option>
+                    {(field.options ?? []).map((option) => (
+                      <option key={option} value={option}>
+                        {option}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <input
+                    required={field.required}
+                    type={
+                      field.type === 'email'
+                        ? 'email'
+                        : field.type === 'phone'
+                          ? 'tel'
+                          : 'text'
+                    }
+                    value={String(formAnswers[field.id] ?? '')}
+                    onChange={(event) =>
+                      setFormAnswers((prev) => ({
+                        ...prev,
+                        [field.id]: event.target.value,
+                      }))
+                    }
+                  />
+                )}
+              </label>
+            ))}
             <label className="sb-field">
               <span>Notes</span>
               <textarea
@@ -482,6 +697,24 @@ export function PublicBookFlow({
                 onChange={(event) => setNotes(event.target.value)}
                 placeholder="Anything we should know?"
               />
+            </label>
+            <label className="sb-field">
+              <span>Reference files (optional)</span>
+              <input
+                type="file"
+                multiple
+                accept="image/*,.pdf,.doc,.docx,.zip"
+                onChange={(event) => {
+                  const files = Array.from(event.target.files ?? []).slice(0, 8);
+                  setReferenceFiles(files);
+                }}
+              />
+              {referenceFiles.length > 0 ? (
+                <span className="sb-muted">
+                  {referenceFiles.length} file
+                  {referenceFiles.length === 1 ? '' : 's'} selected
+                </span>
+              ) : null}
             </label>
             <input
               tabIndex={-1}

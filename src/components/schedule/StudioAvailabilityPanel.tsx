@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { apiRequest } from '@/lib/api-client';
 import { ApiResponse } from '@/lib/auth';
+import { BookingCatalogPanel } from '@/components/booking/BookingCatalogPanel';
 import { BookingSettingsPanel } from '@/components/booking/BookingSettingsPanel';
 import { PublicBookingSettingsPanel } from '@/components/booking/PublicBookingSettingsPanel';
 import { Button } from '@/components/ui/Button';
@@ -505,6 +506,8 @@ export function StudioAvailabilityPanel({
       <PublicBookingSettingsPanel
         clientOrganizationId={clientOrganizationId}
       />
+
+      <BookingCatalogPanel clientOrganizationId={clientOrganizationId} />
 
       <div>
         <Button
