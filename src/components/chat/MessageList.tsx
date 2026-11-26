@@ -324,12 +324,14 @@ export function MessageList({
   };
 
   return (
-    <div className={cn('relative min-h-0 flex-1', className)}>
+    <div className={cn('relative min-h-0 min-w-0 flex-1 overflow-x-hidden', className)}>
       <Virtuoso
         key={scrollKey ?? channelId}
         ref={virtuosoRef}
         className="chat-inset-x h-full overscroll-y-contain py-[var(--chat-inset-y)]"
-        style={{ height: '100%' }}
+        // Virtuoso sets overflowY:auto; CSS then computes overflow-x to auto too,
+        // which shows a bottom horizontal scrollbar for tiny width overflow.
+        style={{ height: '100%', overflowX: 'hidden' }}
         data={messages}
         firstItemIndex={firstItemIndex}
         initialTopMostItemIndex={initialTopMostItemIndex}
