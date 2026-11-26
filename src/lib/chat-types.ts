@@ -147,6 +147,24 @@ export function appendUniqueById<T extends { id: string }>(
   return [...items, item];
 }
 
+/**
+ * Prepend an older page ahead of currently loaded messages (thread / channel).
+ * Older items come first; duplicates already in `current` are skipped.
+ */
+export function prependOlderMessagePage<T extends { id: string }>(
+  older: T[],
+  current: T[],
+): T[] {
+  if (older.length === 0) return current;
+  const merged = [...older];
+  for (const item of current) {
+    if (!merged.some((existing) => existing.id === item.id)) {
+      merged.push(item);
+    }
+  }
+  return merged;
+}
+
 /** Insert (or no-op if id exists) keeping createdAt ascending order. */
 export function insertMessageChronologically<
   T extends { id: string; createdAt: string },

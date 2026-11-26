@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { apiDownload } from '@/lib/api-client';
 import { API_BASE_URL, AUTH_TOKEN_KEY } from '@/lib/config';
 import { renderMarkdownBody } from '@/lib/chatMarkdown';
@@ -61,9 +61,14 @@ export function ChatMessageBody({
     markerNumber?: number | null;
   } | null>(null);
 
+  const renderedBody = useMemo(
+    () => (body !== '(attachment)' ? renderMarkdownBody(body) : null),
+    [body],
+  );
+
   return (
     <div className="space-y-1 [&>div]:space-y-1 [&_p]:m-0">
-      {body !== '(attachment)' ? renderMarkdownBody(body) : null}
+      {renderedBody}
 
       {attachments.map((attachment) => {
         if (attachment.kind === 'link' && attachment.url) {
@@ -117,6 +122,8 @@ export function ChatMessageBody({
                   fileId={fileId}
                   alt={fileName}
                   preferThumbnail={Boolean(attachment.file?.hasThumbnail)}
+                  originalWidth={attachment.file?.originalWidth}
+                  originalHeight={attachment.file?.originalHeight}
                   onOpen={() => {
                     if (!channelId) return;
                     setReviewing({
@@ -225,15 +232,33 @@ function AuthenticatedImage({
   fileId,
   alt,
   preferThumbnail = false,
+  originalWidth,
+  originalHeight,
   onOpen,
 }: {
   fileId: string;
   alt: string;
   preferThumbnail?: boolean;
+  originalWidth?: number | null;
+  originalHeight?: number | null;
   onOpen?: () => void;
 }) {
   const [src, setSrc] = useState<string | null>(null);
   const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading');
+  const aspectRatio =
+    originalWidth &&
+    originalHeight &&
+    originalWidth > 0 &&
+    originalHeight > 0
+      ? originalWidth / originalHeight
+      : null;
+  const reservedStyle = aspectRatio
+    ? {
+        aspectRatio: String(aspectRatio),
+        maxHeight: '16rem',
+        width: 'min(100%, 20rem)',
+      }
+    : undefined;
 
   useEffect(() => {
     let objectUrl: string | null = null;
@@ -283,7 +308,10 @@ function AuthenticatedImage({
 
   if (status === 'loading' || !src) {
     return (
-      <div className="flex min-h-[96px] min-w-[120px] max-w-xs items-center gap-2 rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface-muted)] p-3 text-sm text-[var(--muted)]">
+      <div
+        className="flex min-h-[96px] min-w-[120px] max-w-xs items-center gap-2 rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface-muted)] p-3 text-sm text-[var(--muted)]"
+        style={reservedStyle}
+      >
         <ImageIcon className="h-4 w-4 shrink-0" />
         <span className="truncate">
           {status === 'error' ? `Couldn’t load ${alt}` : 'Loading image…'}
@@ -297,9 +325,16 @@ function AuthenticatedImage({
       type="button"
       onClick={onOpen}
       className="block max-w-full overflow-hidden rounded-[var(--radius-md)] border border-[var(--border)] text-left"
+      style={reservedStyle}
     >
       {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img src={src} alt={alt} className="max-h-64 w-auto max-w-full object-contain" />
+      <img
+        src={src}
+        alt={alt}
+        className="max-h-64 w-auto max-w-full object-contain"
+        width={originalWidth ?? undefined}
+        height={originalHeight ?? undefined}
+      />
     </button>
   );
 }

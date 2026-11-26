@@ -24,6 +24,8 @@ const PUBLIC_PATHS = [
   '/health',
   '/sw.js',
   '/manifest.webmanifest',
+  // Dev-only Virtuoso harness (page itself no-ops in production builds).
+  '/dev/chat-perf',
 ];
 
 function isPublicPath(pathname: string): boolean {

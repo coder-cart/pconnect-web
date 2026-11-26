@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { memo, useEffect, useState } from 'react';
 import {
   Copy,
   Link2,
@@ -34,13 +34,10 @@ import {
 import { formatMessageTime } from '@/lib/formatMessageDate';
 import { useViewerTimeZone } from '@/hooks/useViewerTimeZone';
 import { cn } from '@/lib/cn';
-
-function hasActiveTextSelection(): boolean {
-  if (typeof window === 'undefined') return false;
-  const selection = window.getSelection();
-  if (!selection || selection.type !== 'Range') return false;
-  return selection.toString().length > 0;
-}
+import {
+  getActiveTextSelection,
+  subscribeActiveTextSelection,
+} from '@/lib/selection-active';
 
 interface MessageItemProps {
   message: ChatMessage;
@@ -66,7 +63,7 @@ interface MessageItemProps {
   onMarkUnread: (messageId: string) => Promise<void>;
 }
 
-export function MessageItem({
+function MessageItemComponent({
   message,
   channelId,
   channelType,
@@ -122,15 +119,7 @@ export function MessageItem({
     setEditBody(message.body);
   }, [message.body]);
 
-  useEffect(() => {
-    function syncSelectionState() {
-      setSelectionActive(hasActiveTextSelection());
-    }
-    document.addEventListener('selectionchange', syncSelectionState);
-    return () => {
-      document.removeEventListener('selectionchange', syncSelectionState);
-    };
-  }, []);
+  useEffect(() => subscribeActiveTextSelection(setSelectionActive), []);
 
   useEffect(() => {
     if (!touchActive) return;
@@ -272,7 +261,7 @@ export function MessageItem({
           touchActive && !editing && 'bg-[var(--surface-muted)]',
         )}
         onMouseEnter={() => {
-          if (hasActiveTextSelection()) {
+          if (getActiveTextSelection()) {
             setSelectionActive(true);
             return;
           }
@@ -307,7 +296,7 @@ export function MessageItem({
             aria-label="Message actions"
             onClick={(event) => {
               event.stopPropagation();
-              if (hasActiveTextSelection()) return;
+              if (getActiveTextSelection()) return;
               setTouchActive(true);
             }}
           >
@@ -464,3 +453,6 @@ export function MessageItem({
     </ContextMenu>
   );
 }
+
+export const MessageItem = memo(MessageItemComponent);
+MessageItem.displayName = 'MessageItem';

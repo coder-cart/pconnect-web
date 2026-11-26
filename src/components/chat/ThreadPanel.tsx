@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo } from 'react';
+import { MutableRefObject, useEffect, useMemo } from 'react';
 import { X } from 'lucide-react';
 import { UserAvatar } from '@/components/ui/UserAvatar';
 import { ChatComposer } from '@/components/chat/ChatComposer';
@@ -28,8 +28,12 @@ interface ThreadPanelProps {
   canDeleteForEveryone?: boolean;
   pinnedMessageIds?: Set<string>;
   isLoading: boolean;
+  isLoadingOlderReplies?: boolean;
+  hasMoreReplies?: boolean;
   isSending: boolean;
   onClose: () => void;
+  onLoadOlderReplies?: () => void;
+  scrollContainerRef?: MutableRefObject<HTMLDivElement | null>;
   onSubmitReply: (payload: {
     body: string;
     attachments: Array<{
@@ -65,8 +69,12 @@ export function ThreadPanel({
   canDeleteForEveryone = false,
   pinnedMessageIds,
   isLoading,
+  isLoadingOlderReplies = false,
+  hasMoreReplies = false,
   isSending,
   onClose,
+  onLoadOlderReplies,
+  scrollContainerRef,
   onSubmitReply,
   onReact,
   onEdit,
@@ -153,8 +161,20 @@ export function ThreadPanel({
         className="min-h-0"
         containerClassName="chat-inset-x py-[var(--chat-inset-y)]"
         contentClassName="space-y-0"
+        onReachTop={onLoadOlderReplies}
+        scrollContainerRef={scrollContainerRef}
       >
         {isLoading ? <ListSkeleton rows={2} /> : null}
+        {!isLoading && isLoadingOlderReplies ? (
+          <p className="px-2 py-1 text-center text-xs text-[var(--muted)]">
+            Loading earlier replies…
+          </p>
+        ) : null}
+        {!isLoading && !isLoadingOlderReplies && !hasMoreReplies && replies.length > 0 ? (
+          <p className="px-2 py-1 text-center text-xs text-[var(--muted)]">
+            Beginning of thread
+          </p>
+        ) : null}
         {!isLoading && replies.length === 0 ? (
           <p className="px-2 py-1 text-sm text-[var(--muted)]">No replies yet.</p>
         ) : null}

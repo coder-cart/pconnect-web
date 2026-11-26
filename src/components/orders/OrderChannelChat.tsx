@@ -17,7 +17,6 @@ import { Card } from '@/components/ui/Card';
 import { ErrorState } from '@/components/ui/StatePanels';
 import { MessageList } from '@/components/chat/MessageList';
 import { ChatComposer } from '@/components/chat/ChatComposer';
-import { ChatScrollArea } from '@/components/chat/ChatScrollArea';
 import { DeleteMessageDialog } from '@/components/chat/DeleteMessageDialog';
 import { useRealtime } from '@/components/providers/RealtimeProvider';
 import { isWorkspaceAdmin } from '@/lib/navigation';
@@ -212,25 +211,24 @@ export function OrderChannelChat({
         <p className="text-sm font-medium text-[var(--foreground)]">{title}</p>
         <p className="text-xs text-[var(--muted)]">{description}</p>
       </div>
-      <ChatScrollArea scrollKey={channelId} contentClassName="space-y-1 px-2">
-        <MessageList
-          messages={messages}
-          channelId={channelId}
-          currentUserId={user.id}
-          canManageChannel={false}
-          canDeleteForEveryone={canDeleteForEveryone}
-          isLoading={isLoading}
-          activeThreadMessageId={null}
-          onReply={() => undefined}
-          onReact={handleReact}
-          onEdit={handleEdit}
-          onDelete={handleDeleteRequest}
-          onPin={async () => undefined}
-          onCopyMessage={(body) => void navigator.clipboard.writeText(body)}
-          onCopyLink={() => undefined}
-          onMarkUnread={async () => undefined}
-        />
-      </ChatScrollArea>
+      <MessageList
+        messages={messages}
+        channelId={channelId}
+        currentUserId={user.id}
+        canManageChannel={false}
+        canDeleteForEveryone={canDeleteForEveryone}
+        isLoading={isLoading}
+        activeThreadMessageId={null}
+        scrollKey={channelId}
+        onReply={() => undefined}
+        onReact={handleReact}
+        onEdit={handleEdit}
+        onDelete={handleDeleteRequest}
+        onPin={async () => undefined}
+        onCopyMessage={(body) => void navigator.clipboard.writeText(body)}
+        onCopyLink={() => undefined}
+        onMarkUnread={async () => undefined}
+      />
       <div className="border-t border-[var(--border)] p-3">
         <ChatComposer
           channelId={channelId}

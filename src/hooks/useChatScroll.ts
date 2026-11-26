@@ -117,7 +117,11 @@ export function useChatScroll(
       container.scrollHeight - container.scrollTop - container.clientHeight;
     const nearBottom = distanceFromBottom <= NEAR_BOTTOM_THRESHOLD;
     isNearBottomRef.current = nearBottom;
-    setShowJumpToLatest(!nearBottom);
+    // Avoid React state on every wheel tick — only when jump-button visibility flips.
+    setShowJumpToLatest((current) => {
+      const next = !nearBottom;
+      return current === next ? current : next;
+    });
     onScrollPositionRef.current?.({
       scrollTop: container.scrollTop,
       distanceFromBottom,

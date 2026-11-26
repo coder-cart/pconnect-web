@@ -26,6 +26,7 @@ import {
 } from '@/lib/auth';
 import {
   appendUniqueById,
+  prependOlderMessagePage,
   insertMessageChronologically,
   normalizeChannelMessagesPage,
   ChatChannel,
@@ -51,7 +52,6 @@ import { ChannelDetailsPanel } from '@/components/chat/ChannelDetailsPanel';
 import { ChannelHeader } from '@/components/chat/ChannelHeader';
 import { MessageList } from '@/components/chat/MessageList';
 import { ThreadPanel } from '@/components/chat/ThreadPanel';
-import { ChatScrollArea } from '@/components/chat/ChatScrollArea';
 import { DeleteMessageDialog } from '@/components/chat/DeleteMessageDialog';
 import { DeleteConversationDialog } from '@/components/chat/DeleteConversationDialog';
 import { ClearChatDialog } from '@/components/chat/ClearChatDialog';
@@ -202,6 +202,13 @@ export function ChatWorkspace({
   channelsRef.current = channels;
   const [threadMessageId, setThreadMessageId] = useState<string | null>(null);
   const [threadReplies, setThreadReplies] = useState<ChatMessage[]>([]);
+  const [hasMoreThreadReplies, setHasMoreThreadReplies] = useState(false);
+  const [isLoadingOlderThreadReplies, setIsLoadingOlderThreadReplies] =
+    useState(false);
+  const loadingOlderThreadRef = useRef(false);
+  const threadRepliesRef = useRef<ChatMessage[]>([]);
+  const threadScrollContainerRef = useRef<HTMLDivElement | null>(null);
+  threadRepliesRef.current = threadReplies;
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(() => {
     if (typeof window === 'undefined') return true;
@@ -215,14 +222,12 @@ export function ChatWorkspace({
   const [isLoadingMessages, setIsLoadingMessages] = useState(false);
   const [hasMoreMessages, setHasMoreMessages] = useState(false);
   const [isLoadingOlderMessages, setIsLoadingOlderMessages] = useState(false);
-  const [suspendStickToBottom, setSuspendStickToBottom] = useState(false);
   const [activeScrollKey, setActiveScrollKey] = useState<string | null>(null);
   const [restoreOnKeyChange, setRestoreOnKeyChange] =
     useState<ChatScrollRestore | null>(null);
   const scrollPositionsRef = useRef<
     Map<string, { scrollTop: number; distanceFromBottom: number }>
   >(new Map());
-  const scrollContainerRef = useRef<HTMLDivElement | null>(null);
   const currentScrollPositionRef = useRef<{
     scrollTop: number;
     distanceFromBottom: number;
@@ -677,7 +682,6 @@ export function ChatWorkspace({
     setRestoreOnKeyChange(null);
     setHasMoreMessages(false);
     setIsLoadingOlderMessages(false);
-    setSuspendStickToBottom(false);
     loadingOlderRef.current = false;
     currentScrollPositionRef.current = null;
     setMessages([]);
@@ -842,9 +846,7 @@ export function ChatWorkspace({
 
     loadingOlderRef.current = true;
     setIsLoadingOlderMessages(true);
-    setSuspendStickToBottom(true);
-    const container = scrollContainerRef.current;
-    const previousHeight = container?.scrollHeight ?? 0;
+    // Virtuoso firstItemIndex keeps viewport stable on prepend — no scrollHeight delta.
 
     try {
       const response = await apiRequest<
@@ -869,13 +871,6 @@ export function ChatWorkspace({
         }
         return merged;
       });
-      requestAnimationFrame(() => {
-        const scroller = scrollContainerRef.current;
-        if (scroller && previousHeight > 0) {
-          scroller.scrollTop += scroller.scrollHeight - previousHeight;
-        }
-        setSuspendStickToBottom(false);
-      });
     } catch (error) {
       if (selectedChannelIdRef.current === channelId) {
         setErrorMessage(
@@ -884,7 +879,6 @@ export function ChatWorkspace({
             : 'Failed to load older messages',
         );
       }
-      setSuspendStickToBottom(false);
     } finally {
       loadingOlderRef.current = false;
       if (selectedChannelIdRef.current === channelId) {
@@ -969,18 +963,102 @@ export function ChatWorkspace({
   useEffect(() => {
     if (!selectedChannelId || !threadMessageId) {
       setThreadReplies([]);
+      setHasMoreThreadReplies(false);
+      setIsLoadingOlderThreadReplies(false);
+      loadingOlderThreadRef.current = false;
       return;
     }
 
+    let cancelled = false;
     setIsLoadingThread(true);
+    setHasMoreThreadReplies(false);
+    loadingOlderThreadRef.current = false;
 
-    apiRequest<ApiResponse<ChatMessage[]>>(
-      `/channels/${selectedChannelId}/messages/${threadMessageId}/replies`,
+    apiRequest<ApiResponse<ChannelMessagesPage | ChatMessage[]>>(
+      `/channels/${selectedChannelId}/messages/${threadMessageId}/replies?limit=50`,
     )
-      .then((response) => setThreadReplies(response.data))
-      .catch((error: Error) => setErrorMessage(error.message))
-      .finally(() => setIsLoadingThread(false));
+      .then((response) => {
+        if (cancelled) return;
+        const page = normalizeChannelMessagesPage(response.data);
+        setThreadReplies(page.items);
+        setHasMoreThreadReplies(page.hasMore);
+      })
+      .catch((error: Error) => {
+        if (!cancelled) setErrorMessage(error.message);
+      })
+      .finally(() => {
+        if (!cancelled) setIsLoadingThread(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
   }, [selectedChannelId, threadMessageId]);
+
+  const handleLoadOlderThreadReplies = useCallback(async () => {
+    const channelId = selectedChannelIdRef.current;
+    const parentId = threadMessageIdRef.current;
+    const oldest = threadRepliesRef.current[0];
+    if (
+      !channelId ||
+      !parentId ||
+      !oldest ||
+      !hasMoreThreadReplies ||
+      loadingOlderThreadRef.current ||
+      isLoadingThread
+    ) {
+      return;
+    }
+
+    loadingOlderThreadRef.current = true;
+    setIsLoadingOlderThreadReplies(true);
+    const container = threadScrollContainerRef.current;
+    const previousHeight = container?.scrollHeight ?? 0;
+    try {
+      const response = await apiRequest<
+        ApiResponse<ChannelMessagesPage | ChatMessage[]>
+      >(
+        `/channels/${channelId}/messages/${parentId}/replies?limit=50&before=${oldest.id}`,
+      );
+      if (
+        selectedChannelIdRef.current !== channelId ||
+        threadMessageIdRef.current !== parentId
+      ) {
+        return;
+      }
+      const page = normalizeChannelMessagesPage(response.data);
+      setHasMoreThreadReplies(page.hasMore);
+      if (page.items.length === 0) return;
+      setThreadReplies((current) =>
+        prependOlderMessagePage(page.items, current),
+      );
+      requestAnimationFrame(() => {
+        const scroller = threadScrollContainerRef.current;
+        if (scroller && previousHeight > 0) {
+          scroller.scrollTop += scroller.scrollHeight - previousHeight;
+        }
+      });
+    } catch (error) {
+      if (
+        selectedChannelIdRef.current === channelId &&
+        threadMessageIdRef.current === parentId
+      ) {
+        setErrorMessage(
+          error instanceof Error
+            ? error.message
+            : 'Failed to load earlier replies',
+        );
+      }
+    } finally {
+      loadingOlderThreadRef.current = false;
+      if (
+        selectedChannelIdRef.current === channelId &&
+        threadMessageIdRef.current === parentId
+      ) {
+        setIsLoadingOlderThreadReplies(false);
+      }
+    }
+  }, [hasMoreThreadReplies, isLoadingThread]);
 
   // URL is the conversation layer: Back/popstate and deep links sync selection.
   useEffect(() => {
@@ -1744,7 +1822,7 @@ export function ChatWorkspace({
         <Card
           padding="none"
           className={cn(
-            'order-2 flex min-h-0 min-w-0 flex-col overflow-hidden rounded-none shadow-none',
+            'order-2 flex min-h-0 min-w-0 flex-col overflow-hidden rounded-none shadow-none transition-none hover:shadow-none',
             !showMobileChat ? 'hidden lg:flex' : 'flex',
             showDesktopSidebar ? 'lg:col-start-2' : 'lg:col-start-1',
           )}
@@ -1792,55 +1870,37 @@ export function ChatWorkspace({
           />
 
           {selectedChannelId ? (
-            <ChatScrollArea
+            <MessageList
+              messages={messages}
+              channelId={selectedChannelId}
+              channelType={selectedChannel?.type}
+              currentUserId={user.id}
+              unreadSince={unreadSince}
+              canManageChannel={canPinMessages}
+              canDeleteForEveryone={canDeleteForEveryone}
+              pinnedMessageIds={pinnedMessageIds}
+              memberNames={memberNames}
+              isLoading={isLoadingMessages}
+              activeThreadMessageId={threadMessageId}
+              highlightMessageId={highlightMessageId}
               scrollKey={activeScrollKey}
-              anchorMessageId={highlightMessageId}
               restoreOnKeyChange={restoreOnKeyChange}
               onScrollPosition={handleScrollPosition}
-              suspendStickToBottom={suspendStickToBottom}
               onReachTop={() => {
                 void handleLoadOlderMessages();
               }}
-              scrollContainerRef={scrollContainerRef}
-              containerClassName="chat-inset-x py-[var(--chat-inset-y)]"
-              contentClassName="space-y-0"
-            >
-              {isLoadingOlderMessages ? (
-                <p className="px-2 py-2 text-center text-xs text-[var(--muted)]">
-                  Loading older messages…
-                </p>
-              ) : null}
-              {!isLoadingOlderMessages &&
-              !hasMoreMessages &&
-              messages.length > 0 ? (
-                <p className="px-2 py-2 text-center text-xs text-[var(--muted)]">
-                  Beginning of conversation
-                </p>
-              ) : null}
-              <MessageList
-                messages={messages}
-                channelId={selectedChannelId}
-                channelType={selectedChannel?.type}
-                currentUserId={user.id}
-                unreadSince={unreadSince}
-                canManageChannel={canPinMessages}
-                canDeleteForEveryone={canDeleteForEveryone}
-                pinnedMessageIds={pinnedMessageIds}
-                memberNames={memberNames}
-                isLoading={isLoadingMessages}
-                activeThreadMessageId={threadMessageId}
-                highlightMessageId={highlightMessageId}
-                onReply={handleOpenThread}
-                onReact={handleReact}
-                onEdit={handleEdit}
-                onDelete={handleDeleteRequest}
-                onPin={handlePin}
-                onUnpin={handleUnpin}
-                onCopyMessage={handleCopyMessage}
-                onCopyLink={handleCopyLink}
-                onMarkUnread={handleMarkUnread}
-              />
-            </ChatScrollArea>
+              hasMoreMessages={hasMoreMessages}
+              isLoadingOlderMessages={isLoadingOlderMessages}
+              onReply={handleOpenThread}
+              onReact={handleReact}
+              onEdit={handleEdit}
+              onDelete={handleDeleteRequest}
+              onPin={handlePin}
+              onUnpin={handleUnpin}
+              onCopyMessage={handleCopyMessage}
+              onCopyLink={handleCopyLink}
+              onMarkUnread={handleMarkUnread}
+            />
           ) : null}
 
           <div className="chat-inset safe-pb sticky bottom-0 z-10 shrink-0 border-t border-[var(--border)] bg-[var(--surface)]">
@@ -1909,8 +1969,14 @@ export function ChatWorkspace({
             canDeleteForEveryone={canDeleteForEveryone}
             pinnedMessageIds={pinnedMessageIds}
             isLoading={isLoadingThread}
+            isLoadingOlderReplies={isLoadingOlderThreadReplies}
+            hasMoreReplies={hasMoreThreadReplies}
             isSending={isSendingThreadReply}
             onClose={() => setThreadMessageId(null)}
+            onLoadOlderReplies={() => {
+              void handleLoadOlderThreadReplies();
+            }}
+            scrollContainerRef={threadScrollContainerRef}
             onSubmitReply={handleSendThreadReply}
             onReact={handleReact}
             onEdit={handleEdit}

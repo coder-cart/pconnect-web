@@ -6,6 +6,7 @@ import {
   useCallback,
   useContext,
   useEffect,
+  useMemo,
   useRef,
   useState,
 } from 'react';
@@ -265,24 +266,36 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
+  const value = useMemo<RealtimeContextValue>(
+    () => ({
+      socket: socketRef.current,
+      isConnected,
+      joinChannel,
+      leaveChannel,
+      subscribeMessageCreated,
+      subscribeChannelEvents,
+      subscribeNotificationCreated,
+      subscribeOrderUpdated,
+      subscribeMessageActivity,
+      subscribePresenceUpdated,
+      subscribeConnected,
+    }),
+    [
+      isConnected,
+      joinChannel,
+      leaveChannel,
+      subscribeMessageCreated,
+      subscribeChannelEvents,
+      subscribeNotificationCreated,
+      subscribeOrderUpdated,
+      subscribeMessageActivity,
+      subscribePresenceUpdated,
+      subscribeConnected,
+    ],
+  );
+
   return (
-    <RealtimeContext.Provider
-      value={{
-        socket: socketRef.current,
-        isConnected,
-        joinChannel,
-        leaveChannel,
-        subscribeMessageCreated,
-        subscribeChannelEvents,
-        subscribeNotificationCreated,
-        subscribeOrderUpdated,
-        subscribeMessageActivity,
-        subscribePresenceUpdated,
-        subscribeConnected,
-      }}
-    >
-      {children}
-    </RealtimeContext.Provider>
+    <RealtimeContext.Provider value={value}>{children}</RealtimeContext.Provider>
   );
 }
 

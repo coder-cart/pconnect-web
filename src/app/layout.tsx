@@ -85,7 +85,6 @@ export default function RootLayout({
     <html
       lang="en"
       className={`${inter.variable} h-full`}
-      data-scroll-behavior="smooth"
       suppressHydrationWarning
     >
       <head>

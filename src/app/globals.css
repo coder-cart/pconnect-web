@@ -160,14 +160,16 @@
 }
 
 html {
-  scroll-behavior: smooth;
+  /* Keep default auto scroll in-product — smooth fights wheel/programmatic chat scroll. */
+  scroll-behavior: auto;
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
   font-family: var(--font-inter), system-ui, sans-serif;
-  text-rendering: optimizeLegibility;
+  /* optimizeLegibility is expensive during scroll; prefer speed in the app shell. */
+  text-rendering: geometricPrecision;
 }
 
 /* Authenticated app shell — pin Inter + app tokens; ignore marketing/login fonts. */
@@ -179,6 +181,13 @@ body {
   background: var(--background);
   --font-marketing-display: var(--font-inter);
   --font-marketing-body: var(--font-inter);
+  text-rendering: geometricPrecision;
+}
+
+/* Off-screen chat rows skip paint work while scrolling (Slack-like). */
+.app-root .chat-message-row {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 72px;
 }
 
 @media (min-width: 768px) {
@@ -566,14 +575,14 @@ textarea {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  html {
-    scroll-behavior: auto;
-  }
-
   .animate-fade-in,
   .skeleton,
   .seasonal-leaf,
   .seasonal-friday-pulse {
     animation: none !important;
+  }
+
+  .app-root .chat-message-row {
+    content-visibility: visible;
   }
 }

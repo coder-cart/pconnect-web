@@ -133,7 +133,7 @@ export function GlobalSearch({ className, variant = 'default' }: GlobalSearchPro
           placeholder={isShell ? 'Search' : 'Search anything...'}
           aria-label="Global search"
           className={cn(
-            'h-10 w-full rounded-full border pl-10 pr-4 text-sm transition-all focus:outline-none focus:ring-2',
+            'h-10 w-full rounded-full border pl-10 pr-4 text-sm transition-colors focus:outline-none focus:ring-2',
             isShell
               ? 'shell-chrome-input focus:bg-[var(--shell-hover)]'
               : 'border-[var(--border)] bg-[var(--surface-muted)] text-[var(--foreground)] placeholder:text-[var(--muted)] focus:border-[var(--primary)] focus:bg-[var(--surface)] focus:ring-[var(--primary-soft)]',

@@ -64,7 +64,7 @@ export function ChatScrollArea({
     return () => {
       scrollContainerRef.current = null;
     };
-  });
+  }, [scrollContainerRef, containerRef]);
 
   return (
     <div className={cn('relative min-h-0 flex-1', className)}>

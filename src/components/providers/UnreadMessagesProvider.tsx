@@ -272,19 +272,31 @@ export function UnreadMessagesProvider({ children }: { children: ReactNode }) {
     return counts;
   }, [conversations]);
 
+  const value = useMemo(
+    () => ({
+      total,
+      conversations,
+      unreadByChannel,
+      loaded,
+      isLoading,
+      errorMessage,
+      refreshUnread,
+      setActiveChannel,
+    }),
+    [
+      total,
+      conversations,
+      unreadByChannel,
+      loaded,
+      isLoading,
+      errorMessage,
+      refreshUnread,
+      setActiveChannel,
+    ],
+  );
+
   return (
-    <UnreadMessagesContext.Provider
-      value={{
-        total,
-        conversations,
-        unreadByChannel,
-        loaded,
-        isLoading,
-        errorMessage,
-        refreshUnread,
-        setActiveChannel,
-      }}
-    >
+    <UnreadMessagesContext.Provider value={value}>
       {children}
     </UnreadMessagesContext.Provider>
   );
