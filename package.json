@@ -15,6 +15,7 @@
     "test:paste": "tsx --test src/lib/chatPaste.pipeline.test.ts"
   },
   "dependencies": {
+    "@emoji-mart/data": "^1.2.1",
     "@stripe/react-stripe-js": "^6.6.0",
     "@stripe/stripe-js": "^9.8.0",
     "clsx": "^2.1.1",

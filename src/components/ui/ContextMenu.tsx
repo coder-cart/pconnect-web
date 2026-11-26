@@ -15,6 +15,7 @@ interface ContextMenuProps {
   className?: string;
   /** Imperatively open the menu at a client point (e.g. action button). */
   openSignal?: { x: number; y: number; key: number } | null;
+  onOpenChange?: (open: boolean) => void;
 }
 
 export function ContextMenu({
@@ -22,6 +23,7 @@ export function ContextMenu({
   menu,
   className,
   openSignal = null,
+  onOpenChange,
 }: ContextMenuProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -33,11 +35,16 @@ export function ContextMenu({
   const [position, setPosition] = useState({ left: 0, top: 0 });
   const [anchor, setAnchor] = useState({ x: 0, y: 0 });
 
+  function setMenuOpen(next: boolean) {
+    setOpen(next);
+    onOpenChange?.(next);
+  }
+
   function openAt(x: number, y: number) {
     ignoreOutsideUntilRef.current = Date.now() + IGNORE_OUTSIDE_CLOSE_MS;
     setAnchor({ x, y });
     setPosition({ left: x, top: y });
-    setOpen(true);
+    setMenuOpen(true);
   }
 
   function clearLongPress() {
@@ -75,15 +82,15 @@ export function ContextMenu({
       const target = event.target as Node | null;
       if (!target || !menuRef.current) return;
       if (menuRef.current.contains(target)) return;
-      setOpen(false);
+      setMenuOpen(false);
     }
 
     function handleKeyDown(event: KeyboardEvent) {
-      if (event.key === 'Escape') setOpen(false);
+      if (event.key === 'Escape') setMenuOpen(false);
     }
 
     function handleResize() {
-      setOpen(false);
+      setMenuOpen(false);
     }
 
     // Capture phase so chat/composer stopPropagation cannot keep the menu open.
@@ -105,12 +112,28 @@ export function ContextMenu({
   }, [open]);
 
   function handleContextMenu(event: React.MouseEvent) {
+    const selection = typeof window !== 'undefined' ? window.getSelection() : null;
+    // Prefer native copy/selection when the user right-clicks a selection.
+    if (
+      selection &&
+      selection.type === 'Range' &&
+      selection.toString().trim() &&
+      containerRef.current?.contains(selection.anchorNode)
+    ) {
+      return;
+    }
     event.preventDefault();
     openAt(event.clientX, event.clientY);
   }
 
   function handleTouchStart(event: React.TouchEvent) {
     if (event.touches.length !== 1) return;
+    // Do not start a long-press menu while the user is selecting text.
+    const selection = typeof window !== 'undefined' ? window.getSelection() : null;
+    if (selection && selection.type === 'Range' && selection.toString().trim()) {
+      clearLongPress();
+      return;
+    }
     const touch = event.touches[0];
     longPressOpenedRef.current = false;
     touchStartRef.current = { x: touch.clientX, y: touch.clientY };
@@ -118,6 +141,16 @@ export function ContextMenu({
     longPressTimerRef.current = window.setTimeout(() => {
       const start = touchStartRef.current;
       if (!start) return;
+      const liveSelection =
+        typeof window !== 'undefined' ? window.getSelection() : null;
+      if (
+        liveSelection &&
+        liveSelection.type === 'Range' &&
+        liveSelection.toString().trim()
+      ) {
+        clearLongPress();
+        return;
+      }
       longPressOpenedRef.current = true;
       openAt(start.x, start.y);
       if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
@@ -137,6 +170,7 @@ export function ContextMenu({
     const touch = event.touches[0];
     const dx = Math.abs(touch.clientX - start.x);
     const dy = Math.abs(touch.clientY - start.y);
+    // Any drag cancels long-press so text selection / scroll can proceed.
     if (dx > LONG_PRESS_MOVE_PX || dy > LONG_PRESS_MOVE_PX) {
       clearLongPress();
     }
@@ -165,9 +199,10 @@ export function ContextMenu({
         ? createPortal(
             <div
               ref={menuRef}
+              data-message-action-menu="true"
               className="fixed z-[90] min-w-52 max-w-[min(20rem,calc(100vw-1rem))] rounded-[var(--radius-lg)] border border-[var(--border)] bg-[var(--surface)] py-1 shadow-[var(--shadow-md)]"
               style={{ left: position.left, top: position.top }}
-              onClick={() => setOpen(false)}
+              onClick={() => setMenuOpen(false)}
             >
               {menu}
             </div>,

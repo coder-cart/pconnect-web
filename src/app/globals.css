@@ -37,8 +37,24 @@
   --touch-min: 2.75rem;
   --page-pad-x: 0.75rem;
   --page-pad-y: 0.75rem;
-  --sidebar-width: 16rem;
-  --sidebar-width-collapsed: 4.5rem;
+  /* Desktop shell is compact icon-rail only (no expanded mode) */
+  --sidebar-width: 5.75rem;
+  --sidebar-icon: 1.5rem;
+  /* Typography scale (app shell + content) */
+  --text-page-title: 1.125rem;
+  --text-section: 1rem;
+  --text-body: 0.875rem;
+  --text-nav: 0.8125rem;
+  --text-meta: 0.75rem;
+  --text-label: 0.8125rem;
+  --leading-tight: 1.25;
+  --leading-body: 1.5;
+  /* Icon sizing */
+  --icon-nav: 1.25rem;
+  --icon-sm: 0.875rem;
+  --icon-md: 1rem;
+  --nav-item-gap: 0.25rem;
+  --nav-stack-gap: 0.25rem;
   --safe-top: env(safe-area-inset-top, 0px);
   --safe-right: env(safe-area-inset-right, 0px);
   --safe-bottom: env(safe-area-inset-bottom, 0px);
@@ -47,6 +63,8 @@
   --shell-brand: #1d2353;
   --shell-text: #ffffff;
   --shell-muted: #d4d8f0;
+  /* Active nav icon accent (never solid white — keeps inner shapes readable) */
+  --shell-icon-active: #93c5fd;
   --shell-hover: #282f65;
   --shell-active: #30396f;
   --shell-border: rgba(255, 255, 255, 0.12);
@@ -242,6 +260,7 @@ header.shell-chrome {
   --shell-brand: #1e2128;
   --shell-text: #d5d8e0;
   --shell-muted: #a3aab6;
+  --shell-icon-active: #9db7e8;
   --shell-hover: #2a2e38;
   --shell-active: #343944;
   --shell-border: rgba(255, 255, 255, 0.08);
@@ -466,13 +485,95 @@ textarea {
   padding-top: max(0.75rem, var(--safe-top));
 }
 
+.seasonal-banner--thanksgiving {
+  background:
+    radial-gradient(
+      circle at 12% 20%,
+      rgba(217, 119, 6, 0.12),
+      transparent 42%
+    ),
+    radial-gradient(
+      circle at 88% 30%,
+      rgba(180, 83, 9, 0.1),
+      transparent 40%
+    ),
+    color-mix(in srgb, var(--warning-soft) 75%, #fff7ed);
+}
+
+.seasonal-banner--friday {
+  background: color-mix(in srgb, var(--primary-soft) 55%, var(--surface));
+}
+
+.seasonal-banner--neutral {
+  background: color-mix(in srgb, var(--surface-muted) 80%, var(--surface));
+}
+
+.seasonal-banner--success {
+  background: color-mix(in srgb, var(--success-soft) 70%, var(--surface));
+}
+
+.seasonal-banner--warning {
+  background: color-mix(in srgb, var(--warning-soft) 70%, var(--surface));
+}
+
+/* Back-compat alias */
+.seasonal-banner--leaves {
+  background:
+    radial-gradient(
+      circle at 12% 20%,
+      rgba(217, 119, 6, 0.12),
+      transparent 42%
+    ),
+    color-mix(in srgb, var(--warning-soft) 75%, #fff7ed);
+}
+
+@keyframes seasonal-leaf-fall {
+  0% {
+    transform: translateY(-120%) rotate(0deg);
+    opacity: 0;
+  }
+  10% {
+    opacity: 0.55;
+  }
+  100% {
+    transform: translateY(140%) rotate(28deg);
+    opacity: 0;
+  }
+}
+
+@keyframes seasonal-friday-pulse {
+  0%,
+  100% {
+    transform: scale(1);
+    opacity: 0.35;
+  }
+  50% {
+    transform: scale(1.08);
+    opacity: 0.55;
+  }
+}
+
+.seasonal-leaf {
+  top: -0.5rem;
+  animation-name: seasonal-leaf-fall;
+  animation-timing-function: linear;
+  animation-iteration-count: infinite;
+}
+
+.seasonal-friday-pulse {
+  display: inline-block;
+  animation: seasonal-friday-pulse 2.4s ease-in-out infinite;
+}
+
 @media (prefers-reduced-motion: reduce) {
   html {
     scroll-behavior: auto;
   }
 
   .animate-fade-in,
-  .skeleton {
+  .skeleton,
+  .seasonal-leaf,
+  .seasonal-friday-pulse {
     animation: none !important;
   }
 }

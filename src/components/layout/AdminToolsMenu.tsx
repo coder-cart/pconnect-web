@@ -33,7 +33,7 @@ export function AdminToolsMenu({
           type="button"
           className="flex w-full items-center gap-2 rounded-[var(--radius-md)] px-3 py-2 text-sm text-[var(--shell-muted)] hover:bg-[var(--shell-hover)] hover:text-[var(--shell-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--shell-focus-ring)]"
         >
-          <Settings className="h-4 w-4" />
+          <Settings className="h-[var(--icon-md)] w-[var(--icon-md)] stroke-[1.75]" />
           Admin tools
         </button>
       }
@@ -49,23 +49,23 @@ export function AdminToolsMenu({
       <DropdownMenuSeparator />
       {showSettings ? (
         <DropdownMenuItem href="/admin" onClick={onNavigate}>
-          <Building2 className="h-4 w-4" />
+          <Building2 className="h-[var(--icon-md)] w-[var(--icon-md)] stroke-[1.75]" />
           Workspace settings
         </DropdownMenuItem>
       ) : null}
       <DropdownMenuItem disabled>
-        <Pencil className="h-4 w-4" />
+        <Pencil className="h-[var(--icon-md)] w-[var(--icon-md)] stroke-[1.75]" />
         Edit workspace
       </DropdownMenuItem>
       <DropdownMenuSeparator />
       {showStaff ? (
         <DropdownMenuItem href="/staff" onClick={onNavigate}>
-          <Users className="h-4 w-4" />
+          <Users className="h-[var(--icon-md)] w-[var(--icon-md)] stroke-[1.75]" />
           Manage staff
         </DropdownMenuItem>
       ) : null}
       <DropdownMenuItem disabled>
-        <CreditCard className="h-4 w-4" />
+        <CreditCard className="h-[var(--icon-md)] w-[var(--icon-md)] stroke-[1.75]" />
         Apps & workflows
       </DropdownMenuItem>
     </DropdownMenu>

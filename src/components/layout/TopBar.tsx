@@ -114,19 +114,19 @@ export function TopBar({
     {
       action: 'order' as const,
       label: 'New Order',
-      icon: <ClipboardList className="h-4 w-4" />,
+      icon: <ClipboardList className="h-[var(--icon-md)] w-[var(--icon-md)]" />,
       show: canCreateOrders,
     },
     {
       action: 'revision' as const,
       label: 'Revision',
-      icon: <ClipboardList className="h-4 w-4" />,
+      icon: <ClipboardList className="h-[var(--icon-md)] w-[var(--icon-md)]" />,
       show: canCreateOrders,
     },
     {
       action: 'client' as const,
       label: 'New Client',
-      icon: <Building2 className="h-4 w-4" />,
+      icon: <Building2 className="h-[var(--icon-md)] w-[var(--icon-md)]" />,
       show:
         user.userType === 'internal' &&
         user.permissionCodes.includes('clients.manage'),
@@ -134,7 +134,7 @@ export function TopBar({
     {
       action: 'user' as const,
       label: 'Invite staff',
-      icon: <UserPlus className="h-4 w-4" />,
+      icon: <UserPlus className="h-[var(--icon-md)] w-[var(--icon-md)]" />,
       show: user.permissionCodes.includes('users.manage'),
     },
   ].filter((item) => item.show);
@@ -183,7 +183,7 @@ export function TopBar({
           <button
             type="button"
             onClick={onOpenMobileNav}
-            className="inline-flex min-h-touch min-w-touch shrink-0 items-center justify-center rounded-[var(--radius-md)] text-[var(--shell-muted)] transition-colors hover:bg-[var(--shell-hover)] hover:text-[var(--shell-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--shell-focus-ring)] lg:hidden"
+            className="inline-flex min-h-touch min-w-touch shrink-0 items-center justify-center rounded-[var(--radius-md)] text-[var(--shell-muted)] transition-colors hover:bg-[var(--shell-hover)] hover:text-[var(--shell-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--shell-focus-ring)] md:hidden"
             aria-label="Open navigation menu"
           >
             <Menu className="h-5 w-5" />
@@ -197,23 +197,23 @@ export function TopBar({
         <div className="ml-auto flex shrink-0 items-center gap-0.5 sm:gap-1">
           {createItems.length > 0 ? (
             <div className="relative" data-tour="topbar-create">
-              <div className="hidden lg:block">
+              <div className="hidden md:block">
                 <Button
                   variant="primary"
                   size="sm"
                   aria-label="Create new item"
                   onClick={() => setCreateOpen((value) => !value)}
                 >
-                  <Plus className="h-4 w-4" />
+                  <Plus className="h-[var(--icon-md)] w-[var(--icon-md)]" />
                   Create
                 </Button>
               </div>
-              <div className="lg:hidden">
+              <div className="md:hidden">
                 <IconButton
                   label="Create new item"
                   onClick={() => setCreateOpen((value) => !value)}
                 >
-                  <Plus className="h-4 w-4" />
+                  <Plus className="h-[var(--icon-md)] w-[var(--icon-md)]" />
                 </IconButton>
               </div>
               {createOpen ? (
@@ -262,7 +262,7 @@ export function TopBar({
               busy={pushBusy}
               onClick={() => void handlePushToggle()}
             >
-              <BellRing className="h-4 w-4" />
+              <BellRing className="h-[var(--icon-md)] w-[var(--icon-md)]" />
             </IconButton>
           )}
           <div className="hidden lg:block">
@@ -272,9 +272,9 @@ export function TopBar({
             onClick={handleSoundToggle}
           >
             {soundMuted ? (
-              <VolumeX className="h-4 w-4" />
+              <VolumeX className="h-[var(--icon-md)] w-[var(--icon-md)]" />
             ) : (
-              <Volume2 className="h-4 w-4" />
+              <Volume2 className="h-[var(--icon-md)] w-[var(--icon-md)]" />
             )}
           </IconButton>
           </div>
@@ -284,9 +284,9 @@ export function TopBar({
             onClick={toggleTheme}
           >
             {theme === 'light' ? (
-              <Moon className="h-4 w-4" />
+              <Moon className="h-[var(--icon-md)] w-[var(--icon-md)]" />
             ) : (
-              <Sun className="h-4 w-4" />
+              <Sun className="h-[var(--icon-md)] w-[var(--icon-md)]" />
             )}
           </IconButton>
           </div>
@@ -297,7 +297,7 @@ export function TopBar({
               onClick={() => setNotificationsOpen((value) => !value)}
               badge={unreadCount > 0 ? unreadCount : undefined}
             >
-              <Bell className="h-4 w-4" />
+              <Bell className="h-[var(--icon-md)] w-[var(--icon-md)]" />
             </IconButton>
             {notificationsOpen ? (
               <>
@@ -314,7 +314,7 @@ export function TopBar({
 
           <div className="relative hidden lg:block">
             <IconButton label="Help and support" onClick={() => setHelpOpen((v) => !v)}>
-              <HelpCircle className="h-4 w-4" />
+              <HelpCircle className="h-[var(--icon-md)] w-[var(--icon-md)]" />
             </IconButton>
             {helpOpen ? (
               <>

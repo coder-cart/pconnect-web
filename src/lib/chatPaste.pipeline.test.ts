@@ -116,6 +116,16 @@ describe('chat rich-text paste pipeline', () => {
     });
   });
 
+  it('unwraps Word o:p placeholders without throwing on paste', () => {
+    withDom(() => {
+      const html = `<p>Hello<o:p></o:p></p><p>World<o:p>&nbsp;</o:p></p>`;
+      assert.doesNotThrow(() => clipboardHtmlToMarkdown(html));
+      const { markdown } = clipboardHtmlToMarkdown(html);
+      assert.match(markdown, /Hello/);
+      assert.match(markdown, /World/);
+    });
+  });
+
   it('renders underline headings and tables from markdown', () => {
     const tree = renderMarkdownBody(
       '## Hello\n\n__under__\n\n| A | B |\n| --- | --- |\n| 1 | 2 |',
@@ -128,6 +138,21 @@ describe('chat rich-text paste pipeline', () => {
       const root = document.createElement('div');
       root.innerHTML = '<p><u>line</u></p>';
       assert.equal(htmlToMarkdown(root), '__line__');
+    });
+  });
+
+  it('htmlToMarkdown keeps newlines between leading text and sibling divs', () => {
+    withDom(() => {
+      const root = document.createElement('div');
+      // Contenteditable shape: first line as text node, later lines as divs.
+      root.appendChild(document.createTextNode('jkjk'));
+      const line2 = document.createElement('div');
+      line2.textContent = 'jkll';
+      root.appendChild(line2);
+      const line3 = document.createElement('div');
+      line3.textContent = ',,,';
+      root.appendChild(line3);
+      assert.equal(htmlToMarkdown(root), 'jkjk\njkll\n,,,');
     });
   });
 });

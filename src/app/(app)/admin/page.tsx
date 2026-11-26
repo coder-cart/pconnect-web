@@ -13,6 +13,7 @@ import { MasterDataManager } from '@/components/admin/MasterDataManager';
 import { ServiceMasterManager } from '@/components/admin/ServiceMasterManager';
 import { OrderImportPanel } from '@/components/admin/OrderImportPanel';
 import { WorkspaceBrandingCard } from '@/components/admin/WorkspaceBrandingCard';
+import { PlatformAnnouncementsManager } from '@/components/admin/PlatformAnnouncementsManager';
 import { useWorkspace } from '@/components/providers/WorkspaceProvider';
 import { RestrictedState } from '@/components/ui/StatePanels';
 
@@ -31,14 +32,20 @@ export default function AdminPage() {
   const canManageRoles = userHasPermission(user, 'roles.manage');
   const canManageMasterData = userHasPermission(user, 'master_data.manage');
   const canViewAudit = userHasPermission(user, 'audit.view');
+  const canManageAnnouncements = userHasPermission(
+    user,
+    'announcements.manage',
+  );
   const [activeTab, setActiveTab] = useState(
-    canManageMasterData
-      ? 'service-master'
-      : canManageRoles
-        ? 'roles'
-        : canViewAudit
-          ? 'audit'
-          : 'service-master',
+    canManageAnnouncements
+      ? 'announcements'
+      : canManageMasterData
+        ? 'service-master'
+        : canManageRoles
+          ? 'roles'
+          : canViewAudit
+            ? 'audit'
+            : 'service-master',
   );
   const [auditLogs, setAuditLogs] = useState<AuditLogItem[]>([]);
   const [isLoadingAudit, setIsLoadingAudit] = useState(false);
@@ -54,7 +61,13 @@ export default function AdminPage() {
       .finally(() => setIsLoadingAudit(false));
   }, [activeTab, refreshKey, canViewAudit]);
 
-  if (!canManageUsers && !canManageRoles && !canManageMasterData && !canViewAudit) {
+  if (
+    !canManageUsers &&
+    !canManageRoles &&
+    !canManageMasterData &&
+    !canViewAudit &&
+    !canManageAnnouncements
+  ) {
     return (
       <RestrictedState
         title="Settings restricted"
@@ -94,6 +107,9 @@ export default function AdminPage() {
         activeId={activeTab}
         onChange={setActiveTab}
         items={[
+          ...(canManageAnnouncements
+            ? [{ id: 'announcements', label: 'Announcements' }]
+            : []),
           ...(canManageMasterData
             ? [
                 { id: 'service-master', label: 'Service Master' },
@@ -107,6 +123,10 @@ export default function AdminPage() {
           ...(canViewAudit ? [{ id: 'audit', label: 'Audit Logs' }] : []),
         ]}
       />
+
+      {activeTab === 'announcements' && canManageAnnouncements ? (
+        <PlatformAnnouncementsManager />
+      ) : null}
 
       {activeTab === 'service-master' && canManageMasterData ? (
         <ServiceMasterManager />

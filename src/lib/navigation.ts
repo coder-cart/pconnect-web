@@ -1,12 +1,11 @@
 import {
   BadgeCheck,
   Building2,
+  CircleDollarSign,
   ClipboardList,
   Home,
-  MessageSquare,
-  Receipt,
+  MessageCircle,
   Settings,
-  UserRound,
   Users,
   UsersRound,
   type LucideIcon,
@@ -36,9 +35,8 @@ export const NAV_ITEMS: NavItem[] = [
     href: '/chat',
     label: 'Messages',
     externalLabel: 'Messages',
-    icon: MessageSquare,
+    icon: MessageCircle,
   },
- 
   {
     href: '/orders',
     label: 'Order Report',
@@ -56,7 +54,7 @@ export const NAV_ITEMS: NavItem[] = [
   {
     href: '/finance',
     label: 'Finance',
-    icon: Receipt,
+    icon: CircleDollarSign,
     permissions: [
       'finance.invoices.view_all',
       'finance.invoices.create',

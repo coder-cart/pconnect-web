@@ -15,7 +15,13 @@ export function isAndroidDevice() {
 
 export function isIosDevice() {
   if (typeof navigator === 'undefined') return false;
-  return /iphone|ipad|ipod/i.test(navigator.userAgent);
+  if (/iphone|ipad|ipod/i.test(navigator.userAgent)) return true;
+  // iPadOS 13+ reports as Macintosh with touch points.
+  return (
+    navigator.platform === 'MacIntel' &&
+    typeof navigator.maxTouchPoints === 'number' &&
+    navigator.maxTouchPoints > 1
+  );
 }
 
 /**

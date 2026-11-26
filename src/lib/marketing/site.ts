@@ -23,7 +23,7 @@ export const FOOTER_GROUPS = [
       { href: '/solutions', label: 'Solutions' },
       { href: '/pricing', label: 'Pricing' },
       { href: '/security', label: 'Security' },
-      { href: '/login', label: 'Sign in' },
+      { href: '/login', label: 'Client Login' },
     ],
   },
   {

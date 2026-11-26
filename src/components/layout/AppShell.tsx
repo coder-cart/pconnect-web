@@ -24,8 +24,7 @@ import { UnreadMessagesProvider, useUnreadMessages } from '@/components/provider
 import { NotificationOptInPrompt } from '@/components/pwa/NotificationOptInPrompt';
 import { PresenceLifecycle } from '@/components/providers/PresenceLifecycle';
 import { ProductTourProvider } from '@/components/tour/ProductTourProvider';
-
-const SIDEBAR_COLLAPSED_KEY = 'pconnect.sidebar.collapsed';
+import { SeasonalAnnouncementBanner } from '@/components/announcements/SeasonalAnnouncementBanner';
 
 interface AppShellProps {
   user: AuthenticatedUser;
@@ -66,30 +65,9 @@ function AppShellContent({
   }, [allowed, router, user]);
 
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [createAction, setCreateAction] = useState<CreateAction | null>(null);
   const canManageOrders = userHasPermission(user, 'orders.manage');
   const isExternal = userIsExternal(user);
-
-  useEffect(() => {
-    try {
-      setSidebarCollapsed(window.localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === '1');
-    } catch {
-      setSidebarCollapsed(false);
-    }
-  }, []);
-
-  function toggleSidebarCollapsed() {
-    setSidebarCollapsed((current) => {
-      const next = !current;
-      try {
-        window.localStorage.setItem(SIDEBAR_COLLAPSED_KEY, next ? '1' : '0');
-      } catch {
-        // ignore storage failures
-      }
-      return next;
-    });
-  }
 
   useEffect(() => {
     setMobileNavOpen(false);
@@ -99,19 +77,14 @@ function AppShellContent({
     <div className="app-root h-dvh overflow-hidden bg-[var(--background)] text-[var(--foreground)]">
       <div className="flex h-full min-h-0">
         <div
-          className={cn(
-            'hidden shrink-0 transition-[width] duration-200 lg:block',
-            sidebarCollapsed ? 'w-[var(--sidebar-width-collapsed)]' : 'w-[var(--sidebar-width)]',
-          )}
+          className="hidden w-[var(--sidebar-width)] shrink-0 md:block"
           aria-hidden
         />
-        <div className="hidden lg:block">
+        <div className="hidden md:block">
           <Sidebar
             user={user}
             unreadCount={unreadCount}
             messageUnreadCount={messageUnreadCount}
-            collapsed={sidebarCollapsed}
-            onToggleCollapsed={toggleSidebarCollapsed}
           />
         </div>
 
@@ -123,6 +96,7 @@ function AppShellContent({
             onOpenMobileNav={() => setMobileNavOpen(true)}
             onCreate={setCreateAction}
           />
+          <SeasonalAnnouncementBanner />
 
           <main
             className={cn(
@@ -143,7 +117,7 @@ function AppShellContent({
       </div>
 
       {mobileNavOpen ? (
-        <div className="fixed inset-0 z-40 lg:hidden">
+        <div className="fixed inset-0 z-40 md:hidden">
           <button
             type="button"
             className="absolute inset-0 bg-black/40 backdrop-blur-sm"

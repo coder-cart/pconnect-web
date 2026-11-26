@@ -137,5 +137,6 @@ export function MessageList({
     );
   }
 
-  return <div className="space-y-0">{entries.map(renderEntry)}</div>;
+  // Top padding so half-above toolbars are not clipped by the scroll area.
+  return <div className="space-y-0 pt-3">{entries.map(renderEntry)}</div>;
 }

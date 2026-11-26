@@ -182,8 +182,27 @@ export async function prepareChatImageFile(file: File): Promise<File> {
  * Windows/Chrome often expose the same screenshot in both `items` and `files`
  * with different `lastModified` values — dedupe by type+size within the paste,
  * and prefer `files` when present so we do not double-attach.
+ *
+ * Important: desktop/iPad text pastes sometimes include phantom `file` items with
+ * empty MIME. Never treat those as images when the clipboard also has text, or
+ * paste handlers will preventDefault and swallow the text.
  */
-function isLikelyClipboardImageFile(file: File) {
+function clipboardHasTextPayload(clipboardData: DataTransfer) {
+  try {
+    return Boolean(
+      clipboardData.getData('text/plain')?.trim() ||
+        clipboardData.getData('text/html')?.trim(),
+    );
+  } catch {
+    // Some synthetic DataTransfer mocks throw on getData.
+    return false;
+  }
+}
+
+function isLikelyClipboardImageFile(
+  file: File,
+  options?: { allowAmbiguousEmptyType?: boolean },
+) {
   if (file.type.startsWith('image/')) return true;
   // Some Android / Windows pastes use empty or generic MIME with an image name.
   if (
@@ -194,9 +213,14 @@ function isLikelyClipboardImageFile(file: File) {
   ) {
     return true;
   }
-  // Untitled clipboard blobs with no extension still often carry image MIME later;
-  // accept empty-type files under a reasonable screenshot size for paste only.
-  if (!file.type && file.size > 0 && file.size <= IMAGE_ANNOTATION_MAX_BYTES) {
+  // Untitled clipboard blobs (screenshots) with no MIME/extension — only when
+  // the paste is not also a text paste. Otherwise phantom files steal Ctrl/Cmd+V.
+  if (
+    options?.allowAmbiguousEmptyType &&
+    !file.type &&
+    file.size > 0 &&
+    file.size <= IMAGE_ANNOTATION_MAX_BYTES
+  ) {
     return true;
   }
   return false;
@@ -207,8 +231,10 @@ export function collectClipboardImageFiles(
 ): File[] {
   if (!clipboardData) return [];
 
-  const fromFiles = Array.from(clipboardData.files ?? []).filter(
-    isLikelyClipboardImageFile,
+  const allowAmbiguousEmptyType = !clipboardHasTextPayload(clipboardData);
+
+  const fromFiles = Array.from(clipboardData.files ?? []).filter((file) =>
+    isLikelyClipboardImageFile(file, { allowAmbiguousEmptyType }),
   );
 
   if (fromFiles.length > 0) {
@@ -220,11 +246,11 @@ export function collectClipboardImageFiles(
     if (item.kind !== 'file') continue;
     const typeLooksImage =
       item.type.startsWith('image/') ||
-      !item.type ||
+      (allowAmbiguousEmptyType && !item.type) ||
       item.type === 'application/octet-stream';
     if (!typeLooksImage) continue;
     const file = item.getAsFile();
-    if (file && isLikelyClipboardImageFile(file)) {
+    if (file && isLikelyClipboardImageFile(file, { allowAmbiguousEmptyType })) {
       fromItems.push(file);
     }
   }

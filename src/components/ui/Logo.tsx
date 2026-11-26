@@ -8,6 +8,9 @@ interface LogoProps {
   className?: string;
 }
 
+const LOCKUP_CLASS =
+  'h-10 w-auto max-h-10 max-w-full object-contain object-left sm:h-11 sm:max-h-11';
+
 export function Logo({
   compact = false,
   variant = 'auto',
@@ -20,7 +23,12 @@ export function Logo({
         alt={BRAND.name}
         width={32}
         height={32}
-        className={cn('h-8 w-8 object-contain ml-2', className)}
+        decoding="async"
+        className={cn(
+          'shrink-0 object-contain object-center',
+          // Default mark size; callers may override with h/w utilities.
+          className ?? 'h-8 w-8',
+        )}
       />
     );
   }
@@ -32,10 +40,8 @@ export function Logo({
         alt={BRAND.name}
         width={209}
         height={72}
-        className={cn(
-          'h-9 w-auto max-w-full object-contain object-left',
-          className,
-        )}
+        decoding="async"
+        className={cn(LOCKUP_CLASS, className)}
       />
     );
   }
@@ -47,17 +53,15 @@ export function Logo({
         alt={BRAND.name}
         width={209}
         height={72}
-        className={cn(
-          'w-auto max-w-full object-contain object-left',
-          className,
-        )}
+        decoding="async"
+        className={cn(LOCKUP_CLASS, className)}
       />
     );
   }
 
   return (
     <div
-      className={cn('flex items-center', className)}
+      className={cn('flex min-w-0 max-w-full items-center', className)}
       role="img"
       aria-label={BRAND.name}
     >
@@ -66,14 +70,16 @@ export function Logo({
         alt=""
         width={209}
         height={72}
-        className="brand-lockup h-8 w-auto max-w-[180px] object-contain object-left sm:h-9 sm:max-w-[220px]"
+        decoding="async"
+        className={cn('brand-lockup', LOCKUP_CLASS)}
       />
       <img
         src={BRAND.lockupDark}
         alt=""
         width={209}
         height={72}
-        className="brand-lockup-dark w-auto max-w-[180px] object-contain object-left sm:h-12 sm:max-w-[220px]"
+        decoding="async"
+        className={cn('brand-lockup-dark', LOCKUP_CLASS)}
       />
     </div>
   );

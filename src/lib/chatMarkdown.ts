@@ -1,5 +1,6 @@
 import { ReactNode, createElement } from 'react';
 import { isSafeChatHref } from '@/lib/safeChatHref';
+import { expandEmojiShortcutsInText } from '@/lib/emoji-catalog';
 
 const URL_PATTERN = /(https?:\/\/[^\s<]+)/g;
 
@@ -144,7 +145,11 @@ function renderPlainTextWithLinks(text: string, keyPrefix: string): ReactNode[] 
         part,
       );
     }
-    return createElement('span', { key: `${keyPrefix}-txt-${partIndex}` }, part);
+    return createElement(
+      'span',
+      { key: `${keyPrefix}-txt-${partIndex}` },
+      expandEmojiShortcutsInText(part),
+    );
   });
 }
 
@@ -405,7 +410,8 @@ export function renderMarkdownBody(text: string): ReactNode {
         'p',
         {
           key: `p-${index}`,
-          className: 'whitespace-pre-wrap break-words',
+          // Reset UA paragraph margins so reactions sit tight under short messages.
+          className: 'm-0 whitespace-pre-wrap break-words',
         },
         paragraphLines.flatMap((paragraphLine, paragraphIndex) => {
           const nodes = renderInlineMarkdown(
@@ -427,12 +433,47 @@ export function renderMarkdownBody(text: string): ReactNode {
   return createElement('div', { className: 'space-y-1 text-sm' }, blocks);
 }
 
+function isBlockMarkdownElement(node: Node): boolean {
+  if (node.nodeType !== Node.ELEMENT_NODE) return false;
+  const tag = (node as HTMLElement).tagName.toLowerCase();
+  return (
+    tag === 'div' ||
+    tag === 'p' ||
+    tag === 'br' ||
+    tag === 'li' ||
+    tag === 'ul' ||
+    tag === 'ol' ||
+    tag === 'pre' ||
+    tag === 'blockquote' ||
+    tag === 'table' ||
+    /^h[1-6]$/.test(tag)
+  );
+}
+
+/**
+ * Contenteditable often keeps the first line as a bare text node and later
+ * lines as sibling <div>s. Join with newlines so "a" + <div>b</div> becomes
+ * "a\nb" instead of "ab".
+ */
 export function htmlToMarkdown(root: HTMLElement): string {
-  return Array.from(root.childNodes)
-    .map((node) => nodeToMarkdown(node))
-    .join('')
-    .replace(/\n{3,}/g, '\n\n')
-    .trim();
+  const parts: string[] = [];
+
+  for (const node of Array.from(root.childNodes)) {
+    const chunk = nodeToMarkdown(node);
+    if (!chunk) continue;
+
+    if (
+      parts.length > 0 &&
+      isBlockMarkdownElement(node) &&
+      !parts[parts.length - 1]!.endsWith('\n')
+    ) {
+      parts.push('\n');
+    }
+
+    parts.push(chunk);
+  }
+
+  return parts.join('').replace(/\n{3,}/g, '\n\n').trim();
 }
 
 function escapeTableCell(text: string): string {

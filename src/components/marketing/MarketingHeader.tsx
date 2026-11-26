@@ -53,7 +53,7 @@ export function MarketingHeader() {
 
         <div className="mk-header__actions">
           <Link href="/login" className="mk-link-quiet">
-            Sign in
+            Client Login
           </Link>
           <Link href="/book-a-demo" className="mk-btn mk-btn--sm">
             Book a demo
@@ -80,7 +80,7 @@ export function MarketingHeader() {
               </Link>
             ))}
             <Link href="/login" className="mk-header__drawer-link">
-              Sign in
+              Client Login
             </Link>
           </nav>
           <Link href="/book-a-demo" className="mk-btn">

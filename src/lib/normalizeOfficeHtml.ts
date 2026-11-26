@@ -3,8 +3,9 @@
  * chat markdown converter understands.
  */
 export function normalizeOfficeHtml(root: HTMLElement): void {
-  // Remove empty Office placeholders.
-  root.querySelectorAll('o\\:p, o:p').forEach((node) => {
+  // Unwrap Word `o:p` placeholders. Do not use querySelector('o:p') —
+  // the colon is parsed as a CSS pseudo-class and throws SyntaxError.
+  Array.from(root.getElementsByTagName('o:p')).forEach((node) => {
     node.replaceWith(...Array.from(node.childNodes));
   });
 

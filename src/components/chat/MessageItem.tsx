@@ -35,6 +35,13 @@ import { formatMessageTime } from '@/lib/formatMessageDate';
 import { useViewerTimeZone } from '@/hooks/useViewerTimeZone';
 import { cn } from '@/lib/cn';
 
+function hasActiveTextSelection(): boolean {
+  if (typeof window === 'undefined') return false;
+  const selection = window.getSelection();
+  if (!selection || selection.type !== 'Range') return false;
+  return selection.toString().length > 0;
+}
+
 interface MessageItemProps {
   message: ChatMessage;
   channelId: string;
@@ -83,7 +90,9 @@ export function MessageItem({
 }: MessageItemProps) {
   const [hovered, setHovered] = useState(false);
   const [toolbarLocked, setToolbarLocked] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
   const [touchActive, setTouchActive] = useState(false);
+  const [selectionActive, setSelectionActive] = useState(false);
   const [editing, setEditing] = useState(false);
   const [editBody, setEditBody] = useState(message.body);
   const [saving, setSaving] = useState(false);
@@ -101,23 +110,40 @@ export function MessageItem({
     currentUserId,
     isWorkspaceAdmin: canDeleteForEveryone,
   });
+  // Selection only suppresses hover discovery — explicit touch/menu locks stay open.
   const showToolbar =
-    !editing && (hovered || toolbarLocked || touchActive);
+    !editing &&
+    (toolbarLocked ||
+      touchActive ||
+      menuOpen ||
+      (hovered && !selectionActive));
 
   useEffect(() => {
     setEditBody(message.body);
   }, [message.body]);
 
   useEffect(() => {
+    function syncSelectionState() {
+      setSelectionActive(hasActiveTextSelection());
+    }
+    document.addEventListener('selectionchange', syncSelectionState);
+    return () => {
+      document.removeEventListener('selectionchange', syncSelectionState);
+    };
+  }, []);
+
+  useEffect(() => {
     if (!touchActive) return;
     function handlePointerDown(event: PointerEvent) {
+      if (toolbarLocked || menuOpen) return;
       const target = event.target as HTMLElement | null;
       if (target?.closest(`#message-${message.id}`)) return;
+      if (target?.closest('[data-message-action-menu="true"]')) return;
       setTouchActive(false);
     }
     document.addEventListener('pointerdown', handlePointerDown);
     return () => document.removeEventListener('pointerdown', handlePointerDown);
-  }, [touchActive, message.id]);
+  }, [touchActive, message.id, toolbarLocked, menuOpen]);
 
   async function handleSaveEdit() {
     if (!editBody.trim()) return;
@@ -231,50 +257,58 @@ export function MessageItem({
   );
 
   return (
-    <ContextMenu menu={menu} openSignal={menuSignal}>
+    <ContextMenu
+      menu={menu}
+      openSignal={menuSignal}
+      onOpenChange={setMenuOpen}
+    >
       <div
         id={`message-${message.id}`}
         className={cn(
-          'chat-message-row group relative flex gap-2.5 rounded-[var(--radius-md)] transition-colors [-webkit-touch-callout:none] hover:bg-[var(--surface-muted)]',
+          'chat-message-row group relative flex gap-2.5 rounded-[var(--radius-md)] transition-colors hover:bg-[var(--surface-muted)]',
           isActive && 'bg-[var(--surface-muted)]',
           highlighted && 'ring-2 ring-[var(--primary)] ring-offset-2',
           editing && 'bg-[var(--primary-soft)]/40 ring-1 ring-[var(--primary)]/40',
           touchActive && !editing && 'bg-[var(--surface-muted)]',
         )}
-        onMouseEnter={() => setHovered(true)}
-        onMouseLeave={() => {
-          if (!toolbarLocked) {
-            setHovered(false);
+        onMouseEnter={() => {
+          if (hasActiveTextSelection()) {
+            setSelectionActive(true);
+            return;
           }
+          setHovered(true);
         }}
-        onPointerUp={(event) => {
-          if (event.pointerType === 'touch' || event.pointerType === 'pen') {
-            setTouchActive(true);
+        onMouseLeave={() => {
+          if (!toolbarLocked && !menuOpen) {
+            setHovered(false);
           }
         }}
       >
         {showToolbar ? (
           <MessageHoverToolbar
             canEdit={canEdit}
+            canPin={canManageChannel}
+            isPinned={isPinned}
             onReply={() => onReply(message.id)}
             onReact={(emoji) => void onReact(message.id, emoji)}
             onEdit={startEditing}
+            onPin={() => void onPin(message.id)}
+            onUnpin={onUnpin ? () => void onUnpin(message.id) : undefined}
             onOpenChange={setToolbarLocked}
             onOpenActions={({ x, y }) => openActionsAt(x, y)}
           />
         ) : null}
 
-        {/* Persistent ⋯ when toolbar is hidden (coarse pointers). Hidden once
-            the toolbar is open so actions are not duplicated. */}
+        {/* Touch / tablet action trigger. Hidden on fine-pointer hover devices. */}
         {!editing && !showToolbar ? (
           <button
             type="button"
-            className="absolute right-1 top-1 z-10 flex min-h-touch min-w-touch items-center justify-center rounded-[var(--radius-sm)] text-[var(--muted)] hover:bg-[var(--surface-muted)] hover:text-[var(--foreground)] [@media(hover:hover)_and_(pointer:fine)]:pointer-events-none [@media(hover:hover)_and_(pointer:fine)]:opacity-0"
+            className="absolute right-1 top-1 z-10 flex h-8 w-8 items-center justify-center rounded-md text-[var(--muted)] hover:bg-[var(--surface-muted)] hover:text-[var(--foreground)] [@media(hover:hover)_and_(pointer:fine)]:pointer-events-none [@media(hover:hover)_and_(pointer:fine)]:opacity-0"
             aria-label="Message actions"
             onClick={(event) => {
               event.stopPropagation();
+              if (hasActiveTextSelection()) return;
               setTouchActive(true);
-              openActionsAt(event.clientX, event.clientY);
             }}
           >
             <MoreHorizontal className="h-4 w-4" />
@@ -290,9 +324,9 @@ export function MessageItem({
           size="sm"
           className="mt-0.5 shrink-0"
         />
-        <div className="min-w-0 flex-1 pr-10 sm:pr-8 md:pr-0">
-          <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
-            <p className="text-sm font-semibold text-[var(--primary)]">
+        <div className="min-w-0 flex-1 select-text pr-9">
+          <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0">
+            <p className="text-sm font-semibold leading-tight text-[var(--primary)]">
               {message.sender.fullName}
             </p>
             <span className="text-xs text-[var(--muted)]">
@@ -394,7 +428,7 @@ export function MessageItem({
           ) : (
             <div
               className={cn(
-                'mt-0.5 text-sm leading-snug text-[var(--foreground)]',
+                'mt-px text-sm leading-snug text-[var(--foreground)]',
                 unread && 'font-semibold',
               )}
             >
@@ -412,6 +446,7 @@ export function MessageItem({
               reactions={message.reactions ?? []}
               memberNames={memberNames}
               currentUserId={currentUserId}
+              onPickerOpenChange={setToolbarLocked}
               onToggle={(emoji) => void onReact(message.id, emoji)}
             />
           ) : null}
@@ -419,7 +454,7 @@ export function MessageItem({
             <button
               type="button"
               onClick={() => onReply(message.id)}
-              className="mt-1 min-h-touch"
+              className="mt-0.5 inline-flex min-h-7 items-center"
             >
               <Badge variant="primary">{message.replyCount} replies</Badge>
             </button>

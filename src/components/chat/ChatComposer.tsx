@@ -387,9 +387,47 @@ export function ChatComposer({
     }
   }
 
+  /** Keep the caret inside the contentEditable before programmatic inserts. */
+  function ensureEditorSelection() {
+    const editor = editorRef.current;
+    if (!editor) return false;
+    editor.focus();
+
+    const selection = window.getSelection();
+    if (!selection) return false;
+
+    if (selection.rangeCount > 0) {
+      const current = selection.getRangeAt(0);
+      if (editor.contains(current.commonAncestorContainer)) {
+        return true;
+      }
+    }
+
+    const range = document.createRange();
+    range.selectNodeContents(editor);
+    range.collapse(false);
+    selection.removeAllRanges();
+    selection.addRange(range);
+    return true;
+  }
+
   function insertAtCursor(text: string) {
-    focusEditor();
-    document.execCommand('insertText', false, text);
+    if (!text || !ensureEditorSelection()) return;
+
+    const inserted = document.execCommand('insertText', false, text);
+    if (!inserted) {
+      const selection = window.getSelection();
+      if (selection && selection.rangeCount > 0) {
+        const range = selection.getRangeAt(0);
+        range.deleteContents();
+        const node = document.createTextNode(text);
+        range.insertNode(node);
+        range.setStartAfter(node);
+        range.collapse(true);
+        selection.removeAllRanges();
+        selection.addRange(range);
+      }
+    }
     syncEditorState();
   }
 
@@ -759,8 +797,27 @@ export function ChatComposer({
   }
 
   function insertSafePasteHtml(safeHtml: string) {
-    focusEditor();
-    document.execCommand('insertHTML', false, safeHtml);
+    if (!safeHtml.trim() || !ensureEditorSelection()) return;
+
+    const inserted = document.execCommand('insertHTML', false, safeHtml);
+    if (!inserted) {
+      const selection = window.getSelection();
+      if (selection && selection.rangeCount > 0) {
+        const range = selection.getRangeAt(0);
+        range.deleteContents();
+        const template = document.createElement('template');
+        template.innerHTML = safeHtml;
+        const fragment = template.content;
+        const lastNode = fragment.lastChild;
+        range.insertNode(fragment);
+        if (lastNode) {
+          range.setStartAfter(lastNode);
+          range.collapse(true);
+          selection.removeAllRanges();
+          selection.addRange(range);
+        }
+      }
+    }
     syncEditorState();
   }
 
@@ -799,7 +856,9 @@ export function ChatComposer({
     const html = options?.html?.trim() ?? '';
     const plainText = options?.plainText?.trim() ?? '';
     if (html) {
-      handleRichHtmlPaste(html);
+      if (!handleRichHtmlPaste(html) && plainText) {
+        insertAtCursor(plainText);
+      }
     } else if (plainText) {
       insertAtCursor(plainText);
     }
@@ -820,6 +879,7 @@ export function ChatComposer({
 
     const html = clipboard.getData('text/html');
     const plainText = clipboard.getData('text/plain');
+    const hasText = Boolean(html.trim() || plainText.trim());
 
     if (ingestClipboardImages(clipboard, { html, plainText })) {
       event.preventDefault();
@@ -835,12 +895,13 @@ export function ChatComposer({
     }
 
     // Mobile often exposes a file item without readable image bytes.
-    // Guide to gallery — do not claim the browser is "unsupported".
+    // Only claim the paste when there is no text to insert — otherwise
+    // phantom file items on iPad/iOS would block Cmd/Ctrl+V text paste.
     if (CHAT_MEDIA_UPLOADS_ENABLED && prefersGalleryImagePicker()) {
       const hasFileItem = Array.from(clipboard.items ?? []).some(
         (item) => item.kind === 'file',
       );
-      if (hasFileItem) {
+      if (hasFileItem && !hasText) {
         event.preventDefault();
         setErrorMessage(
           'This device did not provide the screenshot for paste. Tap + → Photos & files to attach it from your gallery.',
@@ -853,10 +914,11 @@ export function ChatComposer({
     if (!CHAT_MEDIA_UPLOADS_ENABLED || !channelId) return;
 
     const inputEvent = event.nativeEvent as InputEvent;
-    if (
-      inputEvent.inputType !== 'insertFromPaste' &&
-      inputEvent.inputType !== 'insertFromDrop'
-    ) {
+    // Handle drops here only. Paste must run on the `paste` event so
+    // text/html + text/plain are available. Intercepting insertFromPaste in
+    // beforeinput (Safari/iPad often fires it first) set pasteGuard and
+    // preventDefault'd before text could be read, which broke laptop/iPad paste.
+    if (inputEvent.inputType !== 'insertFromDrop') {
       return;
     }
 
@@ -1176,7 +1238,7 @@ export function ChatComposer({
         className="relative min-h-0 shrink-0 overflow-visible rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface)]"
       >
         {formatOpen ? (
-          <div className="flex flex-wrap items-center gap-0.5 border-b border-[var(--border)] px-2 py-1.5">
+          <div className="flex flex-wrap items-center gap-0.5 border-b border-[var(--border)] px-2 py-1">
             {FORMAT_TOOLBAR_ITEMS.map(({ icon: Icon, action }) => {
               const meta = formatShortcutMeta.find(
                 (item) => item.action === action,
@@ -1203,7 +1265,7 @@ export function ChatComposer({
           </div>
         ) : null}
 
-        <div className="flex items-end gap-2 px-2 py-2 sm:block sm:px-0 sm:py-0">
+        <div className="flex items-end gap-2 px-2 py-1.5 sm:block sm:px-0 sm:py-0">
           <div
             ref={editorRef}
             contentEditable
@@ -1218,7 +1280,7 @@ export function ChatComposer({
             onPaste={handleEditorPaste}
             onBeforeInput={handleEditorBeforeInput}
             className={cn(
-              'max-h-[140px] min-h-[44px] min-w-0 flex-1 overflow-y-auto bg-transparent px-2.5 py-2 text-sm outline-none sm:max-h-[180px] sm:min-h-[52px] sm:w-full sm:px-3',
+              'max-h-[140px] min-h-[40px] min-w-0 flex-1 overflow-y-auto bg-transparent px-2.5 py-1.5 text-sm leading-[var(--leading-body)] outline-none sm:max-h-[180px] sm:min-h-[48px] sm:w-full sm:px-3 sm:py-2',
               'whitespace-pre-wrap break-words',
               'empty:before:pointer-events-none empty:before:text-[var(--muted)] empty:before:content-[attr(data-placeholder)]',
               '[&_a]:text-[var(--primary)] [&_a]:underline',
@@ -1283,7 +1345,7 @@ export function ChatComposer({
           </div>
         ) : null}
 
-        <div className="flex items-center justify-between gap-2 border-t border-[var(--border)] px-2 py-1.5 pb-[max(0.375rem,env(safe-area-inset-bottom))]">
+        <div className="flex items-center justify-between gap-2 border-t border-[var(--border)] px-2 py-1 pb-[max(0.25rem,env(safe-area-inset-bottom))]">
           <div className="flex min-w-0 flex-1 items-center gap-0.5 overflow-x-auto">
             <AttachmentActionSheet
               open={attachmentMenuOpen}

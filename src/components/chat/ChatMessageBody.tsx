@@ -62,7 +62,7 @@ export function ChatMessageBody({
   } | null>(null);
 
   return (
-    <div className="space-y-1">
+    <div className="space-y-1 [&>div]:space-y-1 [&_p]:m-0">
       {body !== '(attachment)' ? renderMarkdownBody(body) : null}
 
       {attachments.map((attachment) => {

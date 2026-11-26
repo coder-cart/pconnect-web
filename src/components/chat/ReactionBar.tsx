@@ -8,13 +8,18 @@ import {
   type PointerEvent as ReactPointerEvent,
 } from 'react';
 import { createPortal } from 'react-dom';
+import { SmilePlus } from 'lucide-react';
 import { cn } from '@/lib/cn';
 import {
   MessageReactionSummary,
   MessageReactionUser,
 } from '@/lib/chat-types';
 import { Button } from '@/components/ui/Button';
-import { positionPanelAboveAnchor } from '@/lib/viewport-menu';
+import { EmojiPicker } from '@/components/chat/EmojiPicker';
+import {
+  clampFixedMenuPosition,
+  positionPanelAboveAnchor,
+} from '@/lib/viewport-menu';
 
 export type ReactionMemberDirectory = Record<string, string>;
 
@@ -24,6 +29,7 @@ interface ReactionBarProps {
   /** userId → fullName for resolving reactors when API users are missing. */
   memberNames?: ReactionMemberDirectory;
   currentUserId?: string;
+  onPickerOpenChange?: (open: boolean) => void;
   className?: string;
 }
 
@@ -98,13 +104,18 @@ export function ReactionBar({
   onToggle,
   memberNames,
   currentUserId,
+  onPickerOpenChange,
   className,
 }: ReactionBarProps) {
   const [hoveredEmoji, setHoveredEmoji] = useState<string | null>(null);
   const [detailsEmoji, setDetailsEmoji] = useState<string | null>(null);
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [pickerPos, setPickerPos] = useState({ left: 0, top: 0 });
   const [tooltipPos, setTooltipPos] = useState({ left: 0, top: 0 });
   const [detailsPos, setDetailsPos] = useState({ left: 0, top: 0 });
   const chipRefs = useRef<Map<string, HTMLButtonElement>>(new Map());
+  const addReactionRef = useRef<HTMLButtonElement>(null);
+  const pickerRef = useRef<HTMLDivElement>(null);
   const tooltipRef = useRef<HTMLDivElement>(null);
   const detailsRef = useRef<HTMLDivElement>(null);
   const hoverTimerRef = useRef<number | null>(null);
@@ -124,6 +135,56 @@ export function ReactionBar({
       }
     };
   }, []);
+
+  useEffect(() => {
+    onPickerOpenChange?.(pickerOpen);
+  }, [pickerOpen, onPickerOpenChange]);
+
+  useLayoutEffect(() => {
+    if (!pickerOpen || !addReactionRef.current || !pickerRef.current) return;
+    const trigger = addReactionRef.current.getBoundingClientRect();
+    const picker = pickerRef.current.getBoundingClientRect();
+    const preferredX = trigger.left;
+    const preferredY = trigger.top - picker.height - 8;
+    setPickerPos(
+      clampFixedMenuPosition(
+        preferredX,
+        preferredY > 8 ? preferredY : trigger.bottom + 8,
+        picker.width,
+        picker.height,
+      ),
+    );
+  }, [pickerOpen]);
+
+  useEffect(() => {
+    if (!pickerOpen) return;
+
+    function handlePointerDown(event: MouseEvent | TouchEvent) {
+      const target = event.target as Node;
+      if (
+        addReactionRef.current?.contains(target) ||
+        pickerRef.current?.contains(target)
+      ) {
+        return;
+      }
+      setPickerOpen(false);
+    }
+
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === 'Escape') setPickerOpen(false);
+    }
+
+    document.addEventListener('mousedown', handlePointerDown);
+    document.addEventListener('touchstart', handlePointerDown, {
+      passive: true,
+    });
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('mousedown', handlePointerDown);
+      document.removeEventListener('touchstart', handlePointerDown);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [pickerOpen]);
 
   useLayoutEffect(() => {
     if (!hoveredEmoji || !hoveredReaction) return;
@@ -172,10 +233,13 @@ export function ReactionBar({
     };
   }, [detailsEmoji]);
 
-  if (reactions.length === 0) return null;
+  // Only show the bar when the message already has reactions (Slack-style).
+  // First reaction still comes from the hover toolbar.
+  if (reactions.length === 0 && !pickerOpen) return null;
 
   function openDetails(emoji: string) {
     setHoveredEmoji(null);
+    setPickerOpen(false);
     setDetailsEmoji((current) => (current === emoji ? null : emoji));
   }
 
@@ -211,7 +275,7 @@ export function ReactionBar({
 
   return (
     <>
-      <div className={cn('mt-1 flex flex-wrap gap-1', className)}>
+      <div className={cn('mt-0.5 flex flex-wrap items-center gap-1', className)}>
         {reactions.map((reaction) => {
           const users = reactionUsers(reaction, memberNames, currentUserId);
           return (
@@ -234,7 +298,7 @@ export function ReactionBar({
               aria-expanded={detailsEmoji === reaction.emoji}
               aria-pressed={reaction.reactedByMe}
               className={cn(
-                'inline-flex min-h-touch items-center gap-1 rounded-full border px-2.5 text-xs transition-colors sm:min-h-6 sm:px-2',
+                'inline-flex h-6 items-center gap-1 rounded-full border px-2 text-xs leading-none transition-colors [@media(pointer:coarse)]:h-8 [@media(pointer:coarse)]:min-h-8',
                 reaction.reactedByMe
                   ? 'border-[var(--primary)] bg-[var(--primary-soft)] text-[var(--primary)]'
                   : 'border-[var(--border)] bg-[var(--surface-muted)] hover:bg-[var(--surface)]',
@@ -248,7 +312,43 @@ export function ReactionBar({
             </button>
           );
         })}
+
+        <button
+          ref={addReactionRef}
+          type="button"
+          className={cn(
+            'inline-flex h-6 w-6 items-center justify-center rounded-full border border-[var(--border)] bg-[var(--surface-muted)] text-[var(--muted-foreground)] transition-colors hover:bg-[var(--surface)] hover:text-[var(--foreground)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--primary)]/30 [@media(pointer:coarse)]:h-8 [@media(pointer:coarse)]:w-8',
+            pickerOpen && 'bg-[var(--surface)] text-[var(--foreground)]',
+          )}
+          aria-label="Add reaction"
+          aria-expanded={pickerOpen}
+          aria-haspopup="listbox"
+          onClick={() => {
+            setDetailsEmoji(null);
+            setPickerOpen((open) => !open);
+          }}
+        >
+          <SmilePlus className="h-3.5 w-3.5" />
+        </button>
       </div>
+
+      {pickerOpen && typeof document !== 'undefined'
+        ? createPortal(
+            <div
+              ref={pickerRef}
+              className="fixed z-[97]"
+              style={{ left: pickerPos.left, top: pickerPos.top }}
+            >
+              <EmojiPicker
+                onSelect={(emoji) => {
+                  onToggle(emoji);
+                  setPickerOpen(false);
+                }}
+              />
+            </div>,
+            document.body,
+          )
+        : null}
 
       {hoveredReaction && typeof document !== 'undefined'
         ? createPortal(

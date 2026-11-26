@@ -2,13 +2,22 @@
 
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { MessageSquare, MoreHorizontal, Pencil, SmilePlus } from 'lucide-react';
+import {
+  MessageSquare,
+  MoreVertical,
+  Pencil,
+  Pin,
+  PinOff,
+  SmilePlus,
+} from 'lucide-react';
 import { cn } from '@/lib/cn';
 import { EmojiPicker, QUICK_REACTIONS } from '@/components/chat/EmojiPicker';
 import { clampFixedMenuPosition } from '@/lib/viewport-menu';
 
 const actionBtnClass =
-  'flex min-h-touch min-w-touch items-center justify-center gap-1 rounded-[var(--radius-sm)] px-2 text-xs font-medium text-[var(--muted-foreground)] hover:bg-[var(--surface-muted)] sm:min-h-8 sm:min-w-8';
+  'inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-[var(--muted-foreground)] transition-colors hover:bg-[var(--surface-muted)] hover:text-[var(--foreground)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--primary)]/30 [@media(pointer:coarse)]:h-9 [@media(pointer:coarse)]:w-9';
+
+const iconClass = 'h-3.5 w-3.5 shrink-0';
 
 interface MessageHoverToolbarProps {
   onReply: () => void;
@@ -16,7 +25,11 @@ interface MessageHoverToolbarProps {
   onOpenChange?: (open: boolean) => void;
   onEdit?: () => void;
   onOpenActions?: (anchor: { x: number; y: number }) => void;
+  onPin?: () => void;
+  onUnpin?: () => void;
   canEdit?: boolean;
+  canPin?: boolean;
+  isPinned?: boolean;
   className?: string;
 }
 
@@ -26,7 +39,11 @@ export function MessageHoverToolbar({
   onOpenChange,
   onEdit,
   onOpenActions,
+  onPin,
+  onUnpin,
   canEdit = false,
+  canPin = false,
+  isPinned = false,
   className,
 }: MessageHoverToolbarProps) {
   const [pickerOpen, setPickerOpen] = useState(false);
@@ -95,68 +112,83 @@ export function MessageHoverToolbar({
     };
   }, [pickerOpen]);
 
+  const showPin = canPin && (isPinned ? Boolean(onUnpin) : Boolean(onPin));
+
   return (
     <div
       ref={rootRef}
+      role="toolbar"
+      aria-label="Message actions"
       className={cn(
-        'absolute -top-3 right-2 z-20 flex max-w-[calc(100%-0.5rem)] flex-wrap items-center gap-0.5 rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface)] p-0.5 shadow-[var(--shadow-md)]',
+        // Slack-style: straddle the message top edge (half above / half on).
+        'absolute right-1 top-0 z-20 flex -translate-y-1/2 items-center gap-0.5 rounded-full border border-[var(--border)] bg-[var(--surface)] px-1 py-0.5 shadow-[0_2px_10px_rgba(15,23,42,0.12)]',
         className,
       )}
+      onMouseDown={(event) => {
+        // Keep toolbar chrome from stealing the start of a text selection.
+        if ((event.target as HTMLElement).closest('button')) return;
+        event.preventDefault();
+      }}
     >
       {QUICK_REACTIONS.map((emoji) => (
         <button
           key={emoji}
           type="button"
-          className={cn(actionBtnClass, 'text-base leading-none')}
+          className={cn(actionBtnClass, 'text-[13px] leading-none')}
           aria-label={`React with ${emoji}`}
           onClick={() => onReact(emoji)}
         >
           <span aria-hidden>{emoji}</span>
         </button>
       ))}
-      <div className="relative">
-        <button
-          ref={triggerRef}
-          type="button"
-          className={cn(
-            actionBtnClass,
-            pickerOpen && 'bg-[var(--surface-muted)] text-[var(--foreground)]',
-          )}
-          aria-expanded={pickerOpen}
-          aria-haspopup="listbox"
-          aria-label="More reactions"
-          onClick={() => setPickerOpen((open) => !open)}
-        >
-          <SmilePlus className="h-3.5 w-3.5" />
-          <span className="hidden sm:inline">React</span>
-        </button>
-        {pickerOpen
-          ? createPortal(
-              <div
-                ref={pickerRef}
-                className="fixed z-[90]"
-                style={{ left: pickerPos.left, top: pickerPos.top }}
-              >
-                <EmojiPicker
-                  onSelect={(emoji) => {
-                    onReact(emoji);
-                    setPickerOpen(false);
-                  }}
-                />
-              </div>,
-              document.body,
-            )
-          : null}
-      </div>
+
+      <button
+        ref={triggerRef}
+        type="button"
+        className={cn(
+          actionBtnClass,
+          pickerOpen && 'bg-[var(--surface-muted)] text-[var(--foreground)]',
+        )}
+        aria-expanded={pickerOpen}
+        aria-haspopup="listbox"
+        aria-label="More reactions"
+        onClick={() => setPickerOpen((open) => !open)}
+      >
+        <SmilePlus className={iconClass} />
+      </button>
+
+      {pickerOpen
+        ? createPortal(
+            <div
+              ref={pickerRef}
+              className="fixed z-[90]"
+              style={{ left: pickerPos.left, top: pickerPos.top }}
+            >
+              <EmojiPicker
+                onSelect={(emoji) => {
+                  onReact(emoji);
+                  setPickerOpen(false);
+                }}
+              />
+            </div>,
+            document.body,
+          )
+        : null}
+
+      <span
+        className="mx-0.5 h-4 w-px shrink-0 bg-[var(--border)]"
+        aria-hidden
+      />
+
       <button
         type="button"
         className={actionBtnClass}
         aria-label="Reply in thread"
         onClick={onReply}
       >
-        <MessageSquare className="h-3.5 w-3.5" />
-        <span className="hidden sm:inline">Reply</span>
+        <MessageSquare className={iconClass} />
       </button>
+
       {canEdit ? (
         <button
           type="button"
@@ -164,15 +196,36 @@ export function MessageHoverToolbar({
           aria-label="Edit message"
           onClick={onEdit}
         >
-          <Pencil className="h-3.5 w-3.5" />
-          <span className="hidden sm:inline">Edit</span>
+          <Pencil className={iconClass} />
         </button>
       ) : null}
+
+      {showPin ? (
+        <button
+          type="button"
+          className={actionBtnClass}
+          aria-label={isPinned ? 'Unpin from channel' : 'Pin to channel'}
+          onClick={() => {
+            if (isPinned) {
+              onUnpin?.();
+            } else {
+              onPin?.();
+            }
+          }}
+        >
+          {isPinned ? (
+            <PinOff className={iconClass} />
+          ) : (
+            <Pin className={iconClass} />
+          )}
+        </button>
+      ) : null}
+
       <button
         ref={moreRef}
         type="button"
         className={actionBtnClass}
-        aria-label="Message actions"
+        aria-label="More message actions"
         onClick={() => {
           const rect = moreRef.current?.getBoundingClientRect();
           onOpenActions?.({
@@ -181,7 +234,7 @@ export function MessageHoverToolbar({
           });
         }}
       >
-        <MoreHorizontal className="h-4 w-4" />
+        <MoreVertical className={iconClass} />
       </button>
     </div>
   );

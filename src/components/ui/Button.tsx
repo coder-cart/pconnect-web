@@ -22,9 +22,9 @@ const variantClasses: Record<ButtonVariant, string> = {
 
 const sizeClasses: Record<ButtonSize, string> = {
   // sm stays compact on desktop; min-h-touch improves tap targets on phones
-  sm: 'min-h-[var(--touch-min)] px-3 text-sm sm:min-h-8 sm:h-8 sm:text-xs',
-  md: 'min-h-10 h-10 px-4 text-sm',
-  lg: 'min-h-11 h-11 px-5 text-sm',
+  sm: 'min-h-[var(--touch-min)] px-3 text-[length:var(--text-label)] sm:min-h-8 sm:h-8 sm:text-xs',
+  md: 'min-h-10 h-10 px-4 text-[length:var(--text-body)]',
+  lg: 'min-h-11 h-11 px-5 text-[length:var(--text-body)]',
 };
 
 export const Button = forwardRef<HTMLButtonElement, ButtonProps>(

@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { ChevronUp, PanelLeftClose, PanelLeftOpen, Settings, X } from 'lucide-react';
+import { Settings, X } from 'lucide-react';
 import { AuthenticatedUser, userHasAnyPermission, userHasPermission } from '@/lib/auth';
 import { getRoleLabel, getNavItemLabel, getVisibleNavItems, NavItem } from '@/lib/navigation';
 import { UserAvatar } from '@/components/ui/UserAvatar';
@@ -30,8 +30,6 @@ interface SidebarProps {
   onNavigate?: () => void;
   mobile?: boolean;
   onClose?: () => void;
-  collapsed?: boolean;
-  onToggleCollapsed?: () => void;
 }
 
 function personForConversation(conversation: UnreadConversation): UnreadPerson {
@@ -47,11 +45,10 @@ function personForConversation(conversation: UnreadConversation): UnreadPerson {
   };
 }
 
-
 function UnreadPersonHoverCard({ person }: { person: UnreadPerson }) {
   return (
     <div
-      className="absolute left-0 top-full z-40 mt-1 w-56 max-w-[calc(100vw-2rem)] rounded-[var(--radius-lg)] border border-[var(--border)] bg-[var(--surface)] p-3 text-left shadow-[var(--shadow-md)] lg:left-full lg:top-0 lg:mt-0 lg:ml-2"
+      className="absolute left-0 top-full z-40 mt-1 w-56 max-w-[calc(100vw-2rem)] rounded-[var(--radius-lg)] border border-[var(--border)] bg-[var(--surface)] p-3 text-left shadow-[var(--shadow-md)] md:left-full md:top-0 md:mt-0 md:ml-2"
       role="tooltip"
     >
       <div className="flex items-start gap-3">
@@ -84,11 +81,11 @@ function UnreadPersonHoverCard({ person }: { person: UnreadPerson }) {
 function UnreadConversationLink({
   conversation,
   onNavigate,
-  collapsed,
+  compact,
 }: {
   conversation: UnreadConversation;
   onNavigate?: () => void;
-  collapsed?: boolean;
+  compact?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const pathname = usePathname();
@@ -113,7 +110,7 @@ function UnreadConversationLink({
         href={chatHref}
         onClick={(event) => {
           if (!window.matchMedia('(hover: hover)').matches) {
-            if (!open && !collapsed) {
+            if (!open && !compact) {
               event.preventDefault();
               setOpen(true);
               return;
@@ -130,10 +127,10 @@ function UnreadConversationLink({
           });
           onNavigate?.();
         }}
-        title={collapsed ? person.fullName : undefined}
+        title={compact ? person.fullName : undefined}
         className={cn(
           'flex items-center gap-2.5 rounded-[var(--radius-md)] px-2.5 py-2 text-left transition-colors hover:bg-[var(--shell-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--shell-focus-ring)]',
-          collapsed && 'justify-center px-2',
+          compact && 'justify-center px-1.5 py-1.5',
         )}
       >
         <span className="relative shrink-0">
@@ -153,7 +150,7 @@ function UnreadConversationLink({
             aria-hidden
           />
         </span>
-        {!collapsed ? (
+        {!compact ? (
           <>
             <span className="min-w-0 flex-1">
               <span className="block truncate text-sm font-semibold text-[var(--shell-text)]">
@@ -173,10 +170,10 @@ function UnreadConversationLink({
             </span>
           </>
         ) : conversation.unreadCount > 0 ? (
-          <span className="absolute right-1 top-1 h-2 w-2 rounded-full bg-[var(--shell-badge)]" />
+          <span className="absolute right-0.5 top-0.5 h-2 w-2 rounded-full bg-[var(--shell-badge)]" />
         ) : null}
       </Link>
-      {open && !collapsed ? <UnreadPersonHoverCard person={person} /> : null}
+      {open && !compact ? <UnreadPersonHoverCard person={person} /> : null}
     </div>
   );
 }
@@ -188,8 +185,6 @@ export function Sidebar({
   onNavigate,
   mobile = false,
   onClose,
-  collapsed = false,
-  onToggleCollapsed,
 }: SidebarProps) {
   const pathname = usePathname();
   const { conversations } = useUnreadMessages();
@@ -217,26 +212,31 @@ export function Sidebar({
   const showStaff = userHasPermission(user, 'users.manage');
   const homeItem = visibleItems.find((item) => item.href === '/dashboard');
   const otherItems = visibleItems.filter((item) => item.href !== '/dashboard');
-  const isCollapsed = !mobile && collapsed;
 
-  function renderUnreadGroup() {
+  function renderUnreadGroup(compactMode: boolean) {
     if (conversations.length === 0) {
       return null;
     }
     return (
-      <div className="py-2">
-        {!isCollapsed ? (
+      <div className={cn(compactMode ? 'w-full' : 'py-2')}>
+        {!compactMode ? (
           <p className="mb-1 px-2.5 text-[11px] font-semibold uppercase tracking-wide text-[var(--shell-muted)]">
             Unread
           </p>
         ) : null}
-        <div className="space-y-0.5">
+        <div
+          className={cn(
+            compactMode
+              ? 'mx-auto flex max-h-24 w-full flex-col items-center gap-0.5 overflow-y-auto'
+              : 'space-y-0.5',
+          )}
+        >
           {conversations.map((conversation) => (
             <UnreadConversationLink
               key={conversation.channelId}
               conversation={conversation}
               onNavigate={onNavigate}
-              collapsed={isCollapsed}
+              compact={compactMode}
             />
           ))}
         </div>
@@ -244,128 +244,140 @@ export function Sidebar({
     );
   }
 
-  return (
-    <aside
-      className={cn(
-        'shell-chrome flex flex-col border-r border-[var(--shell-border)] bg-[var(--shell-brand)] text-[var(--shell-text)] transition-[width] duration-200',
-        mobile
-          ? 'h-full w-full max-w-sm'
-          : cn(
-              'fixed inset-y-0 left-0 z-30 h-screen',
-              isCollapsed ? 'w-[var(--sidebar-width-collapsed)]' : 'w-[var(--sidebar-width)]',
-            ),
-      )}
-      aria-label="Main navigation"
-    >
-      <div
-        className={cn(
-          'flex shrink-0 items-center   border-b border-[var(--shell-border)] px-3 py-3',
-          isCollapsed ? 'justify-center' : 'justify-between px-4 py-3.5',
-        )}
+  if (mobile) {
+    return (
+      <aside
+        className="shell-chrome flex h-full w-full max-w-sm flex-col border-r border-[var(--shell-border)] bg-[var(--shell-brand)] text-[var(--shell-text)]"
+        aria-label="Main navigation"
       >
-        {isCollapsed ? (
-          <Logo compact className=" " />
-        ) : (
-          <Logo className=" " />
-        )}
-        <div className="flex shrink-0 items-center gap-1">
-          {!mobile && onToggleCollapsed ? (
-            <button
-              type="button"
-              onClick={onToggleCollapsed}
-              className="inline-flex min-h-touch min-w-touch items-center justify-center rounded-[var(--radius-md)] text-[var(--shell-muted)] transition-colors hover:bg-[var(--shell-hover)] hover:text-[var(--shell-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--shell-focus-ring)]"
-              aria-label={isCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-            >
-              {isCollapsed ? (
-                <PanelLeftOpen className="h-5 w-5" />
-              ) : (
-                <PanelLeftClose className="h-5 w-5" />
-              )}
-            </button>
-          ) : null}
-          {mobile && onClose ? (
+        <div className="flex h-16 shrink-0 items-center justify-between gap-2 border-b border-[var(--shell-border)] px-3">
+          <Logo className="min-w-0 flex-1" />
+          {onClose ? (
             <button
               type="button"
               onClick={onClose}
-              className="inline-flex min-h-touch min-w-touch items-center justify-center rounded-[var(--radius-md)] text-[var(--shell-muted)] transition-colors hover:bg-[var(--shell-hover)] hover:text-[var(--shell-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--shell-focus-ring)]"
+              className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-[var(--shell-muted)] transition-colors hover:bg-[var(--shell-hover)] hover:text-[var(--shell-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--shell-focus-ring)]"
               aria-label="Close navigation menu"
             >
-              <X className="h-5 w-5" />
+              <X className="h-5 w-5 stroke-[1.75]" />
             </button>
           ) : null}
         </div>
-      </div>
 
-      <nav className="shell-scroll min-h-0 flex-1 space-y-1 overflow-y-auto px-2 py-3 sm:px-3 sm:py-4">
-        {homeItem ? (
-          <SidebarLink
-            item={homeItem}
-            pathname={pathname}
-            onNavigate={onNavigate}
-            userType={user.userType}
-            collapsed={isCollapsed}
-          />
-        ) : null}
+        <nav className="shell-scroll min-h-0 flex-1 space-y-[var(--nav-item-gap)] overflow-y-auto px-2.5 py-3">
+          {homeItem ? (
+            <SidebarLink
+              item={homeItem}
+              pathname={pathname}
+              onNavigate={onNavigate}
+              userType={user.userType}
+              compact={false}
+            />
+          ) : null}
+          {renderUnreadGroup(false)}
+          {otherItems.map((item) => (
+            <SidebarLink
+              key={item.href}
+              item={item}
+              pathname={pathname}
+              onNavigate={onNavigate}
+              userType={user.userType}
+              compact={false}
+            />
+          ))}
+        </nav>
 
-        {renderUnreadGroup()}
-
-        {otherItems.map((item) => (
-          <SidebarLink
-            key={item.href}
-            item={item}
-            pathname={pathname}
-            onNavigate={onNavigate}
-            userType={user.userType}
-            collapsed={isCollapsed}
-          />
-        ))}
-      </nav>
-
-      <div
-        className={cn(
-          'shrink-0 space-y-2 border-t border-[var(--shell-border)] p-3',
-          isCollapsed && 'px-2',
-        )}
-      >
-        {showSettings || showStaff ? (
-          isCollapsed ? (
-            <Link
-              href={showSettings ? '/admin' : '/staff'}
-              className="inline-flex w-full min-h-touch items-center justify-center rounded-[var(--radius-md)] text-[var(--shell-muted)] hover:bg-[var(--shell-hover)] hover:text-[var(--shell-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--shell-focus-ring)]"
-              title="Admin tools"
-              onClick={onNavigate}
-            >
-              <Settings className="h-4 w-4" />
-            </Link>
-          ) : (
+        <div className="shrink-0 space-y-2 border-t border-[var(--shell-border)] p-3">
+          {showSettings || showStaff ? (
             <AdminToolsMenu
               showSettings={showSettings}
               showStaff={showStaff}
               onNavigate={onNavigate}
             />
-          )
-        ) : null}
+          ) : null}
+          <Link
+            href="/account"
+            onClick={onNavigate}
+            className="flex items-center gap-3 rounded-[var(--radius-lg)] bg-[var(--shell-hover)] p-2.5 transition-colors hover:bg-[var(--shell-active)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--shell-focus-ring)]"
+          >
+            <UserAvatar user={user} size="md" />
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-sm font-medium text-[var(--shell-text)]">
+                {user.fullName}
+              </p>
+              <p className="truncate text-xs text-[var(--shell-muted)]">{roleLabel}</p>
+            </div>
+          </Link>
+        </div>
+      </aside>
+    );
+  }
+
+  return (
+    <aside
+      className="shell-chrome fixed inset-y-0 left-0 z-30 flex h-screen w-[var(--sidebar-width)] flex-col border-r border-[var(--shell-border)] bg-[var(--shell-brand)] text-[var(--shell-text)]"
+      aria-label="Main navigation"
+    >
+      <div className="flex shrink-0 flex-col items-center border-b border-[var(--shell-border)] px-1.5 py-3">
+        <Logo compact className="h-11 w-11" />
+      </div>
+
+      <div className="flex min-h-0 flex-1 flex-col items-center">
+        <nav
+          className="flex h-[75%] w-full flex-col items-center justify-evenly px-1 pt-1"
+          aria-label="Primary"
+        >
+          {homeItem ? (
+            <SidebarLink
+              item={homeItem}
+              pathname={pathname}
+              onNavigate={onNavigate}
+              userType={user.userType}
+              compact
+            />
+          ) : null}
+
+          {renderUnreadGroup(true)}
+
+          {otherItems.map((item) => (
+            <SidebarLink
+              key={item.href}
+              item={item}
+              pathname={pathname}
+              onNavigate={onNavigate}
+              userType={user.userType}
+              compact
+            />
+          ))}
+
+          {showSettings || showStaff ? (
+            <Link
+              href={showSettings ? '/admin' : '/staff'}
+              className="mx-auto flex w-full flex-col items-center gap-0.5 rounded-lg px-1 py-1.5 text-[var(--shell-muted)] hover:bg-[var(--shell-hover)] hover:text-[var(--shell-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--shell-focus-ring)]"
+              title="Admin tools"
+              onClick={onNavigate}
+            >
+              <Settings
+                className="h-[var(--sidebar-icon)] w-[var(--sidebar-icon)] stroke-[1.5]"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+              <span className="w-full truncate text-center text-[9px] font-medium leading-tight">
+                Admin
+              </span>
+            </Link>
+          ) : null}
+        </nav>
+      </div>
+
+      <div className="flex shrink-0 justify-center border-t border-[var(--shell-border)] px-2 py-3">
         <Link
           href="/account"
           onClick={onNavigate}
-          className={cn(
-            'flex items-center gap-3 rounded-[var(--radius-lg)] bg-[var(--shell-hover)] p-2.5 transition-colors hover:bg-[var(--shell-active)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--shell-focus-ring)]',
-            isCollapsed && 'justify-center p-2',
-          )}
-          title={isCollapsed ? user.fullName : undefined}
+          className="inline-flex items-center justify-center rounded-[var(--radius-lg)] bg-[var(--shell-hover)] p-1.5 transition-colors hover:bg-[var(--shell-active)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--shell-focus-ring)]"
+          title={user.fullName}
         >
-          <UserAvatar user={user} size={isCollapsed ? 'sm' : 'md'} />
-          {!isCollapsed ? (
-            <>
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-medium text-[var(--shell-text)]">
-                  {user.fullName}
-                </p>
-                <p className="truncate text-xs text-[var(--shell-muted)]">{roleLabel}</p>
-              </div>
-              <ChevronUp className="h-4 w-4 shrink-0 text-[var(--shell-muted)]" aria-hidden />
-            </>
-          ) : null}
+          <UserAvatar user={user} size="sm" />
         </Link>
       </div>
     </aside>
@@ -377,13 +389,13 @@ function SidebarLink({
   pathname,
   onNavigate,
   userType,
-  collapsed,
+  compact,
 }: {
   item: NavItem;
   pathname: string;
   onNavigate?: () => void;
   userType: 'internal' | 'external';
-  collapsed?: boolean;
+  compact?: boolean;
 }) {
   const isActive =
     pathname === item.href || pathname.startsWith(`${item.href}/`);
@@ -403,41 +415,84 @@ function SidebarLink({
               ? 'nav-team'
               : undefined;
 
+  const shortLabel =
+    item.href === '/orders'
+      ? 'Orders'
+      : item.href === '/dashboard'
+        ? 'Home'
+        : label.split(' ')[0] ?? label;
+
   return (
     <Link
       href={item.href}
       onClick={onNavigate}
-      title={collapsed ? label : undefined}
+      title={compact ? label : undefined}
       data-tour={tourId}
       className={cn(
-        'group relative flex items-center gap-3 rounded-[var(--radius-md)] px-3 py-2.5 text-sm font-medium transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--shell-focus-ring)]',
-        collapsed && 'justify-center px-2',
+        'group relative font-medium transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--shell-focus-ring)]',
+        compact
+          ? 'mx-auto flex w-full flex-col items-center gap-0.5 rounded-lg px-1 py-1'
+          : 'flex min-h-10 items-center gap-3 rounded-lg px-3 py-2',
         isActive
-          ? 'bg-[var(--shell-active)] text-[var(--shell-text)] shadow-[inset_3px_0_0_0_rgba(255,255,255,0.55)]'
+          ? 'bg-[var(--shell-active)] text-[var(--shell-text)]'
           : 'text-[var(--shell-muted)] hover:bg-[var(--shell-hover)] hover:text-[var(--shell-text)]',
+        isActive &&
+          !compact &&
+          'shadow-[inset_3px_0_0_0_rgba(255,255,255,0.65)]',
       )}
       aria-current={isActive ? 'page' : undefined}
     >
-      <Icon className="h-4 w-4 shrink-0" aria-hidden />
-      {!collapsed ? (
+      <span
+        className={cn(
+          'relative inline-flex shrink-0 items-center justify-center',
+          compact
+            ? 'h-[var(--sidebar-icon)] w-[var(--sidebar-icon)]'
+            : 'h-5 w-5',
+          isActive ? 'text-white' : 'text-current',
+        )}
+      >
+        <Icon
+          className={cn(
+            compact
+              ? 'h-[var(--sidebar-icon)] w-[var(--sidebar-icon)]'
+              : 'h-5 w-5',
+            isActive
+              ? 'fill-white stroke-white stroke-[1.5]'
+              : 'fill-none stroke-current stroke-[1.5]',
+          )}
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          aria-hidden
+        />
+        {compact && item.badge ? (
+          <span className="absolute -right-1.5 -top-1.5 flex h-3.5 min-w-3.5 items-center justify-center rounded-full bg-[var(--shell-badge)] px-0.5 text-[8px] font-semibold leading-none text-[var(--shell-badge-text)] ring-2 ring-[var(--shell-brand)]">
+            {item.badge > 9 ? '9+' : item.badge}
+          </span>
+        ) : null}
+      </span>
+      {compact ? (
+        <span className="w-full truncate text-center text-[9px] font-medium leading-tight">
+          {shortLabel}
+        </span>
+      ) : (
         <>
-          <span className="min-w-0 flex-1 truncate">{label}</span>
+          <span className="min-w-0 flex-1 truncate text-[length:var(--text-nav)] font-medium leading-[var(--leading-tight)]">
+            {label}
+          </span>
           {item.badge ? (
             <span
               className={cn(
-                'shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold',
+                'shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-semibold leading-none',
                 isActive
                   ? 'bg-white/20 text-white'
                   : 'bg-[var(--shell-badge)] text-[var(--shell-badge-text)]',
               )}
             >
-              {item.badge}
+              {item.badge > 99 ? '99+' : item.badge}
             </span>
           ) : null}
         </>
-      ) : item.badge ? (
-        <span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-[var(--shell-badge)]" />
-      ) : null}
+      )}
     </Link>
   );
 }
