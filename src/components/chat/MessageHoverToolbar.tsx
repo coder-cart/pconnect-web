@@ -33,6 +33,30 @@ interface MessageHoverToolbarProps {
   className?: string;
 }
 
+type ToolbarPlacement = 'straddle' | 'inside';
+
+function findChatScroller(from: HTMLElement | null): HTMLElement | null {
+  if (!from) return null;
+  const virtuoso = from.closest(
+    '[data-virtuoso-scroller]',
+  ) as HTMLElement | null;
+  if (virtuoso) return virtuoso;
+  let node: HTMLElement | null = from.parentElement;
+  while (node) {
+    const style = window.getComputedStyle(node);
+    const overflowY = style.overflowY;
+    if (
+      overflowY === 'auto' ||
+      overflowY === 'scroll' ||
+      overflowY === 'overlay'
+    ) {
+      return node;
+    }
+    node = node.parentElement;
+  }
+  return null;
+}
+
 export function MessageHoverToolbar({
   onReply,
   onReact,
@@ -48,6 +72,7 @@ export function MessageHoverToolbar({
 }: MessageHoverToolbarProps) {
   const [pickerOpen, setPickerOpen] = useState(false);
   const [pickerPos, setPickerPos] = useState({ left: 0, top: 0 });
+  const [placement, setPlacement] = useState<ToolbarPlacement>('straddle');
   const rootRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const moreRef = useRef<HTMLButtonElement>(null);
@@ -56,6 +81,37 @@ export function MessageHoverToolbar({
   useEffect(() => {
     onOpenChange?.(pickerOpen);
   }, [pickerOpen, onOpenChange]);
+
+  // Slack straddle (-translate-y-1/2) clips against the chat scroller near the
+  // top edge — fall back to an in-row placement there only.
+  useLayoutEffect(() => {
+    const toolbar = rootRef.current;
+    if (!toolbar) return;
+
+    const updatePlacement = () => {
+      const row = toolbar.closest('.chat-message-row') as HTMLElement | null;
+      const scroller = findChatScroller(toolbar);
+      if (!row || !scroller) {
+        setPlacement('straddle');
+        return;
+      }
+      const rowRect = row.getBoundingClientRect();
+      const scrollerRect = scroller.getBoundingClientRect();
+      const toolbarHeight = toolbar.offsetHeight || 32;
+      const wouldClipTop =
+        rowRect.top - toolbarHeight / 2 < scrollerRect.top + 2;
+      setPlacement(wouldClipTop ? 'inside' : 'straddle');
+    };
+
+    updatePlacement();
+    const scroller = findChatScroller(toolbar);
+    scroller?.addEventListener('scroll', updatePlacement, { passive: true });
+    window.addEventListener('resize', updatePlacement);
+    return () => {
+      scroller?.removeEventListener('scroll', updatePlacement);
+      window.removeEventListener('resize', updatePlacement);
+    };
+  }, []);
 
   useLayoutEffect(() => {
     if (!pickerOpen || !triggerRef.current || !pickerRef.current) return;
@@ -120,8 +176,9 @@ export function MessageHoverToolbar({
       role="toolbar"
       aria-label="Message actions"
       className={cn(
-        // Slack-style: straddle the message top edge (half above / half on).
-        'absolute right-1 top-0 z-20 flex -translate-y-1/2 items-center gap-0.5 rounded-full border border-[var(--border)] bg-[var(--surface)] px-1 py-0.5 shadow-[0_2px_10px_rgba(15,23,42,0.12)]',
+        'absolute right-1 z-20 flex items-center gap-0.5 rounded-full border border-[var(--border)] bg-[var(--surface)] px-1 py-0.5 shadow-[0_2px_10px_rgba(15,23,42,0.12)]',
+        // Slack straddle by default; near scrollport top stay inside the row.
+        placement === 'straddle' ? 'top-0 -translate-y-1/2' : 'top-1',
         className,
       )}
       onMouseDown={(event) => {

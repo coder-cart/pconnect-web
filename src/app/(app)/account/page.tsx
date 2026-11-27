@@ -1,11 +1,10 @@
 'use client';
 
-import { FormEvent, useEffect, useMemo, useState } from 'react';
+import { FormEvent, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { Card } from '@/components/ui/Card';
 import { Input } from '@/components/ui/Input';
-import { Select } from '@/components/ui/Select';
 import { Button } from '@/components/ui/Button';
 import { ListSkeleton } from '@/components/ui/Skeleton';
 import { ErrorState } from '@/components/ui/StatePanels';
@@ -16,9 +15,8 @@ import { apiRequest, apiUpload } from '@/lib/api-client';
 import { ApiResponse } from '@/lib/auth';
 import { useWorkspace } from '@/components/providers/WorkspaceProvider';
 import { useNotifications } from '@/components/providers/NotificationProvider';
-import { getBrowserTimeZone } from '@/lib/formatMessageDate';
 import { getRoleLabel } from '@/lib/navigation';
-import { formatTimeZoneLabel, listTimeZoneOptions } from '@/lib/timezones';
+import { TimeZoneSelect } from '@/components/ui/TimeZoneSelect';
 import {
   isNotificationSoundMuted,
   setNotificationSoundMuted,
@@ -70,20 +68,6 @@ export default function AccountProfilePage() {
 
   const roleLabel = getRoleLabel(user.userType, user.roleCodes);
   const isExternal = user.userType === 'external';
-  const deviceTimeZone = useMemo(() => getBrowserTimeZone(), []);
-  const timeZoneOptions = useMemo(() => {
-    const zones = listTimeZoneOptions();
-    return [
-      {
-        value: '',
-        label: `Use device timezone (${formatTimeZoneLabel(deviceTimeZone)})`,
-      },
-      ...zones.map((zone) => ({
-        value: zone,
-        label: formatTimeZoneLabel(zone),
-      })),
-    ];
-  }, [deviceTimeZone]);
 
   useEffect(() => {
     setSoundMuted(isNotificationSoundMuted());
@@ -424,12 +408,12 @@ export default function AccountProfilePage() {
               onChange={(event) => setJobTitle(event.target.value)}
               maxLength={80}
             />
-            <Select
+            <TimeZoneSelect
               label="Time zone"
               name="timeZone"
               value={timeZone}
-              onChange={(event) => setTimeZone(event.target.value)}
-              options={timeZoneOptions}
+              allowEmpty
+              onChange={setTimeZone}
             />
             <p className="text-xs text-[var(--muted)]">
               Chat timestamps use this zone. Leave on device timezone to follow

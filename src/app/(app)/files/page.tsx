@@ -69,13 +69,18 @@ export default function FilesPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isUploading, setIsUploading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [page, setPage] = useState(1);
+  const [totalFiles, setTotalFiles] = useState(0);
+  const [totalPages, setTotalPages] = useState(1);
+  const pageSize = 25;
 
   function buildFilesQuery() {
     const params = new URLSearchParams();
+    params.set('page', String(page));
+    params.set('pageSize', String(pageSize));
     if (filterProjectId) params.set('projectId', filterProjectId);
     if (filterVisibilityScope) params.set('visibilityScope', filterVisibilityScope);
-    const query = params.toString();
-    return query ? `/files?${query}` : '/files';
+    return `/files?${params.toString()}`;
   }
 
   function loadFiles() {
@@ -83,11 +88,21 @@ export default function FilesPage() {
     setErrorMessage(null);
 
     Promise.all([
-      apiRequest<ApiResponse<FileRecord[]>>(buildFilesQuery()),
+      apiRequest<
+        ApiResponse<{
+          items: FileRecord[];
+          page: number;
+          pageSize: number;
+          total: number;
+          totalPages: number;
+        }>
+      >(buildFilesQuery()),
       apiRequest<ApiResponse<ProjectOption[]>>('/projects'),
     ])
       .then(([filesResponse, projectsResponse]) => {
-        setFiles(filesResponse.data);
+        setFiles(filesResponse.data.items);
+        setTotalFiles(filesResponse.data.total);
+        setTotalPages(filesResponse.data.totalPages);
         setProjects(projectsResponse.data);
         if (!projectId && projectsResponse.data[0]) {
           setProjectId(projectsResponse.data[0].id);
@@ -98,8 +113,12 @@ export default function FilesPage() {
   }
 
   useEffect(() => {
+    setPage(1);
+  }, [filterProjectId, filterVisibilityScope]);
+
+  useEffect(() => {
     loadFiles();
-  }, [refreshKey, filterProjectId, filterVisibilityScope]);
+  }, [refreshKey, filterProjectId, filterVisibilityScope, page]);
 
   async function handleUpload(selectedFile: File) {
     const formData = new FormData();
@@ -149,8 +168,10 @@ export default function FilesPage() {
     }
   }
 
-  const internalCount = files.filter((f) => f.visibilityScope === 'internal').length;
-  const sharedCount = files.filter(
+  const internalOnPage = files.filter(
+    (f) => f.visibilityScope === 'internal',
+  ).length;
+  const sharedOnPage = files.filter(
     (f) => f.visibilityScope === 'shared_with_client',
   ).length;
 
@@ -249,9 +270,9 @@ export default function FilesPage() {
 
       <div className="grid gap-4 md:grid-cols-3">
         {[
-          { label: 'Internal files', count: internalCount },
-          { label: 'Shared with client', count: sharedCount },
-          { label: 'Total files', count: files.length },
+          { label: 'Internal on this page', count: internalOnPage },
+          { label: 'Shared on this page', count: sharedOnPage },
+          { label: 'Total matching files', count: totalFiles },
         ].map((entry) => (
           <Card key={entry.label}>
             <div className="flex h-10 w-10 items-center justify-center rounded-[var(--radius-md)] bg-[var(--primary-soft)] text-[var(--primary)]">
@@ -439,6 +460,34 @@ export default function FilesPage() {
           </div>
         </Card>
       )}
+
+      {!isLoading && totalFiles > 0 ? (
+        <div className="flex items-center justify-between gap-3">
+          <p className="text-sm text-[var(--muted)]">
+            Page {page} of {totalPages} · {totalFiles} files
+          </p>
+          <div className="flex gap-2">
+            <Button
+              size="sm"
+              variant="secondary"
+              disabled={page <= 1}
+              onClick={() => setPage((current) => Math.max(1, current - 1))}
+            >
+              Previous
+            </Button>
+            <Button
+              size="sm"
+              variant="secondary"
+              disabled={page >= totalPages}
+              onClick={() =>
+                setPage((current) => Math.min(totalPages, current + 1))
+              }
+            >
+              Next
+            </Button>
+          </div>
+        </div>
+      ) : null}
 
       <ShareFileModal
         open={Boolean(shareFile)}

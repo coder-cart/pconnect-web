@@ -21,6 +21,7 @@ const PUBLIC_PATHS = [
   '/security',
   '/privacy',
   '/terms',
+  '/offer',
   '/health',
   '/sw.js',
   '/manifest.webmanifest',

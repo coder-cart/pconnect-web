@@ -35,6 +35,7 @@ import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { Input } from '@/components/ui/Input';
 import { Select } from '@/components/ui/Select';
+import { TimeZoneSelect } from '@/components/ui/TimeZoneSelect';
 import { Tabs } from '@/components/ui/Tabs';
 import { StatCard } from '@/components/ui/StatCard';
 import { LoadingState, ErrorState, EmptyState } from '@/components/ui/StatePanels';
@@ -1584,7 +1585,6 @@ export default function ClientDetailPage() {
                   ['phone', 'Phone'],
                   ['whatsapp', 'WhatsApp'],
                   ['country', 'Country'],
-                  ['timeZone', 'Time zone'],
                   ['currency', 'Currency'],
                   ['paymentTerms', 'Payment terms'],
                   ['defaultPriority', 'Default priority'],
@@ -1610,6 +1610,20 @@ export default function ClientDetailPage() {
                   }
                 />
               ))}
+              <TimeZoneSelect
+                label="Time zone"
+                name="clientSettingsTimeZone"
+                value={settingsForm.timeZone ?? ''}
+                disabled={!canManage}
+                allowEmpty
+                emptyLabel="Select a time zone"
+                onChange={(timeZone) =>
+                  setSettingsForm((prev) => ({
+                    ...prev,
+                    timeZone,
+                  }))
+                }
+              />
             </div>
             {canManage ? (
               <div className="mt-4">

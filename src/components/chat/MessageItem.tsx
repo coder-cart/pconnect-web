@@ -253,6 +253,7 @@ function MessageItemComponent({
     >
       <div
         id={`message-${message.id}`}
+        data-toolbar-open={showToolbar ? 'true' : undefined}
         className={cn(
           'chat-message-row group relative flex gap-2.5 rounded-[var(--radius-md)] transition-colors hover:bg-[var(--surface-muted)]',
           isActive && 'bg-[var(--surface-muted)]',

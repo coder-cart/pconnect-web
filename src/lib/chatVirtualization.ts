@@ -23,3 +23,54 @@ export function nextFirstItemIndexAfterPrepend(
   }
   return currentFirstItemIndex - (nextLength - previousLength);
 }
+
+/**
+ * When oldest messages are dropped from the front (page-window retention),
+ * increase `firstItemIndex` by the removed count so absolute indexes of
+ * remaining rows stay aligned with the viewport.
+ */
+export function nextFirstItemIndexAfterFrontEvict(
+  currentFirstItemIndex: number,
+  removedCount: number,
+): number {
+  if (removedCount <= 0) {
+    return currentFirstItemIndex;
+  }
+  return currentFirstItemIndex + removedCount;
+}
+
+/**
+ * Detect a contiguous front shrink (head id changed and length fell) and return
+ * the next firstItemIndex. Mid-list deletes (same head) do not shift.
+ */
+export function nextFirstItemIndexAfterMessagesChange(
+  currentFirstItemIndex: number,
+  previousLength: number,
+  nextLength: number,
+  previousFirstId: string | null | undefined,
+  nextFirstId: string | null | undefined,
+): number {
+  if (nextLength > previousLength) {
+    return nextFirstItemIndexAfterPrepend(
+      currentFirstItemIndex,
+      previousLength,
+      nextLength,
+      previousFirstId,
+      nextFirstId,
+    );
+  }
+
+  if (
+    nextLength < previousLength &&
+    previousFirstId &&
+    nextFirstId &&
+    previousFirstId !== nextFirstId
+  ) {
+    return nextFirstItemIndexAfterFrontEvict(
+      currentFirstItemIndex,
+      previousLength - nextLength,
+    );
+  }
+
+  return currentFirstItemIndex;
+}

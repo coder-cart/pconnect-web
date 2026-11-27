@@ -51,15 +51,28 @@ export function OrderFilesPanel({
   const [linkTitle, setLinkTitle] = useState('');
   const [busy, setBusy] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [totalMatching, setTotalMatching] = useState(0);
 
   function load() {
     setIsLoading(true);
-    const roleQuery =
-      roleFilter === 'all' ? '' : `&orderFileRole=${roleFilter}`;
-    apiRequest<ApiResponse<OrderFileItem[]>>(
-      `/files?orderId=${orderId}${roleQuery}`,
-    )
-      .then((response) => setFiles(response.data))
+    const params = new URLSearchParams({
+      orderId,
+      page: '1',
+      pageSize: '100',
+    });
+    if (roleFilter !== 'all') {
+      params.set('orderFileRole', roleFilter);
+    }
+    apiRequest<
+      ApiResponse<{
+        items: OrderFileItem[];
+        total: number;
+      }>
+    >(`/files?${params.toString()}`)
+      .then((response) => {
+        setFiles(response.data.items);
+        setTotalMatching(response.data.total);
+      })
       .catch((error: Error) => setErrorMessage(error.message))
       .finally(() => setIsLoading(false));
   }
@@ -144,6 +157,11 @@ export function OrderFilesPanel({
               ? 'Shared input and reference files, plus your output uploads only.'
               : 'Upload files or paste OneDrive / Google Drive links for this order.'}
           </p>
+          {totalMatching > files.length ? (
+            <p className="mt-1 text-xs text-[var(--muted)]">
+              Showing {files.length} of {totalMatching} files for this order.
+            </p>
+          ) : null}
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <select

@@ -14,6 +14,7 @@
     "lint": "eslint",
     "test:paste": "tsx --test src/lib/chatPaste.pipeline.test.ts",
     "test:chat-thread-pagination": "tsx --test src/lib/chat-thread-pagination.test.ts",
+    "test:chat-retention": "tsx --test src/lib/messageWindowRetention.test.ts src/lib/chatVirtualization.test.ts",
     "test:chat-perf": "node scripts/chat-perf-harness.mjs"
   },
   "dependencies": {

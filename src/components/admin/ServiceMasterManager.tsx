@@ -20,11 +20,14 @@ interface ServiceMasterItem {
   code: string;
   category?: string | null;
   description?: string | null;
+  publicDescription?: string | null;
   defaultPrice?: string | number | null;
   artistRatePerImage?: string | number | null;
   defaultUnit: string;
   estimatedTatHours?: number | null;
   isActive: boolean;
+  isPublicEligible?: boolean;
+  isQuoteOnly?: boolean;
   createdAt?: string;
   updatedAt?: string;
 }
@@ -34,11 +37,14 @@ interface ServiceFormState {
   code: string;
   category: string;
   description: string;
+  publicDescription: string;
   defaultUnit: string;
   defaultPrice: string;
   artistRatePerImage: string;
   estimatedTatHours: string;
   isActive: boolean;
+  isPublicEligible: boolean;
+  isQuoteOnly: boolean;
 }
 
 const EMPTY_FORM: ServiceFormState = {
@@ -46,11 +52,14 @@ const EMPTY_FORM: ServiceFormState = {
   code: '',
   category: '',
   description: '',
+  publicDescription: '',
   defaultUnit: 'Per Image',
   defaultPrice: '',
   artistRatePerImage: '',
   estimatedTatHours: '',
   isActive: true,
+  isPublicEligible: false,
+  isQuoteOnly: false,
 };
 
 function formatEta(hours?: number | null) {
@@ -110,6 +119,7 @@ export function ServiceMasterManager() {
       code: service.code,
       category: service.category ?? '',
       description: service.description ?? '',
+      publicDescription: service.publicDescription ?? '',
       defaultUnit: service.defaultUnit ?? 'Per Image',
       defaultPrice:
         service.defaultPrice != null ? String(service.defaultPrice) : '',
@@ -122,6 +132,8 @@ export function ServiceMasterManager() {
           ? String(service.estimatedTatHours)
           : '',
       isActive: service.isActive,
+      isPublicEligible: Boolean(service.isPublicEligible),
+      isQuoteOnly: Boolean(service.isQuoteOnly),
     });
     setFormError(null);
     setModalOpen(true);
@@ -140,6 +152,7 @@ export function ServiceMasterManager() {
       code: form.code.trim().toUpperCase(),
       category: form.category.trim() || undefined,
       description: form.description.trim() || undefined,
+      publicDescription: form.publicDescription.trim() || undefined,
       defaultUnit: form.defaultUnit.trim() || 'Per Image',
       ...(canViewFinance
         ? {
@@ -155,6 +168,8 @@ export function ServiceMasterManager() {
         ? Number(form.estimatedTatHours)
         : undefined,
       isActive: form.isActive,
+      isPublicEligible: form.isPublicEligible,
+      isQuoteOnly: form.isQuoteOnly,
     };
 
     try {
@@ -402,6 +417,45 @@ export function ServiceMasterManager() {
             }
             placeholder="Short description of the service"
           />
+          <Input
+            label="Public description"
+            value={form.publicDescription}
+            onChange={(event) =>
+              setForm((prev) => ({
+                ...prev,
+                publicDescription: event.target.value,
+              }))
+            }
+            placeholder="Shown on public offer pages"
+          />
+          <div className="flex flex-wrap gap-4 text-sm">
+            <label className="inline-flex items-center gap-2">
+              <input
+                type="checkbox"
+                checked={form.isPublicEligible}
+                onChange={(event) =>
+                  setForm((prev) => ({
+                    ...prev,
+                    isPublicEligible: event.target.checked,
+                  }))
+                }
+              />
+              Public offer eligible
+            </label>
+            <label className="inline-flex items-center gap-2">
+              <input
+                type="checkbox"
+                checked={form.isQuoteOnly}
+                onChange={(event) =>
+                  setForm((prev) => ({
+                    ...prev,
+                    isQuoteOnly: event.target.checked,
+                  }))
+                }
+              />
+              Quote only
+            </label>
+          </div>
 
           <div className="grid gap-3 md:grid-cols-3">
             {canViewFinance ? (

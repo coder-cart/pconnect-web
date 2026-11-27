@@ -28,7 +28,7 @@ import { useViewerTimeZone } from '@/hooks/useViewerTimeZone';
 import { cn } from '@/lib/cn';
 import {
   CHAT_VIRTUOSO_START_INDEX,
-  nextFirstItemIndexAfterPrepend,
+  nextFirstItemIndexAfterMessagesChange,
 } from '@/lib/chatVirtualization';
 
 const NEAR_BOTTOM_THRESHOLD = 96;
@@ -54,6 +54,11 @@ interface MessageListProps {
     scrollTop: number;
     distanceFromBottom: number;
     nearBottom: boolean;
+  }) => void;
+  /** Visible data-index window for page-window retention (Option C). */
+  onVisibleRangeChange?: (range: {
+    startDataIndex: number;
+    endDataIndex: number;
   }) => void;
   onReachTop?: () => void;
   hasMoreMessages?: boolean;
@@ -98,6 +103,7 @@ export function MessageList({
   scrollKey = null,
   restoreOnKeyChange = null,
   onScrollPosition,
+  onVisibleRangeChange,
   onReachTop,
   hasMoreMessages = false,
   isLoadingOlderMessages = false,
@@ -116,10 +122,12 @@ export function MessageList({
   const virtuosoRef = useRef<VirtuosoHandle>(null);
   const scrollerElRef = useRef<HTMLElement | null>(null);
   const isNearBottomRef = useRef(true);
+  const firstItemIndexRef = useRef(CHAT_VIRTUOSO_START_INDEX);
   const [showJumpToLatest, setShowJumpToLatest] = useState(false);
   const [firstItemIndex, setFirstItemIndex] = useState(
     CHAT_VIRTUOSO_START_INDEX,
   );
+  firstItemIndexRef.current = firstItemIndex;
 
   const handlersRef = useRef({
     onReply,
@@ -133,6 +141,7 @@ export function MessageList({
     onMarkUnread,
     onReachTop,
     onScrollPosition,
+    onVisibleRangeChange,
   });
   handlersRef.current = {
     onReply,
@@ -146,6 +155,7 @@ export function MessageList({
     onMarkUnread,
     onReachTop,
     onScrollPosition,
+    onVisibleRangeChange,
   };
 
   const stableOnReply = useCallback((messageId: string) => {
@@ -207,7 +217,7 @@ export function MessageList({
     }
 
     setFirstItemIndex((current) =>
-      nextFirstItemIndexAfterPrepend(
+      nextFirstItemIndexAfterMessagesChange(
         current,
         prev.length,
         length,
@@ -355,6 +365,20 @@ export function MessageList({
           setShowJumpToLatest((current) => {
             const next = !atBottom;
             return current === next ? current : next;
+          });
+        }}
+        rangeChanged={(range) => {
+          const startDataIndex = Math.max(
+            0,
+            range.startIndex - firstItemIndexRef.current,
+          );
+          const endDataIndex = Math.max(
+            startDataIndex,
+            range.endIndex - firstItemIndexRef.current,
+          );
+          handlersRef.current.onVisibleRangeChange?.({
+            startDataIndex,
+            endDataIndex,
           });
         }}
         scrollerRef={(ref) => {

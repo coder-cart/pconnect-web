@@ -1,0 +1,171 @@
+.photophile-offer-root {
+  --ph-ink: #0b0c10;
+  --ph-ink-soft: #151821;
+  --ph-surface: #1a1d27;
+  --ph-panel: #222633;
+  --ph-line: rgba(255, 255, 255, 0.1);
+  --ph-text: #f4f5f8;
+  --ph-muted: #9aa3b5;
+  --ph-accent: #4154b3;
+  --ph-accent-bright: #5b6fd4;
+  --ph-accent-deep: #2f3d8f;
+  --ph-success: #3ecf8e;
+  --ph-sans: "Segoe UI", "Avenir Next", Candara, Calibri, sans-serif;
+  background:
+    radial-gradient(900px 420px at 85% -10%, rgba(65, 84, 179, 0.28), transparent 60%),
+    radial-gradient(700px 360px at 0% 20%, rgba(65, 84, 179, 0.12), transparent 55%),
+    linear-gradient(180deg, #0b0c10 0%, #12141c 55%, #0b0c10 100%);
+  color: var(--ph-text);
+  font-family: var(--ph-sans);
+}
+
+.photophile-offer-root h1,
+.photophile-offer-root h2,
+.photophile-offer-root h3 {
+  font-family: var(--ph-sans);
+  letter-spacing: -0.02em;
+  color: var(--ph-text);
+}
+
+@keyframes ph-fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes ph-accent-glow {
+  0%,
+  100% {
+    opacity: 0.45;
+  }
+  50% {
+    opacity: 0.85;
+  }
+}
+
+.ph-animate-in {
+  animation: ph-fade-up 0.65s ease both;
+}
+
+.ph-animate-in-delay {
+  animation: ph-fade-up 0.75s ease 0.1s both;
+}
+
+.ph-glow {
+  animation: ph-accent-glow 5s ease-in-out infinite;
+}
+
+.ph-logo {
+  display: block;
+  height: 44px;
+  width: auto;
+  max-width: min(280px, 70vw);
+  object-fit: contain;
+}
+
+.ph-logo-lg {
+  height: 56px;
+  max-width: min(340px, 80vw);
+}
+
+.ph-btn-primary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  background: var(--ph-accent);
+  padding: 0.75rem 1.25rem;
+  font-size: 0.875rem;
+  font-weight: 650;
+  color: #fff;
+  text-decoration: none;
+  border: 0;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.ph-btn-primary:hover {
+  background: var(--ph-accent-bright);
+}
+
+.ph-btn-primary:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.ph-btn-secondary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  border: 1px solid var(--ph-line);
+  background: rgba(255, 255, 255, 0.03);
+  padding: 0.75rem 1.25rem;
+  font-size: 0.875rem;
+  font-weight: 650;
+  color: var(--ph-text);
+  text-decoration: none;
+}
+
+.ph-field {
+  width: 100%;
+  border-radius: 8px;
+  border: 1px solid var(--ph-line);
+  background: #0f1118;
+  color: var(--ph-text);
+  padding: 0.625rem 0.75rem;
+  margin-top: 0.35rem;
+}
+
+.ph-field:focus {
+  outline: 2px solid rgba(65, 84, 179, 0.45);
+  border-color: var(--ph-accent);
+}
+
+.ph-card {
+  border-radius: 14px;
+  border: 1px solid var(--ph-line);
+  background: linear-gradient(180deg, rgba(34, 38, 51, 0.95), rgba(22, 25, 35, 0.95));
+}
+
+/* Light form surface so shared Colabdeck controls (ServiceMultiSelect) match workspace */
+.ph-order-form-surface {
+  --border: #e5e7eb;
+  --surface: #ffffff;
+  --surface-muted: #f3f4f6;
+  --foreground: #111827;
+  --muted: #6b7280;
+  --primary: #4154b3;
+  --primary-soft: rgba(65, 84, 179, 0.14);
+  --radius-md: 0.5rem;
+  --shadow-md: 0 12px 32px rgba(0, 0, 0, 0.16);
+  color: var(--foreground);
+}
+
+@media (max-width: 639px) {
+  .ph-btn-primary,
+  .ph-btn-secondary {
+    width: 100%;
+  }
+
+  .ph-hero-actions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .ph-catalogue-card {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+
+  .ph-catalogue-card-title {
+    line-height: 1.35;
+    word-break: break-word;
+  }
+}

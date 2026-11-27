@@ -14,6 +14,7 @@ import { ServiceMasterManager } from '@/components/admin/ServiceMasterManager';
 import { OrderImportPanel } from '@/components/admin/OrderImportPanel';
 import { WorkspaceBrandingCard } from '@/components/admin/WorkspaceBrandingCard';
 import { PlatformAnnouncementsManager } from '@/components/admin/PlatformAnnouncementsManager';
+import { CampaignsManager } from '@/components/admin/CampaignsManager';
 import { useWorkspace } from '@/components/providers/WorkspaceProvider';
 import { RestrictedState } from '@/components/ui/StatePanels';
 
@@ -110,6 +111,9 @@ export default function AdminPage() {
           ...(canManageAnnouncements
             ? [{ id: 'announcements', label: 'Announcements' }]
             : []),
+          ...(canManageUsers || canManageAnnouncements
+            ? [{ id: 'offers', label: 'Offers & Campaigns' }]
+            : []),
           ...(canManageMasterData
             ? [
                 { id: 'service-master', label: 'Service Master' },
@@ -126,6 +130,10 @@ export default function AdminPage() {
 
       {activeTab === 'announcements' && canManageAnnouncements ? (
         <PlatformAnnouncementsManager />
+      ) : null}
+
+      {activeTab === 'offers' && (canManageUsers || canManageAnnouncements) ? (
+        <CampaignsManager />
       ) : null}
 
       {activeTab === 'service-master' && canManageMasterData ? (

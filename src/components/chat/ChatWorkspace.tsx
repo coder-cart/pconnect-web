@@ -36,6 +36,10 @@ import {
   getChannelLabel,
   PendingChannelInvite,
 } from '@/lib/chat-types';
+import {
+  CHANNEL_MESSAGE_MAX_RETAINED,
+  retainChannelMessageWindow,
+} from '@/lib/messageWindowRetention';
 import type { ChatScrollRestore } from '@/hooks/useChatScroll';
 import { useChatKeyboardViewport } from '@/hooks/useChatKeyboardViewport';
 import { Button } from '@/components/ui/Button';
@@ -235,6 +239,9 @@ export function ChatWorkspace({
   const loadingOlderRef = useRef(false);
   const hasMoreMessagesRef = useRef(false);
   const messagesRef = useRef<ChatMessage[]>([]);
+  const visibleRangeRef = useRef({ startDataIndex: 0, endDataIndex: 0 });
+  const highlightMessageIdRef = useRef<string | null>(null);
+  const pendingDeleteMessageIdRef = useRef<string | null>(null);
   const initialMessageIdRef = useRef(initialMessageId);
   initialMessageIdRef.current = initialMessageId;
   const chatPaneRef = useChatKeyboardViewport(true);
@@ -508,6 +515,52 @@ export function ChatWorkspace({
   useEffect(() => {
     threadMessageIdRef.current = threadMessageId;
   }, [threadMessageId]);
+
+  useEffect(() => {
+    highlightMessageIdRef.current = highlightMessageId;
+  }, [highlightMessageId]);
+
+  useEffect(() => {
+    pendingDeleteMessageIdRef.current = pendingDeleteMessageId;
+  }, [pendingDeleteMessageId]);
+
+  const applyChannelMessageRetention = useCallback(() => {
+    if (loadingOlderRef.current) {
+      return;
+    }
+
+    setMessages((current) => {
+      const result = retainChannelMessageWindow({
+        messages: current,
+        startDataIndex: visibleRangeRef.current.startDataIndex,
+        suspend: loadingOlderRef.current,
+        protectedIds: [
+          highlightMessageIdRef.current,
+          threadMessageIdRef.current,
+          pendingDeleteMessageIdRef.current,
+          initialMessageIdRef.current,
+        ],
+      });
+      if (result.removedCount <= 0) {
+        return current;
+      }
+      hasMoreMessagesRef.current = true;
+      queueMicrotask(() => {
+        setHasMoreMessages(true);
+      });
+      return result.messages;
+    });
+  }, []);
+
+  const handleVisibleRangeChange = useCallback(
+    (range: { startDataIndex: number; endDataIndex: number }) => {
+      visibleRangeRef.current = range;
+      if (messagesRef.current.length > CHANNEL_MESSAGE_MAX_RETAINED) {
+        applyChannelMessageRetention();
+      }
+    },
+    [applyChannelMessageRetention],
+  );
 
   useEffect(() => {
     return subscribeMessageCreated(({ channelId, message }) => {
@@ -828,6 +881,12 @@ export function ChatWorkspace({
     [],
   );
 
+  useEffect(() => {
+    if (messages.length > CHANNEL_MESSAGE_MAX_RETAINED) {
+      applyChannelMessageRetention();
+    }
+  }, [messages.length, applyChannelMessageRetention]);
+
   const handleLoadOlderMessages = useCallback(async () => {
     const channelId = selectedChannelIdRef.current;
     if (
@@ -863,14 +922,10 @@ export function ChatWorkspace({
         return;
       }
       setMessages((current) => {
-        const merged = [...page.items];
-        for (const message of current) {
-          if (!merged.some((existing) => existing.id === message.id)) {
-            merged.push(message);
-          }
-        }
+        const merged = prependOlderMessagePage(page.items, current);
         return merged;
       });
+      // Retention runs after the user leaves the head (range callback / length effect).
     } catch (error) {
       if (selectedChannelIdRef.current === channelId) {
         setErrorMessage(
@@ -1886,6 +1941,7 @@ export function ChatWorkspace({
               scrollKey={activeScrollKey}
               restoreOnKeyChange={restoreOnKeyChange}
               onScrollPosition={handleScrollPosition}
+              onVisibleRangeChange={handleVisibleRangeChange}
               onReachTop={() => {
                 void handleLoadOlderMessages();
               }}

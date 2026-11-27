@@ -55,6 +55,8 @@ interface OrderFilters {
   clientOrganizationId: string;
   priority: string;
   overdueOnly: boolean;
+  /** PUBLIC_CAMPAIGN only */
+  campaignOrdersOnly: boolean;
 }
 
 const EMPTY_FILTERS: OrderFilters = {
@@ -64,6 +66,7 @@ const EMPTY_FILTERS: OrderFilters = {
   clientOrganizationId: '',
   priority: '',
   overdueOnly: false,
+  campaignOrdersOnly: false,
 };
 
 type OrderLayoutMode = 'list' | 'board';
@@ -75,7 +78,8 @@ function countActiveFilters(filters: OrderFilters): number {
     Number(Boolean(filters.lifecycleStage)) +
     Number(Boolean(filters.clientOrganizationId)) +
     Number(Boolean(filters.priority)) +
-    Number(filters.overdueOnly)
+    Number(filters.overdueOnly) +
+    Number(filters.campaignOrdersOnly)
   );
 }
 
@@ -220,6 +224,9 @@ export default function OrdersPage() {
     }
     if (appliedFilters.priority) params.set('priority', appliedFilters.priority);
     if (appliedFilters.overdueOnly) params.set('overdueOnly', 'true');
+    if (appliedFilters.campaignOrdersOnly) {
+      params.set('orderSource', 'PUBLIC_CAMPAIGN');
+    }
     if (appliedFilters.dueAfter) params.set('dueAfter', appliedFilters.dueAfter);
     if (appliedFilters.dueBefore) params.set('dueBefore', appliedFilters.dueBefore);
     if (isAssignedView) params.set('assignedToMe', 'true');
@@ -730,6 +737,21 @@ export default function OrdersPage() {
               />
               Overdue only
             </label>
+            {!isExternal ? (
+              <label className="flex items-end gap-2 pb-1 text-sm">
+                <input
+                  type="checkbox"
+                  checked={Boolean(draftFilters.campaignOrdersOnly)}
+                  onChange={(event) =>
+                    setDraftFilters((current) => ({
+                      ...current,
+                      campaignOrdersOnly: event.target.checked,
+                    }))
+                  }
+                />
+                Campaign orders only
+              </label>
+            ) : null}
           </div>
           <div className="flex flex-wrap gap-2">
             <Button

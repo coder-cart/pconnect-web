@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { Modal } from '@/components/ui/Modal';
 import { Input } from '@/components/ui/Input';
 import { Button } from '@/components/ui/Button';
+import { TimeZoneSelect } from '@/components/ui/TimeZoneSelect';
 import { apiRequest } from '@/lib/api-client';
 import { ApiResponse, userHasAnyPermission } from '@/lib/auth';
 import { useWorkspace } from '@/components/providers/WorkspaceProvider';
@@ -404,16 +405,18 @@ export function CreateClientWizard({
                 setGeneral((prev) => ({ ...prev, country: event.target.value }))
               }
             />
-            <Input
+            <TimeZoneSelect
               label="Time zone"
+              name="clientTimeZone"
               value={general.timeZone}
-              onChange={(event) =>
+              allowEmpty
+              emptyLabel="Select a time zone"
+              onChange={(timeZone) =>
                 setGeneral((prev) => ({
                   ...prev,
-                  timeZone: event.target.value,
+                  timeZone,
                 }))
               }
-              placeholder="Asia/Kolkata"
             />
             <label className="block space-y-1.5">
               <span className="text-sm font-medium text-[var(--foreground)]">

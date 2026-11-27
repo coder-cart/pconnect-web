@@ -107,6 +107,19 @@ export function OrdersTable({
                       size="sm"
                     />
                     <Badge variant="primary">{order.outputFormat ?? 'JPG'}</Badge>
+                    {order.orderSource === 'PUBLIC_CAMPAIGN' ? (
+                      <Badge variant="warning">Campaign</Badge>
+                    ) : null}
+                    {order.orderSource === 'PUBLIC_CAMPAIGN' &&
+                    !order.clientOrganizationId ? (
+                      <Badge variant="neutral">External</Badge>
+                    ) : null}
+                    {order.campaignNeedsReview ? (
+                      <Badge variant="danger">Needs review</Badge>
+                    ) : null}
+                    {order.coupon?.code ? (
+                      <Badge variant="primary">{order.coupon.code}</Badge>
+                    ) : null}
                     <Badge
                       variant={orderPriorityVariant(order.priority)}
                       className="capitalize"
@@ -233,10 +246,23 @@ export function OrdersTable({
                       </Link>
                     )}
                     <p className="text-xs text-[var(--muted)]">{order.code}</p>
+                    <div className="mt-1 flex flex-wrap gap-1">
+                      {order.orderSource === 'PUBLIC_CAMPAIGN' ? (
+                        <Badge variant="warning">Campaign</Badge>
+                      ) : null}
+                      {order.orderSource === 'PUBLIC_CAMPAIGN' &&
+                      !order.clientOrganizationId ? (
+                        <Badge variant="neutral">External</Badge>
+                      ) : null}
+                      {order.campaignNeedsReview ? (
+                        <Badge variant="danger">Needs review</Badge>
+                      ) : null}
+                    </div>
                   </td>
                   {showClient ? (
                     <td className="px-4 py-3 text-[var(--muted)]">
-                      {order.clientOrganization?.name ?? '—'}
+                      {order.clientOrganization?.name ??
+                        (order.guestEmail ? `Guest · ${order.guestEmail}` : '—')}
                     </td>
                   ) : null}
                   <td className="px-4 py-3">

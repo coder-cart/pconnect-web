@@ -51,7 +51,7 @@ interface ChannelSidebarProps {
 }
 
 function ChannelIcon({ type }: { type: string }) {
-  const className = 'h-4 w-4 shrink-0';
+  const className = 'h-[15px] w-[15px] shrink-0';
   switch (type) {
     case 'private':
     case 'client_shared':
@@ -167,16 +167,16 @@ function ChannelButton({
     >
       <div
         className={cn(
-          'group flex min-h-9 w-full min-w-0 items-center gap-0.5 rounded-[var(--radius-md)] transition-colors',
+          'group flex min-h-[2.125rem] w-full min-w-0 items-center gap-0.5 rounded-[var(--radius-md)] transition-colors',
           isActive
-            ? 'bg-[var(--shell-active)] text-[var(--shell-text)] shadow-[inset_3px_0_0_0_rgba(255,255,255,0.45)]'
+            ? 'bg-[var(--shell-active)] text-[var(--shell-text)] shadow-[inset_3px_0_0_0_rgba(255,255,255,0.55)]'
             : 'text-[var(--shell-muted)] hover:bg-[var(--shell-hover)] hover:text-[var(--shell-text)]',
         )}
       >
         <button
           type="button"
           onClick={() => onSelect(channel.id)}
-          className="flex min-h-9 min-w-0 flex-1 items-center gap-2 rounded-[var(--radius-md)] px-2 py-1.5 text-left text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--shell-focus-ring)]"
+          className="flex min-h-[2.125rem] min-w-0 flex-1 items-center gap-2.5 rounded-[var(--radius-md)] px-2.5 py-1.5 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--shell-focus-ring)]"
         >
           {isDirect && peer ? (
             <DmPeerAvatar peer={peer} />
@@ -192,10 +192,10 @@ function ChannelButton({
           ) : showTypeIcon ? (
             <span
               className={cn(
-                'flex h-5 w-5 shrink-0 items-center justify-center',
-                isActive
+                'flex h-[1.125rem] w-[1.125rem] shrink-0 items-center justify-center',
+                isActive || unreadCount > 0
                   ? 'text-[var(--shell-text)]'
-                  : 'text-[var(--shell-muted)]',
+                  : 'text-[var(--shell-muted)] group-hover:text-[var(--shell-text)]',
               )}
               aria-hidden
             >
@@ -203,13 +203,13 @@ function ChannelButton({
             </span>
           ) : null}
           <span className="min-w-0 flex-1">
-            <span className="flex items-center gap-2">
+            <span className="flex min-w-0 items-center gap-2">
               <span
                 className={cn(
-                  'block min-w-0 flex-1 truncate',
+                  'block min-w-0 flex-1 truncate text-[13px] leading-snug sm:text-sm',
                   emphasize || isActive || unreadCount > 0
                     ? 'font-semibold text-[var(--shell-text)]'
-                    : 'font-medium text-[var(--shell-muted)]',
+                    : 'font-medium text-[var(--shell-muted)] group-hover:text-[var(--shell-text)]',
                 )}
               >
                 {label}
@@ -220,7 +220,7 @@ function ChannelButton({
                 ) : null}
               </span>
               {unreadCount > 0 ? (
-                <span className="shrink-0 rounded-full bg-[var(--shell-badge)] px-1.5 py-0.5 text-[10px] font-semibold text-[var(--shell-badge-text)]">
+                <span className="shrink-0 rounded-full bg-[var(--shell-badge)] px-1.5 py-0.5 text-[10px] font-semibold leading-none text-[var(--shell-badge-text)]">
                   {unreadCount}
                 </span>
               ) : null}
@@ -231,7 +231,7 @@ function ChannelButton({
           <button
             type="button"
             className={cn(
-              'mr-1 inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-[var(--radius-sm)] text-[var(--shell-muted)] hover:bg-[var(--shell-hover)] hover:text-[var(--shell-text)]',
+              'mr-1 inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-[var(--radius-sm)] text-[var(--shell-muted)] hover:bg-black/10 hover:text-[var(--shell-text)]',
               'opacity-100 [@media(pointer:fine)]:opacity-0 [@media(pointer:fine)]:group-hover:opacity-100 [@media(pointer:fine)]:focus-visible:opacity-100',
             )}
             aria-label={`Actions for ${label}`}
@@ -309,26 +309,29 @@ function SidebarSection({
   children: ReactNode;
 }) {
   return (
-    <div className="mb-3">
-      <div className="mb-1.5 flex items-center justify-between px-1.5">
+    <div className="mb-4">
+      <div className="mb-2 flex items-center justify-between gap-1 px-2">
         <button
           type="button"
           onClick={onToggle}
-          className="flex min-w-0 items-center gap-1 text-[11px] font-semibold uppercase tracking-wide text-[var(--shell-muted)] transition-colors hover:text-[var(--shell-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--shell-focus-ring)]"
+          className="flex min-w-0 items-center gap-1.5 text-[13px] font-bold leading-snug tracking-tight text-[var(--shell-text)] transition-colors hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--shell-focus-ring)]"
         >
           <ChevronDown
-            className={cn('h-3.5 w-3.5 shrink-0 transition-transform', collapsed && '-rotate-90')}
+            className={cn(
+              'h-3.5 w-3.5 shrink-0 text-[var(--shell-muted)] transition-transform',
+              collapsed && '-rotate-90',
+            )}
           />
           <span className="truncate">{title}</span>
           {unreadCount > 0 ? (
-            <span className="shrink-0 rounded-full bg-[var(--shell-badge)] px-1.5 text-[10px] font-semibold normal-case tracking-normal text-[var(--shell-badge-text)]">
+            <span className="shrink-0 rounded-full bg-[var(--shell-badge)] px-1.5 py-0.5 text-[10px] font-semibold leading-none text-[var(--shell-badge-text)]">
               {unreadCount > 99 ? '99+' : unreadCount}
             </span>
           ) : null}
         </button>
         {action}
       </div>
-      {!collapsed ? <div className="space-y-0.5">{children}</div> : null}
+      {!collapsed ? <div className="space-y-1">{children}</div> : null}
     </div>
   );
 }
@@ -453,7 +456,7 @@ export function ChannelSidebar({
         className,
       )}
     >
-      <div className="chat-inset shrink-0 space-y-2.5 border-b border-[var(--shell-border)]">
+      <div className="chat-inset shrink-0 space-y-3 border-b border-[var(--shell-border)]">
         <Button
           type="button"
           className="w-full"
@@ -476,15 +479,15 @@ export function ChannelSidebar({
               type="button"
               onClick={() => setFilter(item.id)}
               className={cn(
-                'inline-flex flex-1 items-center justify-center gap-1 rounded-[var(--radius-sm)] px-2 py-1.5 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--shell-focus-ring)]',
+                'inline-flex flex-1 items-center justify-center gap-1 rounded-[var(--radius-sm)] px-2 py-1.5 text-[13px] font-semibold leading-none transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--shell-focus-ring)]',
                 filter === item.id
                   ? 'bg-[var(--shell-active)] text-[var(--shell-text)] shadow-sm'
-                  : 'text-[var(--shell-muted)] hover:text-[var(--shell-text)]',
+                  : 'text-[var(--shell-muted)] hover:bg-black/10 hover:text-[var(--shell-text)]',
               )}
             >
               {item.label}
               {'badge' in item && item.badge > 0 ? (
-                <span className="rounded-full bg-[var(--shell-badge)] px-1.5 text-[10px] font-semibold text-[var(--shell-badge-text)]">
+                <span className="rounded-full bg-[var(--shell-badge)] px-1.5 py-0.5 text-[10px] font-semibold leading-none text-[var(--shell-badge-text)]">
                   {item.badge > 99 ? '99+' : item.badge}
                 </span>
               ) : null}
@@ -497,16 +500,16 @@ export function ChannelSidebar({
             type="search"
             value={searchQuery}
             onChange={(event) => setSearchQuery(event.target.value)}
-            placeholder="Search channels..."
+            placeholder="Search conversations..."
             aria-label="Search channels and direct messages"
-            className="shell-chrome-input h-9 w-full rounded-[var(--radius-md)] border pl-9 pr-3 text-sm"
+            className="shell-chrome-input h-9 w-full rounded-[var(--radius-md)] border pl-9 pr-3 text-[13px] sm:text-sm"
           />
         </div>
       </div>
-      <div className="shell-scroll min-h-0 flex-1 overflow-y-auto overscroll-y-contain px-1.5 py-2 sm:px-2 sm:py-2.5">
+      <div className="shell-scroll min-h-0 flex-1 overflow-y-auto overscroll-y-contain px-2 py-3 sm:px-2.5 sm:py-3.5">
         {pendingInvites.length > 0 ? (
-          <div className="mb-3 space-y-1.5 border-b border-[var(--shell-border)] px-1.5 pb-3">
-            <p className="text-[11px] font-semibold uppercase tracking-wide text-[var(--shell-muted)]">
+          <div className="mb-4 space-y-2 border-b border-[var(--shell-border)] px-2 pb-4">
+            <p className="text-[13px] font-bold tracking-tight text-[var(--shell-text)]">
               Pending invites
             </p>
             {pendingInvites.map((invite) => (
@@ -531,7 +534,7 @@ export function ChannelSidebar({
         ) : null}
 
         {!hasVisibleResults && (filter === 'unread' || Boolean(normalizedQuery)) ? (
-          <p className="px-2 py-3 text-sm text-[var(--shell-muted)]">
+          <p className="px-2.5 py-3 text-[13px] leading-snug text-[var(--shell-muted)] sm:text-sm">
             {normalizedQuery
               ? 'No channels or direct messages match your search.'
               : filter === 'unread'
@@ -560,7 +563,7 @@ export function ChannelSidebar({
             }
           >
             {clientChannels.length === 0 ? (
-              <p className="px-2 py-1.5 text-xs text-[var(--shell-muted)]">
+              <p className="px-2.5 py-1.5 text-[13px] leading-snug text-[var(--shell-muted)]">
                 Client connections appear here.
               </p>
             ) : (
@@ -598,7 +601,7 @@ export function ChannelSidebar({
             }
           >
             {teamChannels.length === 0 ? (
-              <p className="px-2 py-1.5 text-xs text-[var(--shell-muted)]">
+              <p className="px-2.5 py-1.5 text-[13px] leading-snug text-[var(--shell-muted)]">
                 {internalEmptyText}
               </p>
             ) : (
@@ -616,7 +619,7 @@ export function ChannelSidebar({
 
         {showDms && showSection(directMessages.length) ? (
           <SidebarSection
-            title="Direct messages"
+            title="Direct Messages"
             unreadCount={unreadTotal(directMessages)}
             collapsed={dmsCollapsed}
             onToggle={() => setDmsCollapsed((current) => !current)}
@@ -632,7 +635,7 @@ export function ChannelSidebar({
             }
           >
             {directMessages.length === 0 ? (
-              <p className="px-2 py-1.5 text-xs text-[var(--shell-muted)]">
+              <p className="px-2.5 py-1.5 text-[13px] leading-snug text-[var(--shell-muted)]">
                 No direct messages yet.
               </p>
             ) : (
@@ -653,7 +656,7 @@ export function ChannelSidebar({
 
         {showDms && groupMessages.length > 0 ? (
           <SidebarSection
-            title="Group messages"
+            title="Group Messages"
             collapsed={false}
             onToggle={() => undefined}
           >

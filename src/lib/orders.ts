@@ -61,6 +61,12 @@ export interface OrderSummary {
   price?: string | null;
   cost?: string | null;
   artistRatePerImage?: string | null;
+  orderSource?: 'INTERNAL' | 'PORTAL' | 'PUBLIC_CAMPAIGN' | null;
+  campaignNeedsReview?: boolean;
+  clientOrganizationId?: string | null;
+  campaign?: { id: string; name: string; slug: string } | null;
+  coupon?: { id: string; code: string } | null;
+  guestEmail?: string | null;
   workflowStatus?: {
     id: string;
     name: string;

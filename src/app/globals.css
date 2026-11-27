@@ -184,10 +184,21 @@ body {
   text-rendering: geometricPrecision;
 }
 
-/* Off-screen chat rows skip paint work while scrolling (Slack-like). */
+/*
+ * Off-screen chat rows skip paint work while scrolling.
+ * content-visibility:auto applies paint containment, which clips the Slack
+ * hover toolbar (-translate-y-1/2 above the row). Disable containment while
+ * the row is interactive / toolbar is open.
+ */
 .app-root .chat-message-row {
   content-visibility: auto;
   contain-intrinsic-size: auto 72px;
+}
+
+.app-root .chat-message-row:hover,
+.app-root .chat-message-row:focus-within,
+.app-root .chat-message-row[data-toolbar-open='true'] {
+  content-visibility: visible;
 }
 
 @media (min-width: 768px) {
